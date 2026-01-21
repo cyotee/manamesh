@@ -8,7 +8,7 @@
 | ID | Title | Status | Dependencies | Worktree |
 |----|-------|--------|--------------|----------|
 | MM-001 | Frontend Skeleton + boardgame.io Core | Complete | None | N/A |
-| MM-002 | WebRTC + Two-Way Join Codes | In Progress | MM-001 | `feature/webrtc-join-codes` |
+| MM-002 | WebRTC + Two-Way Join Codes | Pending Merge | MM-001 | `feature/webrtc-join-codes` |
 | MM-003 | libp2p DHT Discovery | Ready | MM-002 | `feature/libp2p-dht` |
 | MM-004 | mDNS Local Discovery | Ready | MM-002 | `feature/mdns-discovery` |
 | MM-005 | boardgame.io P2P Transport | Ready | MM-002 | `feature/bgio-p2p-transport` |
