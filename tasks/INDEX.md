@@ -12,7 +12,7 @@
 | MM-003 | libp2p DHT Discovery | Ready | MM-002 | `feature/libp2p-dht` |
 | MM-004 | mDNS Local Discovery | Ready | MM-002 | `feature/mdns-discovery` |
 | MM-005 | boardgame.io P2P Transport | Ready | MM-002 | `feature/bgio-p2p-transport` |
-| MM-006 | IPFS Asset Loading + Caching | In Review | MM-001 | `feature/ipfs-assets` |
+| MM-006 | IPFS Asset Loading + Caching | Pending Merge | MM-001 | `feature/ipfs-assets` |
 | MM-007 | Backend Signaling Fallback | Blocked | MM-002, MM-003, MM-004 | `feature/signaling-server` |
 | MM-008 | Stabilize Tests & Acceptance Criteria | Ready | MM-001, MM-002 | `feature/test-stabilization` |
 
@@ -34,7 +34,7 @@ Tasks with all dependencies met:
 - MM-005: boardgame.io P2P Transport
 - MM-008: Stabilize Tests & Acceptance Criteria
 
-### In Review
+### Pending Merge
 - MM-006: IPFS Asset Loading + Caching
 
 ### Blocked
@@ -50,7 +50,7 @@ MM-001 (Complete)
 │   ├── MM-004 (Ready) ← UNBLOCKED
 │   ├── MM-005 (Ready) ← UNBLOCKED
 │   └── MM-007 (Blocked - needs MM-003, MM-004)
-├── MM-006 (In Review)
+├── MM-006 (Pending Merge)
 └── MM-008 (Ready) ← UNBLOCKED
 ```
 
