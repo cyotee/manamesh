@@ -2,7 +2,7 @@
 
 ## Current Checkpoint
 
-**Last checkpoint:** Bug fix complete
+**Last checkpoint:** All bugs fixed
 **Next step:** Ready for code review
 **Build status:** ✅ Passes
 **Test status:** ✅ 45 tests pass (15 codec, 11 webrtc, 19 game logic)
@@ -10,6 +10,43 @@
 ---
 
 ## Session Log
+
+### 2026-01-21 - Bug Fix: Duplicate Message Display
+
+#### Issue
+Messages received from peers appeared twice in the chat display.
+
+#### Root Cause
+In `App.tsx`, the `P2PGame` component's `useEffect` that patches the `onMessage` handler was missing a cleanup function. In React Strict Mode (development), effects run twice:
+
+1. Effect runs, patches `onMessage` with handler A (adds message + calls original)
+2. Effect runs again, patches with handler B (adds message + calls handler A)
+
+When a message arrives, handler B runs first, adds the message, then calls handler A which adds the message again = **duplicate messages**.
+
+#### Fix
+Added cleanup function to restore the original handler:
+
+```javascript
+useEffect(() => {
+  const events = (connection as any).events;
+  if (!events) return;
+
+  const originalOnMessage = events.onMessage;
+
+  events.onMessage = (data: string) => {
+    setMessages((prev) => [...prev, `Peer: ${data}`]);
+    originalOnMessage?.(data);
+  };
+
+  // Cleanup: restore original handler to prevent stacking in Strict Mode
+  return () => {
+    events.onMessage = originalOnMessage;
+  };
+}, [connection]);
+```
+
+---
 
 ### 2026-01-20 - Bug Fix: Connection Closed on Component Unmount
 
