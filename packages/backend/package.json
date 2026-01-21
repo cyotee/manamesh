@@ -1,0 +1,23 @@
+{
+    "name": "@manamesh/fbackend",
+    "packageManager": "yarn@4.6.0",
+    "scripts": {
+        "dev": "nodemon --exec ts-node src/index.ts",
+        "build": "tsc",
+        "start": "node dist/index.js"
+    },
+    "dependencies": {
+        "@libp2p/webrtc": "^6.0.3",
+        "@orbitdb/core": "^3.0.2",
+        "express": "^5.1.0",
+        "helia": "^5.5.1",
+        "libp2p": "^3.0.3",
+        "typescript": "^5.9.2"
+    },
+    "devDependencies": {
+        "@types/express": "^5.0.3",
+        "@types/node": "^24.5.2",
+        "nodemon": "^3.1.10",
+        "ts-node": "^10.9.2"
+    }
+}
