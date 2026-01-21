@@ -1,14 +1,14 @@
 # Task Index: ManaMesh
 
 **Repo:** MM
-**Last Updated:** 2026-01-20
+**Last Updated:** 2026-01-21
 
 ## Active Tasks
 
 | ID | Title | Status | Dependencies | Worktree |
 |----|-------|--------|--------------|----------|
 | MM-001 | Frontend Skeleton + boardgame.io Core | Complete | None | N/A |
-| MM-002 | WebRTC + Two-Way Join Codes | Pending Merge | MM-001 | `feature/webrtc-join-codes` |
+| MM-002 | WebRTC + Two-Way Join Codes | Complete | MM-001 | N/A |
 | MM-003 | libp2p DHT Discovery | Ready | MM-002 | `feature/libp2p-dht` |
 | MM-004 | mDNS Local Discovery | Ready | MM-002 | `feature/mdns-discovery` |
 | MM-005 | boardgame.io P2P Transport | Ready | MM-002 | `feature/bgio-p2p-transport` |
@@ -29,30 +29,29 @@
 
 ### Ready for Agent
 Tasks with all dependencies met:
-- (none - MM-006 now in progress)
+- MM-003: libp2p DHT Discovery
+- MM-004: mDNS Local Discovery
+- MM-005: boardgame.io P2P Transport
+- MM-008: Stabilize Tests & Acceptance Criteria
 
-### In Progress
-- MM-002: WebRTC + Two-Way Join Codes
+### In Review
+- MM-006: IPFS Asset Loading + Caching
 
 ### Blocked
 Tasks waiting on dependencies:
-- MM-003: libp2p DHT Discovery → waiting on MM-002
-- MM-004: mDNS Local Discovery → waiting on MM-002
-- MM-005: boardgame.io P2P Transport → waiting on MM-002
-- MM-007: Backend Signaling Fallback → DEFERRED (waiting on MM-002, MM-003, MM-004)
-- MM-008: Stabilize Tests → partially ready, full scope needs MM-002
+- MM-007: Backend Signaling Fallback → DEFERRED (waiting on MM-003, MM-004)
 
 ## Dependency Graph
 
 ```
 MM-001 (Complete)
-├── MM-002 (In Progress) ← CURRENT FOCUS
-│   ├── MM-003 (Ready when MM-002 done)
-│   ├── MM-004 (Ready when MM-002 done)
-│   ├── MM-005 (Ready when MM-002 done)
-│   └── MM-007 (Blocked/Deferred)
-├── MM-006 (In Review) ← PARALLEL TRACK
-└── MM-008 (Ready, expands with MM-002)
+├── MM-002 (Complete) ✓
+│   ├── MM-003 (Ready) ← UNBLOCKED
+│   ├── MM-004 (Ready) ← UNBLOCKED
+│   ├── MM-005 (Ready) ← UNBLOCKED
+│   └── MM-007 (Blocked - needs MM-003, MM-004)
+├── MM-006 (In Review)
+└── MM-008 (Ready) ← UNBLOCKED
 ```
 
 ## Cross-Repo Dependencies
