@@ -2,65 +2,39 @@ import React from 'react';
 import { BoardProps } from 'boardgame.io/react';
 import { SimpleCardGameState } from '../game/game';
 import { Card } from '../game/logic';
-import { IPFSImage, PreloadProgress } from './IPFSImage';
 
 interface GameBoardProps extends BoardProps<SimpleCardGameState> {}
 
-// Extended card type that may include an IPFS image CID
-interface CardWithImage extends Card {
-  imageCid?: string;
-}
-
 const CardComponent: React.FC<{
-  card: CardWithImage;
+  card: Card;
   onClick?: () => void;
   selected?: boolean;
-}> = ({ card, onClick, selected }) => {
-  const hasImage = Boolean(card.imageCid);
-
-  return (
-    <div
-      onClick={onClick}
-      style={{
-        border: selected ? '2px solid #4CAF50' : '1px solid #3a3a5c',
-        borderRadius: '8px',
-        padding: hasImage ? '4px' : '8px 12px',
-        margin: '4px',
-        cursor: onClick ? 'pointer' : 'default',
-        backgroundColor: selected ? '#1a4a3a' : '#16213e',
-        minWidth: hasImage ? '100px' : '80px',
-        textAlign: 'center',
-        boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
-        transition: 'all 0.2s ease',
-        color: '#e4e4e4',
-      }}
-    >
-      {hasImage ? (
-        <>
-          <IPFSImage
-            cid={card.imageCid!}
-            alt={card.name}
-            width={92}
-            height={128}
-            style={{ borderRadius: '4px', marginBottom: '4px' }}
-            preferGateway={true}
-          />
-          <div style={{ fontWeight: 'bold', fontSize: '11px', marginTop: '4px' }}>{card.name}</div>
-        </>
-      ) : (
-        <>
-          <div style={{ fontWeight: 'bold', fontSize: '14px' }}>{card.name}</div>
-          <div style={{ fontSize: '10px', color: '#a0a0a0' }}>{card.id}</div>
-        </>
-      )}
-    </div>
-  );
-};
+}> = ({ card, onClick, selected }) => (
+  <div
+    onClick={onClick}
+    style={{
+      border: selected ? '2px solid #4CAF50' : '1px solid #3a3a5c',
+      borderRadius: '8px',
+      padding: '8px 12px',
+      margin: '4px',
+      cursor: onClick ? 'pointer' : 'default',
+      backgroundColor: selected ? '#1a4a3a' : '#16213e',
+      minWidth: '80px',
+      textAlign: 'center',
+      boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
+      transition: 'all 0.2s ease',
+      color: '#e4e4e4',
+    }}
+  >
+    <div style={{ fontWeight: 'bold', fontSize: '14px' }}>{card.name}</div>
+    <div style={{ fontSize: '10px', color: '#a0a0a0' }}>{card.id}</div>
+  </div>
+);
 
 const PlayerArea: React.FC<{
   playerID: string;
-  hand: CardWithImage[];
-  field: CardWithImage[];
+  hand: Card[];
+  field: Card[];
   isCurrentPlayer: boolean;
   isActivePlayer: boolean;
   onCardClick?: (cardId: string) => void;
@@ -130,37 +104,6 @@ const PlayerArea: React.FC<{
   </div>
 );
 
-// Helper to collect all image CIDs from cards for preloading
-function collectImageCids(G: SimpleCardGameState): string[] {
-  const cids = new Set<string>();
-
-  // Collect from deck
-  G.deck.forEach((card: CardWithImage) => {
-    if (card.imageCid) cids.add(card.imageCid);
-  });
-
-  // Collect from hands
-  Object.values(G.hands).forEach(hand => {
-    hand.forEach((card: CardWithImage) => {
-      if (card.imageCid) cids.add(card.imageCid);
-    });
-  });
-
-  // Collect from field
-  Object.values(G.field).forEach(field => {
-    field.forEach((card: CardWithImage) => {
-      if (card.imageCid) cids.add(card.imageCid);
-    });
-  });
-
-  // Collect from discard
-  G.discard.forEach((card: CardWithImage) => {
-    if (card.imageCid) cids.add(card.imageCid);
-  });
-
-  return Array.from(cids);
-}
-
 export const GameBoard: React.FC<GameBoardProps> = ({
   G,
   ctx,
@@ -168,17 +111,9 @@ export const GameBoard: React.FC<GameBoardProps> = ({
   playerID,
 }) => {
   const [selectedCard, setSelectedCard] = React.useState<string | null>(null);
-  const [isPreloading, setIsPreloading] = React.useState(true);
   const currentPlayerID = playerID || '0';
   const isMyTurn = ctx.currentPlayer === currentPlayerID;
   const myHand = G.hands[currentPlayerID] || [];
-
-  // Collect all image CIDs for preloading
-  const imageCids = React.useMemo(() => collectImageCids(G), []);
-
-  const handlePreloadComplete = React.useCallback(() => {
-    setIsPreloading(false);
-  }, []);
 
   const handleCardClick = (cardId: string) => {
     if (!isMyTurn) return;
@@ -252,15 +187,6 @@ export const GameBoard: React.FC<GameBoardProps> = ({
       fontFamily: 'system-ui, sans-serif',
       color: '#e4e4e4',
     }}>
-      {/* Preload deck images at game start */}
-      {imageCids.length > 0 && isPreloading && (
-        <PreloadProgress
-          cids={imageCids}
-          onComplete={handlePreloadComplete}
-          showDetails={true}
-        />
-      )}
-
       <div style={{
         display: 'flex',
         justifyContent: 'space-between',

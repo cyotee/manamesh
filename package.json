@@ -8,8 +8,8 @@
     "scripts": {
         "dev:frontend": "yarn workspace @manamesh/frontend dev",
         "dev:backend": "yarn workspace @manamesh/backend dev",
-        "build": "yarn workspaces run build",
-        "test": "yarn workspaces run test"
+        "build": "yarn workspaces foreach --all run build",
+        "test": "yarn workspaces foreach --all run test"
     },
     "devDependencies": {
         "@types/node": "^24.5.2",

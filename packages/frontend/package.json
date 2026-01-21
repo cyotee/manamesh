@@ -7,13 +7,11 @@
         "test": "vitest"
     },
     "dependencies": {
-        "@helia/unixfs": "^7.0.1",
         "boardgame.io": "^0.50.2",
         "circomlibjs": "^0.1.7",
         "elliptic": "^6.5.5",
         "helia": "^4.0.1",
         "idb-keyval": "^6.2.1",
-        "multiformats": "^13.4.2",
         "phaser": "^3.80.1",
         "react": "^18.2.0",
         "react-dom": "^18.2.0",

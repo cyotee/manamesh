@@ -44,7 +44,11 @@ export const P2PLobby: React.FC<P2PLobbyProps> = ({ onConnected, onBack }) => {
     });
 
     return () => {
-      connectionRef.current?.close();
+      // Only close if we're NOT connected - if connected, the connection
+      // has been handed off to the parent component and should not be closed
+      if (connectionRef.current && !connectionRef.current.isConnected()) {
+        connectionRef.current.close();
+      }
     };
   }, [onConnected]);
 
