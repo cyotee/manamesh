@@ -167,13 +167,20 @@ const P2PGame: React.FC<{
 
   // Listen for messages
   useEffect(() => {
-    const originalOnMessage = (connection as any).events?.onMessage;
-    if (originalOnMessage) {
-      (connection as any).events.onMessage = (data: string) => {
-        setMessages((prev) => [...prev, `Peer: ${data}`]);
-        originalOnMessage(data);
-      };
-    }
+    const events = (connection as any).events;
+    if (!events) return;
+
+    const originalOnMessage = events.onMessage;
+
+    events.onMessage = (data: string) => {
+      setMessages((prev) => [...prev, `Peer: ${data}`]);
+      originalOnMessage?.(data);
+    };
+
+    // Cleanup: restore original handler to prevent stacking in Strict Mode
+    return () => {
+      events.onMessage = originalOnMessage;
+    };
   }, [connection]);
 
   const sendMessage = () => {
