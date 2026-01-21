@@ -12,7 +12,7 @@
 | MM-003 | libp2p DHT Discovery | Ready | MM-002 | `feature/libp2p-dht` |
 | MM-004 | mDNS Local Discovery | Ready | MM-002 | `feature/mdns-discovery` |
 | MM-005 | boardgame.io P2P Transport | Ready | MM-002 | `feature/bgio-p2p-transport` |
-| MM-006 | IPFS Asset Loading + Caching | Ready | MM-001 | `feature/ipfs-assets` |
+| MM-006 | IPFS Asset Loading + Caching | In Review | MM-001 | `feature/ipfs-assets` |
 | MM-007 | Backend Signaling Fallback | Blocked | MM-002, MM-003, MM-004 | `feature/signaling-server` |
 | MM-008 | Stabilize Tests & Acceptance Criteria | Ready | MM-001, MM-002 | `feature/test-stabilization` |
 
@@ -29,7 +29,7 @@
 
 ### Ready for Agent
 Tasks with all dependencies met:
-- MM-006: IPFS Asset Loading + Caching (depends on MM-001 ✅)
+- (none - MM-006 now in progress)
 
 ### In Progress
 - MM-002: WebRTC + Two-Way Join Codes
@@ -51,7 +51,7 @@ MM-001 (Complete)
 │   ├── MM-004 (Ready when MM-002 done)
 │   ├── MM-005 (Ready when MM-002 done)
 │   └── MM-007 (Blocked/Deferred)
-├── MM-006 (Ready) ← CAN START NOW
+├── MM-006 (In Review) ← PARALLEL TRACK
 └── MM-008 (Ready, expands with MM-002)
 ```
 

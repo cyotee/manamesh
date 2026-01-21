@@ -1,0 +1,21 @@
+{
+    "compilerOptions": {
+        "target": "ES2020",
+        "module": "ESNext",
+        "strict": true,
+        "composite": true,
+        "declaration": true,
+        "skipLibCheck": true
+    },
+    "include": [
+        "packages/**/src/**/*"
+    ],
+    "references": [
+        {
+            "path": "./packages/frontend"
+        },
+        {
+            "path": "./packages/backend"
+        }
+    ]
+}

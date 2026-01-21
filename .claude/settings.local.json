@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:grok.com)",
+      "Bash(yarn workspace @manamesh/frontend test:*)",
+      "Bash(yarn workspace @manamesh/frontend build:*)",
+      "WebFetch(domain:support.claude.com)",
+      "WebFetch(domain:localhost)",
+      "Bash(cat:*)"
+    ]
+  }
+}

@@ -1,0 +1,16 @@
+{
+    "compilerOptions": {
+        "target": "ES2020",
+        "module": "ESNext",
+        "strict": true,
+        "jsx": "react-jsx",
+        "moduleResolution": "node",
+        "esModuleInterop": true,
+        "outDir": "dist",
+        "declaration": true,
+        "composite": true
+    },
+    "include": [
+        "src/**/*"
+    ]
+}

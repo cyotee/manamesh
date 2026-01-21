@@ -1,0 +1,5 @@
+# design.yaml - Task management configuration
+# This file is shared with the team (checked into git)
+
+repo_prefix: MM
+repo_name: ManaMesh
