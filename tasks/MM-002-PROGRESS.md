@@ -2,7 +2,7 @@
 
 ## Current Checkpoint
 
-**Last checkpoint:** Task complete
+**Last checkpoint:** Bug fix complete
 **Next step:** Ready for code review
 **Build status:** ✅ Passes
 **Test status:** ✅ 45 tests pass (15 codec, 11 webrtc, 19 game logic)
@@ -10,6 +10,44 @@
 ---
 
 ## Session Log
+
+### 2026-01-20 - Bug Fix: Connection Closed on Component Unmount
+
+#### Issue
+Message sending failed with "Not connected" error after P2P connection was established. Console showed `RTCErrorEvent` and data channel errors.
+
+#### Root Cause
+In `P2PLobby.tsx`, the `useEffect` cleanup function was unconditionally closing the connection when the component unmounted:
+
+```javascript
+return () => {
+  connectionRef.current?.close();
+};
+```
+
+When the connection was established successfully, `P2PLobby` would call `onConnected(connectionRef.current)` to pass the connection to the parent component, which then transitioned to showing `P2PGame`. This caused `P2PLobby` to unmount, triggering the cleanup function which closed the connection - making `peerConnection` null and causing "Not connected" errors.
+
+#### Fix
+Modified the cleanup to only close the connection if NOT connected (i.e., only close on explicit cancel, not on successful handoff):
+
+```javascript
+return () => {
+  // Only close if we're NOT connected - if connected, the connection
+  // has been handed off to the parent component and should not be closed
+  if (connectionRef.current && !connectionRef.current.isConnected()) {
+    connectionRef.current.close();
+  }
+};
+```
+
+#### Verification
+- ✅ P2P connection established successfully between two tabs
+- ✅ Host can send messages to guest ("Hello from host!")
+- ✅ Guest can send messages to host ("Hello from guest!")
+- ✅ All 45 tests pass
+- ✅ Build succeeds
+
+---
 
 ### 2026-01-20 - Implementation Complete
 
@@ -90,4 +128,4 @@ The app is running on `http://localhost:3000`. To test P2P connection:
 3. ✅ Implement join code discovery flow (`discovery/join-code.ts`)
 4. ✅ Update P2PLobby UI for join code exchange
 5. ✅ Write tests for codec and connection flow
-6. ⏳ Test with two browser tabs (manual testing required)
+6. ✅ Test with two browser tabs (manual testing complete)
