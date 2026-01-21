@@ -9,7 +9,7 @@
 |----|-------|--------|--------------|----------|
 | MM-001 | Frontend Skeleton + boardgame.io Core | Complete | None | N/A |
 | MM-002 | WebRTC + Two-Way Join Codes | Complete | MM-001 | N/A |
-| MM-003 | libp2p DHT Discovery | Ready | MM-002 | `feature/libp2p-dht` |
+| MM-003 | libp2p DHT Discovery | In Progress | MM-002 | `feature/libp2p-dht` |
 | MM-004 | mDNS Local Discovery | Ready | MM-002 | `feature/mdns-discovery` |
 | MM-005 | boardgame.io P2P Transport | Ready | MM-002 | `feature/bgio-p2p-transport` |
 | MM-006 | IPFS Asset Loading + Caching | Complete | MM-001 | N/A |
