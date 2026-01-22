@@ -19,6 +19,8 @@ import {
   getNode,
   getRoomKey,
   getPublicGamesKey,
+  getPublicGamesIndexKey,
+  getPublicGameKey,
   isConnectedToPeers,
   type ManaMeshLibp2p
 } from '../libp2p-config';
@@ -355,14 +357,16 @@ export class DHTConnection {
 
   /**
    * Add game to public games list
+   *
+   * This uses a two-part approach:
+   * 1. Store the game details under a game-specific key
+   * 2. Update the index with the room code
    */
   private async addToPublicGames(
     roomCode: string,
     hostName: string,
     gameType: string
   ): Promise<void> {
-    // For simplicity, we publish each public game under its own key
-    // A more sophisticated approach would maintain a shared list
     const gameInfo: PublicGame = {
       roomCode,
       hostName,
@@ -370,8 +374,50 @@ export class DHTConnection {
       createdAt: Date.now(),
     };
 
-    const key = new TextEncoder().encode(`${getPublicGamesKey()}/${roomCode}`);
-    await this.publishToDHT(key, gameInfo);
+    // 1. Store game details under its own key
+    await this.publishToDHT(getPublicGameKey(roomCode), gameInfo);
+    console.log(`[DHT] Published public game: ${roomCode}`);
+
+    // 2. Update the index with this room code
+    await this.updatePublicGamesIndex(roomCode);
+  }
+
+  /**
+   * Update the public games index with a new room code
+   */
+  private async updatePublicGamesIndex(roomCode: string): Promise<void> {
+    try {
+      // Fetch current index
+      const currentIndex = await this.lookupFromDHT(getPublicGamesIndexKey());
+      const now = Date.now();
+      const maxAge = 5 * 60 * 1000; // 5 minutes
+
+      let roomCodes: Array<{ code: string; timestamp: number }> = [];
+
+      if (currentIndex && Array.isArray(currentIndex.rooms)) {
+        // Filter out stale entries
+        roomCodes = (currentIndex.rooms as Array<{ code: string; timestamp: number }>)
+          .filter(entry => now - entry.timestamp < maxAge);
+      }
+
+      // Add or update this room code
+      const existingIndex = roomCodes.findIndex(entry => entry.code === roomCode);
+      if (existingIndex >= 0) {
+        roomCodes[existingIndex].timestamp = now;
+      } else {
+        roomCodes.push({ code: roomCode, timestamp: now });
+      }
+
+      // Publish updated index
+      await this.publishToDHT(getPublicGamesIndexKey(), {
+        rooms: roomCodes,
+        updatedAt: now,
+      });
+      console.log(`[DHT] Updated public games index with ${roomCodes.length} entries`);
+    } catch (error) {
+      console.error('[DHT] Failed to update public games index:', error);
+      // Don't throw - the game is still published, just not indexed
+    }
   }
 
   /**
@@ -446,6 +492,10 @@ export class DHTConnection {
 
   /**
    * Fetch current public games
+   *
+   * This uses a two-step approach:
+   * 1. Fetch the index to get room codes
+   * 2. Fetch each game's details from its individual key
    */
   private async fetchPublicGames(): Promise<void> {
     if (!this.libp2p) {
@@ -454,32 +504,69 @@ export class DHTConnection {
     }
 
     try {
-      const games: PublicGame[] = [];
       const now = Date.now();
       const maxAge = 5 * 60 * 1000; // 5 minutes max age
 
-      // Query DHT for public games
-      // This is a simplified approach - in production, you'd want a more
-      // sophisticated discovery mechanism
-      for await (const event of this.libp2p.services.dht.getClosestPeers(
-        getPublicGamesKey(),
-        { signal: AbortSignal.timeout(5000) }
-      )) {
-        // Process discovered peers that might have games
-        if (event.name === 'PEER_RESPONSE') {
-          // Try to get game info from these peers
-          // For now, this is a placeholder - full implementation would
-          // involve querying each peer for their hosted games
+      // Step 1: Fetch the index
+      const indexData = await this.lookupFromDHT(getPublicGamesIndexKey());
+
+      if (!indexData || !Array.isArray(indexData.rooms)) {
+        console.log('[DHT] No public games index found');
+        this.events.onPublicGamesUpdate([]);
+        return;
+      }
+
+      // Filter out stale room codes from index
+      const freshRoomCodes = (indexData.rooms as Array<{ code: string; timestamp: number }>)
+        .filter(entry => now - entry.timestamp < maxAge)
+        .map(entry => entry.code);
+
+      console.log(`[DHT] Found ${freshRoomCodes.length} room codes in index`);
+
+      // Step 2: Fetch each game's details
+      const games: PublicGame[] = [];
+
+      for (const roomCode of freshRoomCodes) {
+        try {
+          const gameData = await this.lookupFromDHT(getPublicGameKey(roomCode));
+
+          if (gameData && this.isValidPublicGame(gameData)) {
+            const game = gameData as unknown as PublicGame;
+            // Double-check freshness
+            if (now - game.createdAt < maxAge) {
+              games.push(game);
+            }
+          }
+        } catch (error) {
+          // Skip games we can't fetch
+          console.warn(`[DHT] Could not fetch game ${roomCode}:`, error);
         }
       }
 
-      // Filter out stale games
-      const freshGames = games.filter(g => now - g.createdAt < maxAge);
-      this.events.onPublicGamesUpdate(freshGames);
+      console.log(`[DHT] Retrieved ${games.length} public games`);
+
+      // Sort by creation time (newest first)
+      games.sort((a, b) => b.createdAt - a.createdAt);
+
+      this.events.onPublicGamesUpdate(games);
     } catch (error) {
       console.error('[DHT] Fetch public games error:', error);
       this.events.onPublicGamesUpdate([]);
     }
+  }
+
+  /**
+   * Type guard to validate a PublicGame object
+   */
+  private isValidPublicGame(data: unknown): data is PublicGame {
+    if (!data || typeof data !== 'object') return false;
+    const obj = data as Record<string, unknown>;
+    return (
+      typeof obj.roomCode === 'string' &&
+      typeof obj.hostName === 'string' &&
+      typeof obj.gameType === 'string' &&
+      typeof obj.createdAt === 'number'
+    );
   }
 
   /**

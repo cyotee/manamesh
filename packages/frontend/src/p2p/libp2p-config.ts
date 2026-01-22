@@ -167,3 +167,20 @@ export function getPublicGamesKey(): Uint8Array {
   const encoder = new TextEncoder();
   return encoder.encode(PUBLIC_GAMES_TOPIC);
 }
+
+/**
+ * Generate the key for the public games index
+ * The index stores a list of recent room codes for discovery
+ */
+export function getPublicGamesIndexKey(): Uint8Array {
+  const encoder = new TextEncoder();
+  return encoder.encode(`${PUBLIC_GAMES_TOPIC}/index`);
+}
+
+/**
+ * Generate a key for a specific public game entry
+ */
+export function getPublicGameKey(roomCode: string): Uint8Array {
+  const encoder = new TextEncoder();
+  return encoder.encode(`${PUBLIC_GAMES_TOPIC}/${roomCode.toUpperCase()}`);
+}

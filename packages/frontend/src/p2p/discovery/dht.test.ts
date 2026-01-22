@@ -315,3 +315,130 @@ describe('Public games', () => {
     });
   });
 });
+
+describe('Public game key generation', () => {
+  // Import key generators for testing
+  it('exports correct key helpers from libp2p-config', async () => {
+    const {
+      getPublicGamesKey,
+      getPublicGamesIndexKey,
+      getPublicGameKey,
+      PUBLIC_GAMES_TOPIC,
+    } = await import('../libp2p-config');
+
+    const decoder = new TextDecoder();
+
+    // Public games key matches the topic
+    const publicGamesKey = getPublicGamesKey();
+    expect(decoder.decode(publicGamesKey)).toBe(PUBLIC_GAMES_TOPIC);
+
+    // Index key is the topic + /index
+    const indexKey = getPublicGamesIndexKey();
+    expect(decoder.decode(indexKey)).toBe(`${PUBLIC_GAMES_TOPIC}/index`);
+
+    // Game key includes the room code (uppercase)
+    const gameKey = getPublicGameKey('abc123');
+    expect(decoder.decode(gameKey)).toBe(`${PUBLIC_GAMES_TOPIC}/ABC123`);
+  });
+
+  it('getPublicGameKey normalizes room codes to uppercase', async () => {
+    const { getPublicGameKey, PUBLIC_GAMES_TOPIC } = await import('../libp2p-config');
+    const decoder = new TextDecoder();
+
+    const key1 = getPublicGameKey('abc123');
+    const key2 = getPublicGameKey('ABC123');
+    const key3 = getPublicGameKey('AbC123');
+
+    expect(decoder.decode(key1)).toBe(`${PUBLIC_GAMES_TOPIC}/ABC123`);
+    expect(decoder.decode(key2)).toBe(`${PUBLIC_GAMES_TOPIC}/ABC123`);
+    expect(decoder.decode(key3)).toBe(`${PUBLIC_GAMES_TOPIC}/ABC123`);
+  });
+});
+
+describe('PublicGame type validation', () => {
+  it('validates complete PublicGame objects', () => {
+    const validGame: PublicGame = {
+      roomCode: 'ABC123',
+      hostName: 'Player 1',
+      gameType: 'MTG',
+      createdAt: Date.now(),
+    };
+
+    expect(validGame.roomCode).toBe('ABC123');
+    expect(validGame.hostName).toBe('Player 1');
+    expect(validGame.gameType).toBe('MTG');
+    expect(typeof validGame.createdAt).toBe('number');
+  });
+
+  it('allows different game types', () => {
+    const games: PublicGame[] = [
+      { roomCode: 'ABC123', hostName: 'Host 1', gameType: 'MTG', createdAt: Date.now() },
+      { roomCode: 'DEF456', hostName: 'Host 2', gameType: 'Pokemon', createdAt: Date.now() },
+      { roomCode: 'GHI789', hostName: 'Host 3', gameType: 'Lorcana', createdAt: Date.now() },
+    ];
+
+    expect(games.length).toBe(3);
+    expect(games.map(g => g.gameType)).toEqual(['MTG', 'Pokemon', 'Lorcana']);
+  });
+});
+
+describe('Index-based public game discovery', () => {
+  it('DHTConnection exposes startPublicGamesWatch and stopPublicGamesWatch', () => {
+    const events: DHTEvents = {
+      onStateChange: vi.fn(),
+      onMessage: vi.fn(),
+      onConnectionStateChange: vi.fn(),
+      onPublicGamesUpdate: vi.fn(),
+    };
+
+    const connection = new DHTConnection(events);
+
+    // Verify methods exist
+    expect(typeof connection.startPublicGamesWatch).toBe('function');
+    expect(typeof connection.stopPublicGamesWatch).toBe('function');
+  });
+
+  it('public games update is called with empty array when libp2p not initialized', async () => {
+    const onPublicGamesUpdate = vi.fn();
+    const events: DHTEvents = {
+      onStateChange: vi.fn(),
+      onMessage: vi.fn(),
+      onConnectionStateChange: vi.fn(),
+      onPublicGamesUpdate,
+    };
+
+    const connection = new DHTConnection(events);
+
+    // Start watching - should immediately call with empty array since no libp2p
+    connection.startPublicGamesWatch();
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(onPublicGamesUpdate).toHaveBeenCalledWith([]);
+    connection.stopPublicGamesWatch();
+  });
+
+  it('stopping watch prevents further updates', async () => {
+    const onPublicGamesUpdate = vi.fn();
+    const events: DHTEvents = {
+      onStateChange: vi.fn(),
+      onMessage: vi.fn(),
+      onConnectionStateChange: vi.fn(),
+      onPublicGamesUpdate,
+    };
+
+    const connection = new DHTConnection(events);
+
+    // Start and immediately stop
+    connection.startPublicGamesWatch();
+    connection.stopPublicGamesWatch();
+
+    const callCountAfterStop = onPublicGamesUpdate.mock.calls.length;
+
+    // Wait for what would be a refresh interval
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    // Should not have more calls after stopping
+    expect(onPublicGamesUpdate.mock.calls.length).toBe(callCountAfterStop);
+  });
+});
