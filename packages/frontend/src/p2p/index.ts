@@ -11,6 +11,13 @@ export { encodeOffer, decodeOffer, isValidJoinCode } from './codec';
 
 // Discovery methods
 export { JoinCodeConnection, type JoinCodeState, type JoinCodeRole, type JoinCodeEvents } from './discovery/join-code';
+export {
+  MDNSDiscovery,
+  LANConnection,
+  type LANGame,
+  type MDNSDiscoveryEvents,
+  type MDNSState,
+} from './discovery/mdns';
 
 // Legacy stub for backwards compatibility
 export async function startP2P() {
