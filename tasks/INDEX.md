@@ -8,7 +8,7 @@
 | ID | Title | Status | Dependencies | Worktree |
 |----|-------|--------|--------------|----------|
 | MM-003 | libp2p DHT Discovery | In Progress | MM-002 | `feature/libp2p-dht` |
-| MM-004 | mDNS Local Discovery | Ready | MM-002 | `feature/mdns-discovery` |
+| MM-004 | mDNS Local Discovery | Complete | MM-002 | N/A |
 | MM-005 | boardgame.io P2P Transport | In Progress | MM-002 | `feature/bgio-p2p-transport` |
 | MM-007 | Backend Signaling Fallback | Blocked | MM-002, MM-003, MM-004 | `feature/signaling-server` |
 | MM-008 | Stabilize Tests & Acceptance Criteria | Ready | None | `feature/test-stabilization` |
@@ -46,7 +46,6 @@
 
 ### Ready for Agent
 Tasks with all dependencies met:
-- MM-004: mDNS Local Discovery
 - MM-008: Stabilize Tests & Acceptance Criteria
 - MM-013: Fix AbortController Reuse in Gateway (from MM-006 review)
 - MM-014: Clear Timeout Timers on Success (from MM-006 review)
@@ -82,9 +81,9 @@ MM-003 (In Progress)
 ├── MM-011 (Blocked - runtime compat)
 └── MM-012 (Blocked - record expiry)
 
-MM-004 (Ready)
+MM-004 (Complete) ✓
 MM-005 (In Progress)
-MM-007 (Blocked - needs MM-003, MM-004)
+MM-007 (Blocked - needs MM-003)
 
 MM-008 (Ready)
 
