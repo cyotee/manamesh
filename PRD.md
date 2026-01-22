@@ -164,7 +164,7 @@ In-play deck state uses commitments and mental poker techniques. Out-of-play dec
 
 ### Feature 6: Game Module System
 
-Pluggable module system for supporting different card games with game-specific state, zones, and rendering.
+Pluggable module system for supporting different card games with game-specific state, zones, and rendering. Game modules are implemented in TypeScript using boardgame.io's game definition and plugin APIs.
 
 #### Supported Games (Priority Order)
 
@@ -177,9 +177,48 @@ Pluggable module system for supporting different card games with game-specific s
 | Lorcana | P2 | Disney TCG, different mechanics |
 | Riftbound | P3 | Community game |
 
+#### boardgame.io Integration
+
+Game modules are built on boardgame.io's Game definition API and plugin system:
+
+- **Game Definition**: Each module exports a boardgame.io `Game` object with moves, phases, and victory conditions
+- **TypeScript**: Full type safety using boardgame.io's TypeScript support (`Ctx`, `Game<G>`, `Move<G>`)
+- **Plugins**: Shared functionality (deck operations, zones) implemented as boardgame.io plugins
+
+```typescript
+import { Game, Ctx } from 'boardgame.io';
+import { DeckPlugin } from '@manamesh/deck-plugin';
+
+// Example: War game module
+export const WarGame: Game<WarState> = {
+  name: 'war',
+
+  setup: ({ ctx }): WarState => ({
+    players: initializeDecks(ctx.numPlayers),
+    played: [],
+    winner: null,
+  }),
+
+  plugins: [DeckPlugin],
+
+  moves: {
+    flipCard: ({ G, ctx, playerID }) => {
+      // Move top card from deck to played zone
+    },
+    resolveRound: ({ G, ctx }) => {
+      // Compare cards, winner takes both
+    },
+  },
+
+  endIf: ({ G }) => {
+    if (G.winner) return { winner: G.winner };
+  },
+};
+```
+
 #### Module Loading
 
-- **Built-in modules**: Core games compiled into the app (Poker, MTG, Lorcana)
+- **Built-in modules**: Core games compiled into the app (War, Poker, etc.)
 - **Dynamic modules**: Community modules loaded at runtime from IPFS/URLs
 
 ```typescript
@@ -463,11 +502,21 @@ manamesh/
 | Zone | Logical location for cards (library, hand, battlefield, etc.) |
 | Tutor | Search through a zone (typically library) to find specific cards |
 | Scry | Peek at top N cards of library and optionally reorder |
+| boardgame.io Game | Game definition object with setup, moves, phases, and victory conditions |
+| boardgame.io Plugin | Reusable module that extends game functionality (e.g., deck operations) |
 
 ### References
 
+#### boardgame.io
 - [boardgame.io Documentation](https://boardgame.io/documentation/)
+- [TypeScript Support](https://boardgame.io/documentation/#/typescript) - Type definitions for Game, Ctx, moves
+- [Game Definition API](https://boardgame.io/documentation/#/api/Game) - Setup, moves, phases, endIf
+- [Plugin System](https://boardgame.io/documentation/#/plugins) - Extending game functionality
+
+#### P2P & Storage
 - [libp2p Documentation](https://docs.libp2p.io/)
 - [IPFS/Helia Documentation](https://helia.io/)
+
+#### Project Documents
 - CardGameTechStackDesign.markdown (detailed architecture)
 - PRD_Implementation.md (implementation tasks)
