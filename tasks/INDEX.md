@@ -15,6 +15,10 @@
 | MM-006 | IPFS Asset Loading + Caching | Complete | MM-001 | N/A |
 | MM-007 | Backend Signaling Fallback | Blocked | MM-002, MM-003, MM-004 | `feature/signaling-server` |
 | MM-008 | Stabilize Tests & Acceptance Criteria | Ready | MM-001, MM-002 | `feature/test-stabilization` |
+| MM-009 | Implement Public Game Indexing | Blocked | MM-003 | `feature/public-game-indexing` |
+| MM-010 | Fix Public Game Key Encoding | Blocked | MM-003 | `feature/fix-dht-key-encoding` |
+| MM-011 | Confirm/Document Runtime Support | Blocked | MM-003 | `feature/runtime-compat` |
+| MM-012 | Add DHT Record Expiry/Republish | Blocked | MM-003 | `feature/dht-record-expiry` |
 
 ## Status Legend
 
@@ -37,15 +41,23 @@ Tasks with all dependencies met:
 ### Blocked
 Tasks waiting on dependencies:
 - MM-007: Backend Signaling Fallback → DEFERRED (waiting on MM-003, MM-004)
+- MM-009: Implement Public Game Indexing (waiting on MM-003)
+- MM-010: Fix Public Game Key Encoding (waiting on MM-003)
+- MM-011: Confirm/Document Runtime Support (waiting on MM-003)
+- MM-012: Add DHT Record Expiry/Republish (waiting on MM-003)
 
 ## Dependency Graph
 
 ```
 MM-001 (Complete)
 ├── MM-002 (Complete) ✓
-│   ├── MM-003 (Ready)
+│   ├── MM-003 (In Progress)
+│   │   ├── MM-009 (Blocked - public game indexing)
+│   │   ├── MM-010 (Blocked - key encoding fix)
+│   │   ├── MM-011 (Blocked - runtime compat)
+│   │   └── MM-012 (Blocked - record expiry)
 │   ├── MM-004 (Ready)
-│   ├── MM-005 (Ready)
+│   ├── MM-005 (In Progress)
 │   └── MM-007 (Blocked - needs MM-003, MM-004)
 ├── MM-006 (Complete) ✓
 └── MM-008 (Ready)
