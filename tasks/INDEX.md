@@ -7,7 +7,7 @@
 
 | ID | Title | Status | Dependencies | Worktree |
 |----|-------|--------|--------------|----------|
-| MM-003 | libp2p DHT Discovery | In Progress | MM-002 | `feature/libp2p-dht` |
+| MM-003 | libp2p DHT Discovery | Pending Merge | MM-002 | `feature/libp2p-dht` |
 | MM-004 | mDNS Local Discovery | Complete | MM-002 | N/A |
 | MM-005 | boardgame.io P2P Transport | In Progress | MM-002 | `feature/bgio-p2p-transport` |
 | MM-007 | Backend Signaling Fallback | Blocked | MM-002, MM-003, MM-004 | `feature/signaling-server` |
