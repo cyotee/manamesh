@@ -9,7 +9,7 @@ export { PeerConnection, type ConnectionState, type ConnectionOffer, type PeerCo
 // Codec for encoding/decoding offers
 export { encodeOffer, decodeOffer, isValidJoinCode } from './codec';
 
-// Discovery methods
+// Discovery methods - Two-way join codes (fallback)
 export { JoinCodeConnection, type JoinCodeState, type JoinCodeRole, type JoinCodeEvents } from './discovery/join-code';
 export {
   MDNSDiscovery,
@@ -18,6 +18,26 @@ export {
   type MDNSDiscoveryEvents,
   type MDNSState,
 } from './discovery/mdns';
+
+// Discovery methods - DHT (primary)
+export {
+  DHTConnection,
+  type DHTState,
+  type DHTEvents,
+  type PublicGame,
+  generateRoomCode,
+  normalizeRoomCode,
+  isValidRoomCode,
+} from './discovery/dht';
+
+// libp2p configuration
+export {
+  createNode,
+  getNode,
+  stopNode,
+  isConnectedToPeers,
+  getConnectedPeerCount,
+} from './libp2p-config';
 
 // Legacy stub for backwards compatibility
 export async function startP2P() {
