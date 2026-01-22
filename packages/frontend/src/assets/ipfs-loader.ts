@@ -107,16 +107,22 @@ async function fetchFromHelia(cidString: string, timeout: number): Promise<Blob 
 /**
  * Fetch content from IPFS gateway by CID
  * Uses configurable gateway list from config module
+ *
+ * Each gateway attempt uses a fresh AbortController to ensure
+ * a timeout on one gateway doesn't prevent trying others.
  */
 async function fetchFromGateway(
   cidString: string,
   timeout: number
 ): Promise<{ blob: Blob; gateway: string } | null> {
   const gateways = getEffectiveGateways();
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeout);
 
   for (const gateway of gateways) {
+    // Create fresh AbortController for each gateway attempt
+    // This prevents a timeout on one gateway from blocking subsequent attempts
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+
     try {
       const response = await fetch(`${gateway}${cidString}`, {
         signal: controller.signal,
@@ -127,13 +133,15 @@ async function fetchFromGateway(
         const blob = await response.blob();
         return { blob, gateway };
       }
+      // Response not ok, clear timeout and try next gateway
+      clearTimeout(timeoutId);
     } catch (error) {
-      // Try next gateway
+      // Clear timeout and try next gateway
+      clearTimeout(timeoutId);
       continue;
     }
   }
 
-  clearTimeout(timeoutId);
   return null;
 }
 
