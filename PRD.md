@@ -58,6 +58,10 @@ Multiple connection methods prioritized by decentralization:
 3. **mDNS** - Automatic LAN discovery
 4. **Signaling server** - Optional fallback only if needed
 
+#### boardgame.io P2P Transport
+
+Using the experimental [boardgame.io/p2p](https://github.com/boardgameio/p2p) package for WebRTC-based multiplayer without a lobby server. This integrates directly with boardgame.io's transport layer.
+
 ### Feature 2: boardgame.io Game Engine
 
 Turn-based multiplayer using boardgame.io for state synchronization. Game-specific rules implemented as pluggable handlers (MTG tutors, One Piece top-deck peeks, etc.).
@@ -447,6 +451,7 @@ manamesh/
 | Dependency | Version | Purpose |
 |------------|---------|---------|
 | boardgame.io | ^0.50.2 | Turn-based game framework |
+| @boardgame.io/p2p | experimental | P2P transport (WebRTC, no lobby server) |
 | phaser | ^3.80.1 | 2D rendering engine |
 | helia | ^4.0.1 | Browser IPFS node |
 | libp2p | ^3.0.3 | P2P networking |
@@ -512,6 +517,7 @@ manamesh/
 - [TypeScript Support](https://boardgame.io/documentation/#/typescript) - Type definitions for Game, Ctx, moves
 - [Game Definition API](https://boardgame.io/documentation/#/api/Game) - Setup, moves, phases, endIf
 - [Plugin System](https://boardgame.io/documentation/#/plugins) - Extending game functionality
+- [boardgame.io/p2p](https://github.com/boardgameio/p2p) - Experimental P2P transport (WebRTC, no lobby server)
 
 #### P2P & Storage
 - [libp2p Documentation](https://docs.libp2p.io/)
