@@ -170,11 +170,12 @@ Pluggable module system for supporting different card games with game-specific s
 
 | Game | Priority | Rationale |
 |------|----------|-----------|
-| Poker | P0 | Simplest rules, validate module system first |
-| MTG | P1 | Most complex, proves full capability |
-| Lorcana | P1 | Disney TCG, different mechanics |
-| One Piece | P2 | Anime TCG |
-| Riftbound | P2 | Community game |
+| War | P0 | Simplest possible rules, minimal state - validates core module system |
+| Poker | P0 | Simple rules with shared deck - validates shared zones |
+| One Piece | P1 | Anime TCG - simpler than MTG, good mid-complexity validation |
+| MTG | P2 | Most complex, proves full capability |
+| Lorcana | P2 | Disney TCG, different mechanics |
+| Riftbound | P3 | Community game |
 
 #### Module Loading
 
@@ -249,6 +250,9 @@ interface PokerCard extends CoreCard {
   rank: string;  // 'A', '2'-'10', 'J', 'Q', 'K'
 }
 
+// War uses same schema as Poker (standard 52-card deck)
+type WarCard = PokerCard;
+
 interface LorcanaCard extends CoreCard {
   inkCost: number;
   inkable: boolean;
@@ -272,7 +276,14 @@ interface ZoneDefinition {
   features: ZoneFeature[]; // 'search', 'peek', 'shuffle'
 }
 
-// Example zones
+// Example zones - War (simplest)
+const warZones: ZoneDefinition[] = [
+  { id: 'deck', shared: false, visibility: 'hidden', ordered: true },
+  { id: 'played', shared: false, visibility: 'public', ordered: false },  // Current card
+  { id: 'won', shared: false, visibility: 'public', ordered: false },     // Won cards pile
+];
+
+// Example zones - Poker
 const pokerZones: ZoneDefinition[] = [
   { id: 'deck', shared: true, visibility: 'hidden', ordered: true },
   { id: 'hand', shared: false, visibility: 'owner-only', ordered: false },
@@ -427,10 +438,13 @@ manamesh/
 | M6 | IPFS Asset Loading + Caching | Done |
 | M7 | Stabilize Tests & Acceptance Criteria | Ongoing |
 | M8 | Game Module System: Core Interface | Planned |
-| M9 | Game Module: Poker (validation) | Planned |
-| M10 | Game Module: MTG | Planned |
-| M11 | Game Module: Lorcana | Planned |
-| M12 | Asset Pack System | Planned |
+| M9 | Game Module: War (simplest validation) | Planned |
+| M10 | Game Module: Poker (shared deck validation) | Planned |
+| M11 | Game Module: One Piece | Planned |
+| M12 | Game Module: MTG | Planned |
+| M13 | Game Module: Lorcana | Planned |
+| M14 | Game Module: Riftbound | Planned |
+| M15 | Asset Pack System | Planned |
 
 ## Appendix
 
