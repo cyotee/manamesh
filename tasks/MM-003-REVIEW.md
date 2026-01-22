@@ -96,8 +96,8 @@ Practical options (pick one):
 **Affected Files:**
 - `packages/frontend/src/p2p/discovery/dht.ts`
 - `packages/frontend/src/p2p/libp2p-config.ts`
-**User Response:** (pending)
-**Notes:** Current implementation cannot satisfy US-MM-003.3.
+**User Response:** Accepted
+**Notes:** Converted to task MM-009
 
 ### Suggestion 2: Fix Public Game Key Encoding
 **Priority:** P0
@@ -106,8 +106,8 @@ Stop interpolating `Uint8Array` into a string. Use a string topic constant for k
 **Affected Files:**
 - `packages/frontend/src/p2p/discovery/dht.ts`
 - `packages/frontend/src/p2p/libp2p-config.ts`
-**User Response:** (pending)
-**Notes:** This is required even after public browsing is implemented.
+**User Response:** Accepted
+**Notes:** Converted to task MM-010
 
 ### Suggestion 3: Confirm/Document Runtime Support for libp2p Build
 **Priority:** P1
@@ -121,8 +121,8 @@ Potential actions:
 **Affected Files:**
 - `packages/frontend/package.json` (if version bumps/pins)
 - `packages/frontend/vitest.config.ts` (if polyfill)
-**User Response:** (pending)
-**Notes:** Build succeeds, but runtime support should be explicit.
+**User Response:** Accepted
+**Notes:** Converted to task MM-011
 
 ### Suggestion 4: Add Expiry/Republish For DHT Records
 **Priority:** P2
@@ -130,8 +130,8 @@ Potential actions:
 Add an expiry field and republish strategy for room offers/answers and public game ads, and ensure UI ignores expired records.
 **Affected Files:**
 - `packages/frontend/src/p2p/discovery/dht.ts`
-**User Response:** (pending)
-**Notes:** Prevents long-lived stale rooms.
+**User Response:** Accepted
+**Notes:** Converted to task MM-012
 
 ---
 
