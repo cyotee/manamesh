@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Client } from 'boardgame.io/react';
 import { Local } from 'boardgame.io/multiplayer';
 import { SimpleCardGame } from './game/game';
 import { GameBoard } from './components/GameBoard';
-import { P2PLobby } from './components/P2PLobby';
-import { startP2P, type JoinCodeConnection } from './p2p';
+import { P2PLobby, type P2PRole } from './components/P2PLobby';
+import { startP2P, P2PMultiplayer, type JoinCodeConnection } from './p2p';
 
 // Create multiplayer clients for local play (two players on same browser)
 const GameClient = Client({
@@ -157,47 +157,59 @@ const LocalGame: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   );
 };
 
-// Simple P2P Game component - shows connection test before full boardgame.io integration
+// P2P Game component - uses boardgame.io with P2P transport
 const P2PGame: React.FC<{
   connection: JoinCodeConnection;
+  role: P2PRole;
   onBack: () => void;
-}> = ({ connection, onBack }) => {
-  const [messages, setMessages] = useState<string[]>([]);
-  const [inputMessage, setInputMessage] = useState('');
+}> = ({ connection, role, onBack }) => {
+  const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'reconnecting'>('connected');
 
-  // Listen for messages
+  // Create the P2P client dynamically based on role
+  const P2PClient = useMemo(() => {
+    const playerID = role === 'host' ? '0' : '1';
+
+    return Client({
+      game: SimpleCardGame,
+      board: GameBoard,
+      multiplayer: P2PMultiplayer({
+        connection,
+        role,
+        playerID,
+        matchID: 'p2p-match',
+        numPlayers: 2,
+      }),
+      debug: false,
+    });
+  }, [connection, role]);
+
+  // Monitor connection state
   useEffect(() => {
     const events = (connection as any).events;
     if (!events) return;
 
-    const originalOnMessage = events.onMessage;
+    const originalOnConnectionStateChange = events.onConnectionStateChange;
 
-    events.onMessage = (data: string) => {
-      setMessages((prev) => [...prev, `Peer: ${data}`]);
-      originalOnMessage?.(data);
+    events.onConnectionStateChange = (state: string) => {
+      if (state === 'connected') {
+        setConnectionStatus('connected');
+      } else if (state === 'disconnected') {
+        setConnectionStatus('reconnecting');
+      } else if (state === 'failed') {
+        setConnectionStatus('disconnected');
+      }
+      originalOnConnectionStateChange?.(state);
     };
 
-    // Cleanup: restore original handler to prevent stacking in Strict Mode
     return () => {
-      events.onMessage = originalOnMessage;
+      events.onConnectionStateChange = originalOnConnectionStateChange;
     };
   }, [connection]);
 
-  const sendMessage = () => {
-    if (inputMessage.trim()) {
-      connection.send(inputMessage);
-      setMessages((prev) => [...prev, `You: ${inputMessage}`]);
-      setInputMessage('');
-    }
-  };
+  const playerID = role === 'host' ? '0' : '1';
 
   return (
-    <div style={{
-      padding: '40px',
-      maxWidth: '600px',
-      margin: '0 auto',
-      fontFamily: 'system-ui, sans-serif',
-    }}>
+    <div>
       <div style={{
         padding: '12px 20px',
         backgroundColor: '#16213e',
@@ -205,9 +217,7 @@ const P2PGame: React.FC<{
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        borderRadius: '8px',
-        marginBottom: '20px',
-        border: '1px solid #3a3a5c',
+        borderBottom: '1px solid #3a3a5c',
       }}>
         <button
           onClick={onBack}
@@ -222,75 +232,26 @@ const P2PGame: React.FC<{
         >
           ← Disconnect
         </button>
-        <span style={{ color: '#6fcf6f' }}>Connected via P2P!</span>
-      </div>
-
-      <div style={{
-        backgroundColor: '#16213e',
-        padding: '24px',
-        borderRadius: '12px',
-        border: '1px solid #3a3a5c',
-        marginBottom: '20px',
-      }}>
-        <h2 style={{ color: '#e4e4e4', marginBottom: '16px' }}>P2P Connection Test</h2>
-        <p style={{ color: '#a0a0a0', marginBottom: '16px' }}>
-          Send messages to test the connection. Game integration coming next!
-        </p>
-
-        <div style={{
-          backgroundColor: '#1a1a2e',
-          padding: '12px',
-          borderRadius: '8px',
-          minHeight: '150px',
-          maxHeight: '200px',
-          overflow: 'auto',
-          marginBottom: '12px',
-        }}>
-          {messages.length === 0 ? (
-            <span style={{ color: '#6a6a8a' }}>No messages yet...</span>
-          ) : (
-            messages.map((msg, i) => (
-              <div key={i} style={{
-                color: msg.startsWith('You:') ? '#6fcf6f' : '#e4e4e4',
-                marginBottom: '4px',
-              }}>
-                {msg}
-              </div>
-            ))
-          )}
-        </div>
-
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <input
-            type="text"
-            value={inputMessage}
-            onChange={(e) => setInputMessage(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
-            placeholder="Type a message..."
-            style={{
-              flex: 1,
-              padding: '12px',
-              backgroundColor: '#1a1a2e',
-              color: '#e4e4e4',
-              border: '1px solid #3a3a5c',
-              borderRadius: '8px',
-            }}
-          />
-          <button
-            onClick={sendMessage}
-            style={{
-              padding: '12px 24px',
-              backgroundColor: '#4CAF50',
-              color: 'white',
-              border: 'none',
-              borderRadius: '8px',
-              cursor: 'pointer',
-            }}
-          >
-            Send
-          </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <span style={{
+            padding: '4px 12px',
+            backgroundColor: role === 'host' ? '#4CAF50' : '#2196F3',
+            borderRadius: '4px',
+            fontSize: '12px',
+            textTransform: 'uppercase',
+          }}>
+            {role}
+          </span>
+          <span style={{
+            color: connectionStatus === 'connected' ? '#6fcf6f' :
+                   connectionStatus === 'reconnecting' ? '#ff9800' : '#ff6b6b',
+          }}>
+            {connectionStatus === 'connected' ? '● Connected via P2P' :
+             connectionStatus === 'reconnecting' ? '○ Reconnecting...' : '○ Disconnected'}
+          </span>
         </div>
       </div>
+      <P2PClient playerID={playerID} matchID="p2p-match" />
     </div>
   );
 };
@@ -298,14 +259,16 @@ const P2PGame: React.FC<{
 const App: React.FC = () => {
   const [gameMode, setGameMode] = useState<'lobby' | 'local' | 'online' | 'p2p-game'>('lobby');
   const [p2pConnection, setP2pConnection] = useState<JoinCodeConnection | null>(null);
+  const [p2pRole, setP2pRole] = useState<P2PRole>('host');
 
   useEffect(() => {
     // Initialize P2P in background
     startP2P();
   }, []);
 
-  const handleP2PConnected = useCallback((connection: JoinCodeConnection) => {
+  const handleP2PConnected = useCallback((connection: JoinCodeConnection, role: P2PRole) => {
     setP2pConnection(connection);
+    setP2pRole(role);
     setGameMode('p2p-game');
   }, []);
 
@@ -329,7 +292,7 @@ const App: React.FC = () => {
   }
 
   if (gameMode === 'p2p-game' && p2pConnection) {
-    return <P2PGame connection={p2pConnection} onBack={handleBackFromP2P} />;
+    return <P2PGame connection={p2pConnection} role={p2pRole} onBack={handleBackFromP2P} />;
   }
 
   return <Lobby onStartGame={setGameMode} />;

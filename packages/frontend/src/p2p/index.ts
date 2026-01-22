@@ -39,6 +39,9 @@ export {
   getConnectedPeerCount,
 } from './libp2p-config';
 
+// boardgame.io P2P transport
+export { P2PTransport, P2PMultiplayer, type P2PTransportOpts, type P2PRole, type P2PMessage, type P2PMessageType } from './transport';
+
 // Legacy stub for backwards compatibility
 export async function startP2P() {
   console.log('[P2P] P2P layer initialized');
