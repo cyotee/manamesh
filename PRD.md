@@ -162,6 +162,170 @@ interface GameModuleAssetRequirements {
 
 In-play deck state uses commitments and mental poker techniques. Out-of-play decks are unencrypted for sharing.
 
+### Feature 6: Game Module System
+
+Pluggable module system for supporting different card games with game-specific state, zones, and rendering.
+
+#### Supported Games (Priority Order)
+
+| Game | Priority | Rationale |
+|------|----------|-----------|
+| Poker | P0 | Simplest rules, validate module system first |
+| MTG | P1 | Most complex, proves full capability |
+| Lorcana | P1 | Disney TCG, different mechanics |
+| One Piece | P2 | Anime TCG |
+| Riftbound | P2 | Community game |
+
+#### Module Loading
+
+- **Built-in modules**: Core games compiled into the app (Poker, MTG, Lorcana)
+- **Dynamic modules**: Community modules loaded at runtime from IPFS/URLs
+
+```typescript
+// Module loading
+const module = await loadGameModule('ipfs://bafybei.../mtg-module');
+// or
+import { PokerModule } from '@manamesh/game-poker';
+```
+
+#### Core Module Interface
+
+```typescript
+interface GameModule {
+  // Identity
+  id: string;                    // e.g., 'poker', 'mtg', 'lorcana'
+  name: string;                  // Display name
+  version: string;               // Semver
+
+  // Card Schema
+  cardSchema: CardSchema;        // Core + game-specific fields
+
+  // Zone Definitions
+  zones: ZoneDefinition[];       // Library, hand, battlefield, etc.
+
+  // Asset Requirements
+  assetRequirements: {
+    required: AssetType[];       // e.g., ['card_faces']
+    optional: AssetType[];       // e.g., ['tokens', 'alt_backs']
+    idFormat: string;            // How cards are identified
+  };
+
+  // Game State
+  initialState(config: GameConfig): GameState;
+  validateMove(state: GameState, move: Move): MoveValidation;
+
+  // Rendering (optional customization)
+  zoneLayout?: ZoneLayoutConfig;      // Custom zone positions
+  customRenderer?: PhaserSceneClass;  // Full custom rendering
+}
+```
+
+#### Card Schema (Core + Extensions)
+
+```typescript
+// Core schema all games share
+interface CoreCard {
+  id: string;              // Unique identifier
+  name: string;            // Card name
+  imageCid?: string;       // IPFS CID for card image
+  backImageCid?: string;   // For double-faced cards
+}
+
+// Game-specific extensions
+interface MTGCard extends CoreCard {
+  manaCost?: string;
+  types: string[];
+  subtypes?: string[];
+  power?: number;
+  toughness?: number;
+  loyalty?: number;
+  oracleText?: string;
+  set: string;
+  collectorNumber: string;
+}
+
+interface PokerCard extends CoreCard {
+  suit: 'hearts' | 'diamonds' | 'clubs' | 'spades';
+  rank: string;  // 'A', '2'-'10', 'J', 'Q', 'K'
+}
+
+interface LorcanaCard extends CoreCard {
+  inkCost: number;
+  inkable: boolean;
+  strength?: number;
+  willpower?: number;
+  lore?: number;
+  abilities: string[];
+}
+```
+
+#### Zone System
+
+```typescript
+interface ZoneDefinition {
+  id: string;              // 'library', 'hand', 'battlefield'
+  name: string;            // Display name
+  visibility: 'public' | 'private' | 'owner-only' | 'hidden';
+  shared: boolean;         // Shared between players (Poker deck)
+  maxCards?: number;       // Hand limit, etc.
+  ordered: boolean;        // Stack order matters (library)
+  features: ZoneFeature[]; // 'search', 'peek', 'shuffle'
+}
+
+// Example zones
+const pokerZones: ZoneDefinition[] = [
+  { id: 'deck', shared: true, visibility: 'hidden', ordered: true },
+  { id: 'hand', shared: false, visibility: 'owner-only', ordered: false },
+  { id: 'community', shared: true, visibility: 'public', ordered: false },
+  { id: 'discard', shared: true, visibility: 'public', ordered: false },
+];
+
+const mtgZones: ZoneDefinition[] = [
+  { id: 'library', shared: false, visibility: 'hidden', ordered: true, features: ['search', 'shuffle'] },
+  { id: 'hand', shared: false, visibility: 'owner-only', ordered: false },
+  { id: 'battlefield', shared: false, visibility: 'public', ordered: false },
+  { id: 'graveyard', shared: false, visibility: 'public', ordered: true },
+  { id: 'exile', shared: false, visibility: 'public', ordered: false },
+  { id: 'command', shared: false, visibility: 'public', ordered: false },
+];
+```
+
+#### Game Actions
+
+Standard actions available to all modules:
+
+| Action | Description | Zones |
+|--------|-------------|-------|
+| `draw` | Move top card(s) from deck to hand | library → hand |
+| `play` | Move card from hand to battlefield | hand → battlefield |
+| `discard` | Move card to discard/graveyard | any → graveyard |
+| `shuffle` | Randomize zone order | library |
+| `search` | View and select from zone | library (tutor) |
+| `peek` | View top N cards privately | library (scry) |
+| `reveal` | Show card to opponent(s) | any |
+| `tap/untap` | Toggle card state | battlefield |
+| `counter` | Add/remove counters | any card |
+| `token` | Create token card | → battlefield |
+
+#### Rendering Options
+
+1. **Default renderer**: Module provides zone definitions, shared Phaser scene renders
+2. **Custom layout**: Module provides `ZoneLayoutConfig` for zone positioning
+3. **Full custom**: Module exports a Phaser Scene class for complete control
+
+```typescript
+interface ZoneLayoutConfig {
+  zones: {
+    [zoneId: string]: {
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      cardArrangement: 'stack' | 'fan' | 'grid';
+    };
+  };
+}
+
 ## Technical Requirements
 
 ### Architecture
@@ -260,8 +424,13 @@ manamesh/
 | M3 | P2P Layer: libp2p DHT Discovery | Planned |
 | M4 | P2P Layer: mDNS Local Discovery | Planned |
 | M5 | boardgame.io P2P Transport Integration | Planned |
-| M6 | IPFS Asset Loading + Caching | Planned |
+| M6 | IPFS Asset Loading + Caching | Done |
 | M7 | Stabilize Tests & Acceptance Criteria | Ongoing |
+| M8 | Game Module System: Core Interface | Planned |
+| M9 | Game Module: Poker (validation) | Planned |
+| M10 | Game Module: MTG | Planned |
+| M11 | Game Module: Lorcana | Planned |
+| M12 | Asset Pack System | Planned |
 
 ## Appendix
 
@@ -276,7 +445,10 @@ manamesh/
 | IPNS | InterPlanetary Name System - mutable pointers to IPFS content |
 | Mental Poker | Cryptographic protocol for fair card games without trusted third party |
 | Asset Pack | Bundled collection of game assets (images, etc.) with manifest |
-| Game Module | Plugin defining rules and asset requirements for a specific card game |
+| Game Module | Plugin defining rules, zones, and asset requirements for a specific card game |
+| Zone | Logical location for cards (library, hand, battlefield, etc.) |
+| Tutor | Search through a zone (typically library) to find specific cards |
+| Scry | Peek at top N cards of library and optionally reorder |
 
 ### References
 
