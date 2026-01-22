@@ -83,6 +83,14 @@ Hierarchical, extensible format for bundling and distributing game assets.
 | Card Face Pack | Card face images for a set/expansion | MTG "Foundations" set |
 | Bundle Pack | Collection of other packs | "MTG Complete" bundling all sets |
 
+#### Initial Asset Packs
+
+| Pack | Game(s) | Source |
+|------|---------|--------|
+| Standard Playing Cards | War, Poker | [OpenGameArt cards_0.zip](https://opengameart.org/sites/default/files/cards_0.zip) |
+
+The OpenGameArt playing card set provides the 52-card standard deck images needed for War and Poker game modules.
+
 #### Manifest Structure
 
 ```json
@@ -552,6 +560,9 @@ yarn link ./vendor/boardgameIO-p2p
 #### P2P & Storage
 - [libp2p Documentation](https://docs.libp2p.io/)
 - [IPFS/Helia Documentation](https://helia.io/)
+
+#### Assets
+- [OpenGameArt Playing Cards](https://opengameart.org/sites/default/files/cards_0.zip) - Standard 52-card deck images for War/Poker
 
 #### Project Documents
 - CardGameTechStackDesign.markdown (detailed architecture)
