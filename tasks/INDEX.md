@@ -1,7 +1,7 @@
 # Task Index: ManaMesh
 
 **Repo:** MM
-**Last Updated:** 2026-01-21
+**Last Updated:** 2026-01-22
 
 ## Active Tasks
 
@@ -15,7 +15,7 @@
 | MM-009 | Implement Public Game Indexing | Complete | MM-003 | N/A |
 | MM-010 | Fix Public Game Key Encoding | Complete | MM-003 | N/A |
 | MM-011 | Confirm/Document Runtime Support | Complete | MM-003 | N/A |
-| MM-012 | Add DHT Record Expiry/Republish | Ready | MM-003 | `feature/dht-record-expiry` |
+| MM-012 | Add DHT Record Expiry/Republish | Complete | MM-003 | N/A |
 | MM-013 | Fix AbortController Reuse in Gateway | Ready | None | `feature/fix-abort-controller` |
 | MM-014 | Clear Timeout Timers on Success | Ready | None | `feature/fix-timeout-cleanup` |
 | MM-015 | Fix IPFS Config and Gateway Priority | Ready | None | `feature/fix-ipfs-config` |
@@ -51,7 +51,6 @@ Tasks with all dependencies met:
 - MM-009: Implement Public Game Indexing (unblocked by MM-003)
 - MM-010: Fix Public Game Key Encoding (unblocked by MM-003)
 - MM-011: Confirm/Document Runtime Support (unblocked by MM-003)
-- MM-012: Add DHT Record Expiry/Republish (unblocked by MM-003)
 - MM-013: Fix AbortController Reuse in Gateway (from MM-006 review)
 - MM-014: Clear Timeout Timers on Success (from MM-006 review)
 - MM-015: Fix IPFS Config and Gateway Priority (from MM-006 review)
@@ -79,7 +78,7 @@ MM-003 (Complete) ✓
 ├── MM-009 (Ready - public game indexing)
 ├── MM-010 (Ready - key encoding fix)
 ├── MM-011 (Ready - runtime compat)
-└── MM-012 (Ready - record expiry)
+└── MM-012 (Complete) ✓
 
 MM-004 (Complete) ✓
 MM-005 (Complete) ✓
