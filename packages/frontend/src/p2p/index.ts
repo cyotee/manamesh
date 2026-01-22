@@ -30,6 +30,15 @@ export {
   isValidRoomCode,
 } from './discovery/dht';
 
+// Discovery methods - Signaling server (fallback)
+export {
+  SignalingConnection,
+  isSignalingAvailable,
+  getSignalingUrl,
+  type SignalingState,
+  type SignalingEvents,
+} from './discovery/signaling';
+
 // libp2p configuration
 export {
   createNode,

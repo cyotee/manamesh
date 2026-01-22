@@ -1,0 +1,12 @@
+{
+  "version": "0.2",
+  "language": "en",
+  "dictionaryDefinitions": [
+    {
+      "name": "custom",
+      "path": ".cspell/custom-dictionary.txt"
+    }
+  ],
+  "dictionaries": ["custom"],
+  "ignorePaths": ["node_modules", "dist", "build"]
+}

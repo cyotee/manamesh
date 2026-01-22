@@ -12,11 +12,13 @@
         "express": "^5.1.0",
         "helia": "^5.5.1",
         "libp2p": "^3.0.3",
-        "typescript": "^5.9.2"
+        "typescript": "^5.9.2",
+        "ws": "^8.18.0"
     },
     "devDependencies": {
         "@types/express": "^5.0.3",
         "@types/node": "^24.5.2",
+        "@types/ws": "^8.5.13",
         "nodemon": "^3.1.10",
         "ts-node": "^10.9.2"
     }
