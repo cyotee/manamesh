@@ -13,7 +13,7 @@
 | MM-007 | Backend Signaling Fallback | Complete | MM-002, MM-003, MM-004 | N/A |
 | MM-008 | Stabilize Tests & Acceptance Criteria | Complete | None | N/A |
 | MM-009 | Implement Public Game Indexing | Complete | MM-003 | N/A |
-| MM-010 | Fix Public Game Key Encoding | Ready | MM-003 | `feature/fix-dht-key-encoding` |
+| MM-010 | Fix Public Game Key Encoding | Complete | MM-003 | N/A |
 | MM-011 | Confirm/Document Runtime Support | Ready | MM-003 | `feature/runtime-compat` |
 | MM-012 | Add DHT Record Expiry/Republish | Ready | MM-003 | `feature/dht-record-expiry` |
 | MM-013 | Fix AbortController Reuse in Gateway | Ready | None | `feature/fix-abort-controller` |
