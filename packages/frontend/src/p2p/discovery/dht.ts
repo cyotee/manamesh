@@ -34,6 +34,10 @@ const DHT_TIMEOUT_MS = 30000; // 30 seconds for DHT operations
 const ANSWER_POLL_INTERVAL_MS = 2000; // Poll for answers every 2 seconds
 const PUBLIC_GAMES_REFRESH_MS = 10000; // Refresh public games every 10 seconds
 
+// Record expiry/republish configuration
+const RECORD_TTL_MS = 5 * 60 * 1000; // 5 minutes TTL for all records
+const REPUBLISH_INTERVAL_MS = 2 * 60 * 1000; // Republish every 2 minutes (before TTL expires)
+
 export type DHTState =
   | { phase: 'idle' }
   | { phase: 'initializing' }
@@ -51,6 +55,7 @@ export interface PublicGame {
   hostName: string;
   gameType: string;
   createdAt: number;
+  expiresAt: number;
 }
 
 export interface DHTEvents {
@@ -97,10 +102,12 @@ export class DHTConnection {
   private _state: DHTState = { phase: 'idle' };
   private answerPollTimer: NodeJS.Timeout | null = null;
   private publicGamesTimer: NodeJS.Timeout | null = null;
+  private republishTimer: NodeJS.Timeout | null = null;
   private currentRoomCode: string | null = null;
   private isPublicGame = false;
   private hostName = 'Anonymous';
   private gameType = 'MTG';
+  private currentOfferCode: string | null = null; // Store for republishing
 
   constructor(events: DHTEvents) {
     this.events = events;
@@ -211,6 +218,7 @@ export class DHTConnection {
       this.peerConnection = this.createPeerConnection();
       const offer = await this.peerConnection.createOffer();
       const offerCode = await encodeOffer(offer);
+      this.currentOfferCode = offerCode; // Store for republishing
 
       // Generate room code
       const roomCode = generateRoomCode();
@@ -218,13 +226,16 @@ export class DHTConnection {
 
       this.setState({ phase: 'publishing-offer', role: 'host', roomCode });
 
-      // Publish offer to DHT
+      const now = Date.now();
+
+      // Publish offer to DHT with expiry
       await this.publishToDHT(getRoomKey(roomCode), {
         type: 'offer',
         data: offerCode,
         hostName,
         gameType,
-        createdAt: Date.now(),
+        createdAt: now,
+        expiresAt: now + RECORD_TTL_MS,
       });
 
       // If public, also add to public games list
@@ -236,6 +247,9 @@ export class DHTConnection {
 
       // Start polling for answers
       this.startAnswerPolling(roomCode);
+
+      // Start republishing to keep room alive
+      this.startRepublishing();
 
       return roomCode;
     } catch (error) {
@@ -279,6 +293,12 @@ export class DHTConnection {
         throw new Error('Room not found. Check the code and try again.');
       }
 
+      // Check if offer has expired
+      const now = Date.now();
+      if (offerData.expiresAt && typeof offerData.expiresAt === 'number' && now > offerData.expiresAt) {
+        throw new Error('Room has expired. The host may have left.');
+      }
+
       // Decode and accept the offer
       const offer = await decodeOffer(offerData.data);
       this.peerConnection = this.createPeerConnection();
@@ -287,11 +307,14 @@ export class DHTConnection {
 
       this.setState({ phase: 'connecting', role: 'guest' });
 
-      // Publish answer to DHT
+      const answerTime = Date.now();
+
+      // Publish answer to DHT with expiry
       await this.publishToDHT(getRoomKey(`${normalized}-answer`), {
         type: 'answer',
         data: answerCode,
-        createdAt: Date.now(),
+        createdAt: answerTime,
+        expiresAt: answerTime + RECORD_TTL_MS,
       });
 
       // Connection will complete when host processes the answer
@@ -367,11 +390,13 @@ export class DHTConnection {
     hostName: string,
     gameType: string
   ): Promise<void> {
+    const now = Date.now();
     const gameInfo: PublicGame = {
       roomCode,
       hostName,
       gameType,
-      createdAt: Date.now(),
+      createdAt: now,
+      expiresAt: now + RECORD_TTL_MS,
     };
 
     // 1. Store game details under its own key
@@ -463,6 +488,73 @@ export class DHTConnection {
       clearInterval(this.publicGamesTimer);
       this.publicGamesTimer = null;
     }
+    if (this.republishTimer) {
+      clearInterval(this.republishTimer);
+      this.republishTimer = null;
+    }
+  }
+
+  /**
+   * Start republishing room offer and public game listing periodically
+   * This keeps the room alive in the DHT until the host disconnects
+   */
+  private startRepublishing(): void {
+    if (this.republishTimer) {
+      clearInterval(this.republishTimer);
+    }
+
+    this.republishTimer = setInterval(async () => {
+      // Only republish if still waiting for guest or connected
+      if (
+        this._state.phase !== 'waiting-for-guest' &&
+        this._state.phase !== 'connected'
+      ) {
+        this.stopRepublishing();
+        return;
+      }
+
+      const roomCode = this.currentRoomCode;
+      const offerCode = this.currentOfferCode;
+
+      if (!roomCode || !offerCode) {
+        return;
+      }
+
+      try {
+        const now = Date.now();
+
+        // Republish room offer with updated expiry
+        await this.publishToDHT(getRoomKey(roomCode), {
+          type: 'offer',
+          data: offerCode,
+          hostName: this.hostName,
+          gameType: this.gameType,
+          createdAt: now,
+          expiresAt: now + RECORD_TTL_MS,
+        });
+        console.log(`[DHT] Republished room offer: ${roomCode}`);
+
+        // If public game, also republish game listing and update index
+        if (this.isPublicGame) {
+          await this.addToPublicGames(roomCode, this.hostName, this.gameType);
+          console.log(`[DHT] Republished public game listing: ${roomCode}`);
+        }
+      } catch (error) {
+        console.error('[DHT] Republish error:', error);
+        // Don't stop republishing on error - will retry next interval
+      }
+    }, REPUBLISH_INTERVAL_MS);
+  }
+
+  /**
+   * Stop republishing
+   */
+  private stopRepublishing(): void {
+    if (this.republishTimer) {
+      clearInterval(this.republishTimer);
+      this.republishTimer = null;
+    }
+    this.currentOfferCode = null;
   }
 
   /**
@@ -496,6 +588,8 @@ export class DHTConnection {
    * This uses a two-step approach:
    * 1. Fetch the index to get room codes
    * 2. Fetch each game's details from its individual key
+   *
+   * Records are filtered by expiresAt timestamp to exclude stale games
    */
   private async fetchPublicGames(): Promise<void> {
     if (!this.libp2p) {
@@ -505,7 +599,7 @@ export class DHTConnection {
 
     try {
       const now = Date.now();
-      const maxAge = 5 * 60 * 1000; // 5 minutes max age
+      const maxAge = RECORD_TTL_MS; // Use the same TTL for index staleness
 
       // Step 1: Fetch the index
       const indexData = await this.lookupFromDHT(getPublicGamesIndexKey());
@@ -532,9 +626,15 @@ export class DHTConnection {
 
           if (gameData && this.isValidPublicGame(gameData)) {
             const game = gameData as unknown as PublicGame;
-            // Double-check freshness
-            if (now - game.createdAt < maxAge) {
+            // Filter by expiresAt if present, otherwise fall back to createdAt
+            const isExpired = game.expiresAt
+              ? now > game.expiresAt
+              : now - game.createdAt > maxAge;
+
+            if (!isExpired) {
               games.push(game);
+            } else {
+              console.log(`[DHT] Filtering expired game: ${roomCode}`);
             }
           }
         } catch (error) {
@@ -543,7 +643,7 @@ export class DHTConnection {
         }
       }
 
-      console.log(`[DHT] Retrieved ${games.length} public games`);
+      console.log(`[DHT] Retrieved ${games.length} non-expired public games`);
 
       // Sort by creation time (newest first)
       games.sort((a, b) => b.createdAt - a.createdAt);
@@ -605,6 +705,7 @@ export class DHTConnection {
    */
   cleanup(): void {
     this.stopPolling();
+    this.stopRepublishing();
     if (this.peerConnection) {
       this.peerConnection.close();
       this.peerConnection = null;

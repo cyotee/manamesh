@@ -357,25 +357,30 @@ describe('Public game key generation', () => {
 });
 
 describe('PublicGame type validation', () => {
-  it('validates complete PublicGame objects', () => {
+  it('validates complete PublicGame objects with expiresAt', () => {
+    const now = Date.now();
     const validGame: PublicGame = {
       roomCode: 'ABC123',
       hostName: 'Player 1',
       gameType: 'MTG',
-      createdAt: Date.now(),
+      createdAt: now,
+      expiresAt: now + 5 * 60 * 1000, // 5 minute TTL
     };
 
     expect(validGame.roomCode).toBe('ABC123');
     expect(validGame.hostName).toBe('Player 1');
     expect(validGame.gameType).toBe('MTG');
     expect(typeof validGame.createdAt).toBe('number');
+    expect(typeof validGame.expiresAt).toBe('number');
+    expect(validGame.expiresAt).toBeGreaterThan(validGame.createdAt);
   });
 
   it('allows different game types', () => {
+    const now = Date.now();
     const games: PublicGame[] = [
-      { roomCode: 'ABC123', hostName: 'Host 1', gameType: 'MTG', createdAt: Date.now() },
-      { roomCode: 'DEF456', hostName: 'Host 2', gameType: 'Pokemon', createdAt: Date.now() },
-      { roomCode: 'GHI789', hostName: 'Host 3', gameType: 'Lorcana', createdAt: Date.now() },
+      { roomCode: 'ABC123', hostName: 'Host 1', gameType: 'MTG', createdAt: now, expiresAt: now + 300000 },
+      { roomCode: 'DEF456', hostName: 'Host 2', gameType: 'Pokemon', createdAt: now, expiresAt: now + 300000 },
+      { roomCode: 'GHI789', hostName: 'Host 3', gameType: 'Lorcana', createdAt: now, expiresAt: now + 300000 },
     ];
 
     expect(games.length).toBe(3);
@@ -441,5 +446,135 @@ describe('Index-based public game discovery', () => {
 
     // Should not have more calls after stopping
     expect(onPublicGamesUpdate.mock.calls.length).toBe(callCountAfterStop);
+  });
+});
+
+describe('Record expiry logic', () => {
+  it('PublicGame expiresAt should be in the future', () => {
+    const now = Date.now();
+    const RECORD_TTL_MS = 5 * 60 * 1000; // Same as in dht.ts
+
+    const game: PublicGame = {
+      roomCode: 'ABC123',
+      hostName: 'Player 1',
+      gameType: 'MTG',
+      createdAt: now,
+      expiresAt: now + RECORD_TTL_MS,
+    };
+
+    // expiresAt should be 5 minutes in the future
+    expect(game.expiresAt - game.createdAt).toBe(RECORD_TTL_MS);
+    expect(game.expiresAt).toBeGreaterThan(now);
+  });
+
+  it('detects expired games by expiresAt', () => {
+    const now = Date.now();
+    const pastTime = now - 10 * 60 * 1000; // 10 minutes ago
+
+    const expiredGame: PublicGame = {
+      roomCode: 'OLDGAME',
+      hostName: 'Old Player',
+      gameType: 'MTG',
+      createdAt: pastTime,
+      expiresAt: pastTime + 5 * 60 * 1000, // Expired 5 minutes ago
+    };
+
+    const freshGame: PublicGame = {
+      roomCode: 'NEWGAME',
+      hostName: 'New Player',
+      gameType: 'MTG',
+      createdAt: now,
+      expiresAt: now + 5 * 60 * 1000, // Expires in 5 minutes
+    };
+
+    // Expired game's expiresAt is in the past
+    expect(now > expiredGame.expiresAt).toBe(true);
+
+    // Fresh game's expiresAt is in the future
+    expect(now < freshGame.expiresAt).toBe(true);
+  });
+
+  it('can filter expired games from a list', () => {
+    const now = Date.now();
+    const RECORD_TTL_MS = 5 * 60 * 1000;
+
+    const games: PublicGame[] = [
+      // Fresh game - should be kept
+      {
+        roomCode: 'FRESH1',
+        hostName: 'Host 1',
+        gameType: 'MTG',
+        createdAt: now,
+        expiresAt: now + RECORD_TTL_MS,
+      },
+      // Expired game - should be filtered out
+      {
+        roomCode: 'EXPIRED',
+        hostName: 'Host 2',
+        gameType: 'MTG',
+        createdAt: now - 10 * 60 * 1000,
+        expiresAt: now - 5 * 60 * 1000, // Expired 5 minutes ago
+      },
+      // Another fresh game - should be kept
+      {
+        roomCode: 'FRESH2',
+        hostName: 'Host 3',
+        gameType: 'Pokemon',
+        createdAt: now - 1 * 60 * 1000,
+        expiresAt: now + 4 * 60 * 1000, // Expires in 4 minutes
+      },
+    ];
+
+    // Filter out expired games (same logic as in fetchPublicGames)
+    const freshGames = games.filter(game => {
+      const isExpired = game.expiresAt
+        ? now > game.expiresAt
+        : now - game.createdAt > RECORD_TTL_MS;
+      return !isExpired;
+    });
+
+    expect(freshGames.length).toBe(2);
+    expect(freshGames.map(g => g.roomCode)).toEqual(['FRESH1', 'FRESH2']);
+    expect(freshGames.find(g => g.roomCode === 'EXPIRED')).toBeUndefined();
+  });
+
+  it('falls back to createdAt if expiresAt is missing', () => {
+    const now = Date.now();
+    const RECORD_TTL_MS = 5 * 60 * 1000;
+
+    // Legacy game without expiresAt field (cast to test backward compat)
+    const legacyGame = {
+      roomCode: 'LEGACY',
+      hostName: 'Legacy Host',
+      gameType: 'MTG',
+      createdAt: now - 6 * 60 * 1000, // 6 minutes ago (expired by TTL)
+    } as PublicGame;
+
+    // Filter logic should use createdAt when expiresAt is missing
+    const isExpired = legacyGame.expiresAt
+      ? now > legacyGame.expiresAt
+      : now - legacyGame.createdAt > RECORD_TTL_MS;
+
+    expect(isExpired).toBe(true); // Should be expired based on createdAt
+  });
+
+  it('keeps games with expiresAt even if createdAt is old', () => {
+    const now = Date.now();
+    const RECORD_TTL_MS = 5 * 60 * 1000;
+
+    // Game with old createdAt but recently republished (fresh expiresAt)
+    const republishedGame: PublicGame = {
+      roomCode: 'REPUBLISHED',
+      hostName: 'Active Host',
+      gameType: 'MTG',
+      createdAt: now - 30 * 60 * 1000, // Created 30 minutes ago
+      expiresAt: now + 3 * 60 * 1000, // But just republished, expires in 3 minutes
+    };
+
+    const isExpired = republishedGame.expiresAt
+      ? now > republishedGame.expiresAt
+      : now - republishedGame.createdAt > RECORD_TTL_MS;
+
+    expect(isExpired).toBe(false); // Should NOT be expired because expiresAt is fresh
   });
 });
