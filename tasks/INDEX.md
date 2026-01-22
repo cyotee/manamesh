@@ -16,7 +16,7 @@
 | MM-010 | Fix Public Game Key Encoding | Complete | MM-003 | N/A |
 | MM-011 | Confirm/Document Runtime Support | Complete | MM-003 | N/A |
 | MM-012 | Add DHT Record Expiry/Republish | Complete | MM-003 | N/A |
-| MM-013 | Fix AbortController Reuse in Gateway | Ready | None | `feature/fix-abort-controller` |
+| MM-013 | Fix AbortController Reuse in Gateway | Complete | None | N/A |
 | MM-014 | Clear Timeout Timers on Success | Ready | None | `feature/fix-timeout-cleanup` |
 | MM-015 | Fix IPFS Config and Gateway Priority | Ready | None | `feature/fix-ipfs-config` |
 | MM-016 | IPFS Code Cleanup and Test Improvements | Ready | None | `feature/ipfs-cleanup` |
