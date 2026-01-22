@@ -228,3 +228,156 @@ describe('isGameOver', () => {
     expect(isGameOver(G)).toBe(false);
   });
 });
+
+describe('Edge cases', () => {
+  describe('empty deck handling', () => {
+    it('allows multiple draw attempts on empty deck without error', () => {
+      const G = createUnshuffledState([], 2);
+
+      const result1 = drawCard(G, '0');
+      const result2 = drawCard(result1.state, '0');
+      const result3 = drawCard(result2.state, '0');
+
+      expect(result1.drawnCard).toBeNull();
+      expect(result2.drawnCard).toBeNull();
+      expect(result3.drawnCard).toBeNull();
+      expect(result3.state.hands['0']).toEqual([]);
+    });
+
+    it('game over triggers when deck runs out mid-game', () => {
+      const cards: Card[] = [{ id: 'last', name: 'Last Card' }];
+      const G = createUnshuffledState(cards, 2);
+
+      const result = drawCard(G, '0');
+      expect(result.drawnCard?.id).toBe('last');
+      expect(isGameOver(result.state)).toBe(true);
+    });
+  });
+
+  describe('full hand handling', () => {
+    it('allows drawing beyond maxHandSize (no hard limit enforced)', () => {
+      const cards = createTestDeck(10);
+      const G = createUnshuffledState(cards, 2);
+      G.maxHandSize = 3;
+
+      // Draw 5 cards (beyond maxHandSize)
+      let state = G;
+      for (let i = 0; i < 5; i++) {
+        const result = drawCard(state, '0');
+        state = result.state;
+      }
+
+      expect(state.hands['0']).toHaveLength(5);
+      expect(state.deck).toHaveLength(5);
+    });
+  });
+
+  describe('win conditions', () => {
+    it('player wins immediately when cardsToWin is 1', () => {
+      const G = createUnshuffledState([], 2);
+      G.cardsToWin = 1;
+      G.hands['0'] = [{ id: 'winning', name: 'Winning Card' }];
+
+      const result = playCard(G, '0', 'winning');
+
+      expect(result.success).toBe(true);
+      expect(result.state.winner).toBe('0');
+    });
+
+    it('only first player to reach cardsToWin wins', () => {
+      const G = createUnshuffledState([], 2);
+      G.cardsToWin = 2;
+      G.field['0'] = [{ id: 'A', name: 'Card A' }];
+      G.field['1'] = [{ id: 'B', name: 'Card B' }];
+      G.hands['0'] = [{ id: 'C', name: 'Card C' }];
+      G.hands['1'] = [{ id: 'D', name: 'Card D' }];
+
+      // Player 0 plays first
+      const result = playCard(G, '0', 'C');
+
+      expect(result.state.winner).toBe('0');
+    });
+
+    it('subsequent plays after winner update winner (known behavior - game should prevent this)', () => {
+      const G = createUnshuffledState([], 2);
+      G.cardsToWin = 1;
+      G.hands['0'] = [{ id: 'A', name: 'Card A' }];
+      G.hands['1'] = [{ id: 'B', name: 'Card B' }];
+
+      // Player 0 wins
+      const state1 = playCard(G, '0', 'A').state;
+      expect(state1.winner).toBe('0');
+
+      // Player 1 plays after - NOTE: current logic allows this to overwrite winner
+      // In a real game, the game flow should prevent plays after a winner is declared
+      const state2 = playCard(state1, '1', 'B').state;
+      expect(state2.winner).toBe('1'); // Documents current behavior
+    });
+  });
+
+  describe('invalid move handling', () => {
+    it('play fails gracefully for non-existent player', () => {
+      const G = createUnshuffledState([], 2);
+
+      const result = playCard(G, 'nonexistent', 'any');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Card not in hand');
+    });
+
+    it('discard fails gracefully for non-existent player', () => {
+      const G = createUnshuffledState([], 2);
+
+      const result = discardCard(G, 'nonexistent', 'any');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Card not in hand');
+    });
+
+    it('draw handles non-existent player gracefully', () => {
+      const cards = createTestDeck(5);
+      const G = createUnshuffledState(cards, 2);
+
+      const result = drawCard(G, 'nonexistent');
+
+      // Creates empty array for nonexistent player
+      expect(result.drawnCard).not.toBeNull();
+      expect(result.state.hands['nonexistent']).toHaveLength(1);
+    });
+
+    it('playing same card twice fails', () => {
+      const G = createUnshuffledState([], 2);
+      G.hands['0'] = [{ id: 'A', name: 'Card A' }];
+
+      const result1 = playCard(G, '0', 'A');
+      expect(result1.success).toBe(true);
+
+      // Try to play same card again
+      const result2 = playCard(result1.state, '0', 'A');
+      expect(result2.success).toBe(false);
+      expect(result2.error).toBe('Card not in hand');
+    });
+  });
+
+  describe('multiple players', () => {
+    it('handles 4-player game correctly', () => {
+      const cards = createTestDeck(20);
+      const G = createUnshuffledState(cards, 4);
+
+      // Each player draws 2 cards
+      let state = G;
+      for (let round = 0; round < 2; round++) {
+        for (let player = 0; player < 4; player++) {
+          const result = drawCard(state, player.toString());
+          state = result.state;
+        }
+      }
+
+      expect(state.hands['0']).toHaveLength(2);
+      expect(state.hands['1']).toHaveLength(2);
+      expect(state.hands['2']).toHaveLength(2);
+      expect(state.hands['3']).toHaveLength(2);
+      expect(state.deck).toHaveLength(12); // 20 - 8 drawn
+    });
+  });
+});

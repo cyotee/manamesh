@@ -7,7 +7,8 @@
       "WebFetch(domain:support.claude.com)",
       "WebFetch(domain:localhost)",
       "Bash(cat:*)",
-      "Bash(yarn tsc:*)"
+      "Bash(yarn tsc:*)",
+      "Skill(backlog:complete)"
     ]
   }
 }
