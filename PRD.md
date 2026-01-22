@@ -2,7 +2,7 @@
 project: ManaMesh
 version: 1.0
 created: 2026-01-20
-last_updated: 2026-01-20
+last_updated: 2026-01-21
 ---
 
 # ManaMesh - Product Requirements Document
@@ -66,6 +66,98 @@ Turn-based multiplayer using boardgame.io for state synchronization. Game-specif
 
 Card images and assets loaded from IPFS with IndexedDB caching for offline play. Gateway fallback for reliability.
 
+### Feature 5: Asset Pack Format
+
+Hierarchical, extensible format for bundling and distributing game assets.
+
+#### Asset Pack Types
+
+| Type | Description | Example |
+|------|-------------|---------|
+| Token Pack | Generic game tokens | Counters, markers, damage tokens |
+| Card Back Pack | Card back images | Standard back, alternate backs |
+| Card Face Pack | Card face images for a set/expansion | MTG "Foundations" set |
+| Bundle Pack | Collection of other packs | "MTG Complete" bundling all sets |
+
+#### Manifest Structure
+
+```json
+{
+  "manifest_version": "1.0",
+  "pack_id": "mtg-foundations-2024",
+  "pack_type": "card_faces",
+  "name": "MTG Foundations 2024",
+  "game_module": "mtg",
+  "version": "1.0.0",
+  "ipns_key": "k51qzi5uqu5d...",  // Optional mutable reference
+
+  "asset_schema": {
+    "id_format": "scryfall_uuid",  // Game module defines this
+    "asset_types": ["card_face", "card_back"]
+  },
+
+  "assets": [
+    {
+      "id": "12345678-abcd-...",
+      "type": "card_face",
+      "file": "cards/12345678.webp",  // Local file in archive
+      "checksum": "sha256:abc123..."
+    },
+    {
+      "id": "87654321-dcba-...",
+      "type": "card_face",
+      "cid": "bafybeig...",  // External IPFS reference
+      "checksum": "sha256:def456..."
+    }
+  ],
+
+  "includes": [
+    {
+      "cid": "bafybei...",  // Reference to child pack
+      "name": "MTG Token Pack"
+    },
+    {
+      "inline": { /* embedded child manifest */ }
+    }
+  ],
+
+  "overrides": {
+    "card_back": {
+      "default": "backs/standard.webp",
+      "per_card": {
+        "dfc-uuid-123": "backs/transform.webp"
+      }
+    }
+  }
+}
+```
+
+#### Distribution Formats
+
+| Format | Use Case | Contents |
+|--------|----------|----------|
+| Bare Manifest | Reference-only packs | Just `.json` manifest with CID references |
+| Archive (tar.gz/zip) | Self-contained packs | Manifest + bundled asset files |
+| IPFS Directory | Large packs | Manifest + assets as IPFS directory |
+
+#### Game Module Integration
+
+Game modules declare accepted asset types:
+
+```typescript
+interface GameModuleAssetRequirements {
+  required: AssetType[];   // Must have (e.g., card_faces)
+  optional: AssetType[];   // Can use (e.g., tokens, alt_backs)
+  id_format: string;       // How cards are identified
+}
+```
+
+#### Versioning
+
+- **Immutable**: Each pack version is a unique IPFS CID
+- **Mutable**: Optional IPNS key for "latest" pointer
+- **Checksum**: SHA-256 for each asset ensures integrity
+
 ### Feature 4: Cryptographic Fair Play
 
 In-play deck state uses commitments and mental poker techniques. Out-of-play decks are unencrypted for sharing.
@@ -84,6 +176,7 @@ Monorepo with two packages:
 |--------|---------|------|
 | libp2p | P2P networking, DHT discovery | Read/Write |
 | IPFS (helia) | Decentralized asset storage | Read |
+| WebTorrent | Large asset pack distribution | Read |
 | IndexedDB | Local caching, offline storage | Read/Write |
 | WebRTC | Direct peer data channels | Read/Write |
 
@@ -180,7 +273,10 @@ manamesh/
 | DHT | Distributed Hash Table - decentralized peer lookup |
 | mDNS | Multicast DNS - local network service discovery |
 | CID | Content Identifier - IPFS content-addressed hash |
+| IPNS | InterPlanetary Name System - mutable pointers to IPFS content |
 | Mental Poker | Cryptographic protocol for fair card games without trusted third party |
+| Asset Pack | Bundled collection of game assets (images, etc.) with manifest |
+| Game Module | Plugin defining rules and asset requirements for a specific card game |
 
 ### References
 
