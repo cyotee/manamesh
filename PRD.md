@@ -433,6 +433,9 @@ manamesh/
 │   │       ├── components/ # React UI
 │   │       └── assets/     # IPFS loader
 │   └── backend/      # Optional signaling server
+├── vendor/           # Forked dependencies (git submodules)
+│   ├── boardgame.io/       # cyotee/boardgame.io
+│   └── boardgameIO-p2p/    # cyotee/boardgameIO-p2p
 ├── tasks/            # Task management
 └── design.yaml       # Repo configuration
 ```
@@ -450,12 +453,35 @@ manamesh/
 
 | Dependency | Version | Purpose |
 |------------|---------|---------|
-| boardgame.io | ^0.50.2 | Turn-based game framework |
-| @boardgame.io/p2p | experimental | P2P transport (WebRTC, no lobby server) |
+| boardgame.io | fork | Turn-based game framework (submodule) |
+| @boardgame.io/p2p | fork | P2P transport (submodule) |
 | phaser | ^3.80.1 | 2D rendering engine |
 | helia | ^4.0.1 | Browser IPFS node |
 | libp2p | ^3.0.3 | P2P networking |
 | elliptic | ^6.5.5 | Cryptographic operations |
+
+### Forked Dependencies
+
+Critical dependencies are maintained as forks installed via git submodules. This allows:
+- Immediate bug fixes without waiting for upstream PR acceptance
+- Custom modifications for ManaMesh-specific needs
+- Version pinning independent of upstream releases
+- Local development with linked node modules
+
+| Upstream | Fork | Purpose |
+|----------|------|---------|
+| [boardgameio/boardgame.io](https://github.com/boardgameio/boardgame.io) | [cyotee/boardgame.io](https://github.com/cyotee/boardgame.io) | Core game framework |
+| [boardgameio/p2p](https://github.com/boardgameio/p2p) | [cyotee/boardgameIO-p2p](https://github.com/cyotee/boardgameIO-p2p) | P2P transport |
+
+**Submodule workflow:**
+```bash
+# Submodules installed to vendor/
+git submodule update --init --recursive
+
+# Link as node modules
+yarn link ./vendor/boardgame.io
+yarn link ./vendor/boardgameIO-p2p
+```
 
 ### Testing Requirements
 
@@ -517,7 +543,11 @@ manamesh/
 - [TypeScript Support](https://boardgame.io/documentation/#/typescript) - Type definitions for Game, Ctx, moves
 - [Game Definition API](https://boardgame.io/documentation/#/api/Game) - Setup, moves, phases, endIf
 - [Plugin System](https://boardgame.io/documentation/#/plugins) - Extending game functionality
-- [boardgame.io/p2p](https://github.com/boardgameio/p2p) - Experimental P2P transport (WebRTC, no lobby server)
+- [boardgame.io/p2p](https://github.com/boardgameio/p2p) - Experimental P2P transport (upstream)
+
+#### ManaMesh Forks (Submodules)
+- [cyotee/boardgame.io](https://github.com/cyotee/boardgame.io) - Our fork of boardgame.io core
+- [cyotee/boardgameIO-p2p](https://github.com/cyotee/boardgameIO-p2p) - Our fork of P2P transport
 
 #### P2P & Storage
 - [libp2p Documentation](https://docs.libp2p.io/)
