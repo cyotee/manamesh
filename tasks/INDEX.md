@@ -7,15 +7,15 @@
 
 | ID | Title | Status | Dependencies | Worktree |
 |----|-------|--------|--------------|----------|
-| MM-003 | libp2p DHT Discovery | Pending Merge | MM-002 | `feature/libp2p-dht` |
+| MM-003 | libp2p DHT Discovery | Complete | MM-002 | `feature/libp2p-dht` |
 | MM-004 | mDNS Local Discovery | Complete | MM-002 | N/A |
 | MM-005 | boardgame.io P2P Transport | In Progress | MM-002 | `feature/bgio-p2p-transport` |
-| MM-007 | Backend Signaling Fallback | Blocked | MM-002, MM-003, MM-004 | `feature/signaling-server` |
+| MM-007 | Backend Signaling Fallback | Ready | MM-002, MM-003, MM-004 | `feature/signaling-server` |
 | MM-008 | Stabilize Tests & Acceptance Criteria | Ready | None | `feature/test-stabilization` |
-| MM-009 | Implement Public Game Indexing | Blocked | MM-003 | `feature/public-game-indexing` |
-| MM-010 | Fix Public Game Key Encoding | Blocked | MM-003 | `feature/fix-dht-key-encoding` |
-| MM-011 | Confirm/Document Runtime Support | Blocked | MM-003 | `feature/runtime-compat` |
-| MM-012 | Add DHT Record Expiry/Republish | Blocked | MM-003 | `feature/dht-record-expiry` |
+| MM-009 | Implement Public Game Indexing | Ready | MM-003 | `feature/public-game-indexing` |
+| MM-010 | Fix Public Game Key Encoding | Ready | MM-003 | `feature/fix-dht-key-encoding` |
+| MM-011 | Confirm/Document Runtime Support | Ready | MM-003 | `feature/runtime-compat` |
+| MM-012 | Add DHT Record Expiry/Republish | Ready | MM-003 | `feature/dht-record-expiry` |
 | MM-013 | Fix AbortController Reuse in Gateway | Ready | None | `feature/fix-abort-controller` |
 | MM-014 | Clear Timeout Timers on Success | Ready | None | `feature/fix-timeout-cleanup` |
 | MM-015 | Fix IPFS Config and Gateway Priority | Ready | None | `feature/fix-ipfs-config` |
@@ -46,7 +46,12 @@
 
 ### Ready for Agent
 Tasks with all dependencies met:
+- MM-007: Backend Signaling Fallback (was deferred, now ready)
 - MM-008: Stabilize Tests & Acceptance Criteria
+- MM-009: Implement Public Game Indexing (unblocked by MM-003)
+- MM-010: Fix Public Game Key Encoding (unblocked by MM-003)
+- MM-011: Confirm/Document Runtime Support (unblocked by MM-003)
+- MM-012: Add DHT Record Expiry/Republish (unblocked by MM-003)
 - MM-013: Fix AbortController Reuse in Gateway (from MM-006 review)
 - MM-014: Clear Timeout Timers on Success (from MM-006 review)
 - MM-015: Fix IPFS Config and Gateway Priority (from MM-006 review)
@@ -57,11 +62,6 @@ Tasks with all dependencies met:
 
 ### Blocked
 Tasks waiting on dependencies:
-- MM-007: Backend Signaling Fallback → DEFERRED (waiting on MM-003, MM-004)
-- MM-009: Implement Public Game Indexing (waiting on MM-003)
-- MM-010: Fix Public Game Key Encoding (waiting on MM-003)
-- MM-011: Confirm/Document Runtime Support (waiting on MM-003)
-- MM-012: Add DHT Record Expiry/Republish (waiting on MM-003)
 - MM-019: Core Game Module Interface (waiting on MM-017)
 - MM-020: Deck Plugin for boardgame.io (waiting on MM-017, MM-019)
 - MM-021: War Game Module (waiting on MM-019, MM-020, MM-018)
@@ -75,15 +75,15 @@ Tasks waiting on dependencies:
 ## Dependency Graph
 
 ```
-MM-003 (In Progress)
-├── MM-009 (Blocked - public game indexing)
-├── MM-010 (Blocked - key encoding fix)
-├── MM-011 (Blocked - runtime compat)
-└── MM-012 (Blocked - record expiry)
+MM-003 (Complete) ✓
+├── MM-009 (Ready - public game indexing)
+├── MM-010 (Ready - key encoding fix)
+├── MM-011 (Ready - runtime compat)
+└── MM-012 (Ready - record expiry)
 
 MM-004 (Complete) ✓
 MM-005 (In Progress)
-MM-007 (Blocked - needs MM-003)
+MM-007 (Ready - all deps complete)
 
 MM-008 (Ready)
 
