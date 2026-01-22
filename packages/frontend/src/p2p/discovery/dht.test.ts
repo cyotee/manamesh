@@ -237,6 +237,7 @@ describe('Error handling', () => {
 });
 
 describe('State transitions', () => {
+  // These tests take longer because libp2p actually initializes and waits for bootstrap
   it('createRoom transitions through correct states when DHT unavailable', async () => {
     const calls: DHTState[] = [];
     const events: DHTEvents = {
@@ -248,13 +249,13 @@ describe('State transitions', () => {
 
     const connection = new DHTConnection(events);
 
-    // Without libp2p initialized, createRoom should fail gracefully
+    // Without bootstrap peer connection, createRoom should fail gracefully
     await expect(connection.createRoom()).rejects.toThrow();
 
     // Should have gone through initializing state before error
     expect(calls.some(s => s.phase === 'initializing')).toBe(true);
     expect(calls.some(s => s.phase === 'error')).toBe(true);
-  });
+  }, 15000); // 15 second timeout for libp2p initialization
 
   it('joinRoom transitions through correct states when DHT unavailable', async () => {
     const calls: DHTState[] = [];
@@ -267,13 +268,13 @@ describe('State transitions', () => {
 
     const connection = new DHTConnection(events);
 
-    // Without libp2p initialized, joinRoom should fail gracefully
+    // Without bootstrap peer connection, joinRoom should fail gracefully
     await expect(connection.joinRoom('ABC123')).rejects.toThrow();
 
     // Should have gone through initializing state before error
     expect(calls.some(s => s.phase === 'initializing')).toBe(true);
     expect(calls.some(s => s.phase === 'error')).toBe(true);
-  });
+  }, 15000); // 15 second timeout for libp2p initialization
 });
 
 describe('Public games', () => {

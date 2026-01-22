@@ -1,6 +1,9 @@
 {
     "name": "@manamesh/frontend",
     "version": "0.1.0",
+    "engines": {
+        "node": ">=20.0.0"
+    },
     "scripts": {
         "dev": "vite",
         "build": "vite build",
