@@ -37,20 +37,20 @@
 
 ### High
 
-- `packages/frontend/src/assets/ipfs-loader.ts`: `fetchFromGateway` reuses one `AbortController` across all gateways. If it times out once, `signal` becomes permanently aborted and all subsequent gateway attempts fail immediately. This effectively disables multi-gateway fallback in the timeout case.
+- `packages/frontend/src/assets/ipfs-loader.ts`: `fetchFromGateway` reuses one `AbortController` across all gateways. If it times out once, `signal` becomes permanently aborted and all subsequent gateway attempts fail immediately. This effectively disables multi-gateway fallback in the timeout case. **→ Converted to MM-013**
 
 ### Medium
 
-- `packages/frontend/src/assets/ipfs-loader.ts`: timeout timers created for helia init + helia fetch aren't cleared on success (`setTimeout` inside a `Promise.race`). This can cause late rejections and/or wasted timers.
-- `packages/frontend/src/assets/ipfs-loader.ts`: config includes `heliaFetchTimeout` but `loadAsset` routes a single `timeout` value to both helia + gateway (defaulting to `gatewayTimeout`). Expected: helia uses `heliaFetchTimeout`.
+- `packages/frontend/src/assets/ipfs-loader.ts`: timeout timers created for helia init + helia fetch aren't cleared on success (`setTimeout` inside a `Promise.race`). This can cause late rejections and/or wasted timers. **→ Converted to MM-014**
+- `packages/frontend/src/assets/ipfs-loader.ts`: config includes `heliaFetchTimeout` but `loadAsset` routes a single `timeout` value to both helia + gateway (defaulting to `gatewayTimeout`). Expected: helia uses `heliaFetchTimeout`. **→ Converted to MM-015**
 - `packages/frontend/src/components/IPFSImage.tsx`: `loadImage` revokes `imageUrl`, but `imageUrl` isn't in the callback deps. Combined with `useEffect([cid, retryCount])`, this risks leaking object URLs or revoking the wrong one in some update sequences.
 - `packages/frontend/src/components/GameBoard.tsx`: `imageCids` uses `useMemo(() => collectImageCids(G), [])`, so it never updates if `G` changes. Probably fine if deck is immutable after start, but it will miss late-added `imageCid`s.
-- `packages/frontend/src/components/GameBoard.tsx`: `preferGateway={true}` means gateway is tried first, which is the inverse of the helia-first requirement described in MM-006 (helia with gateway fallback). The loader supports helia-first; the component choice should be revisited.
+- `packages/frontend/src/components/GameBoard.tsx`: `preferGateway={true}` means gateway is tried first, which is the inverse of the helia-first requirement described in MM-006 (helia with gateway fallback). The loader supports helia-first; the component choice should be revisited. **→ Converted to MM-015**
 
 ### Low
 
-- `packages/frontend/src/assets/cache.ts`: imports `keys` from `idb-keyval` but never uses it.
-- `packages/frontend/src/assets/cache.test.ts`: LRU eviction test doesn't assert outcomes (it ends with a comment), so it won't catch regressions in eviction behavior.
+- `packages/frontend/src/assets/cache.ts`: imports `keys` from `idb-keyval` but never uses it. **→ Converted to MM-016**
+- `packages/frontend/src/assets/cache.test.ts`: LRU eviction test doesn't assert outcomes (it ends with a comment), so it won't catch regressions in eviction behavior. **→ Converted to MM-016**
 
 ## Test Coverage Notes
 

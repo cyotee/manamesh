@@ -19,6 +19,10 @@
 | MM-010 | Fix Public Game Key Encoding | Blocked | MM-003 | `feature/fix-dht-key-encoding` |
 | MM-011 | Confirm/Document Runtime Support | Blocked | MM-003 | `feature/runtime-compat` |
 | MM-012 | Add DHT Record Expiry/Republish | Blocked | MM-003 | `feature/dht-record-expiry` |
+| MM-013 | Fix AbortController Reuse in Gateway | Ready | None | `feature/fix-abort-controller` |
+| MM-014 | Clear Timeout Timers on Success | Ready | None | `feature/fix-timeout-cleanup` |
+| MM-015 | Fix IPFS Config and Gateway Priority | Ready | None | `feature/fix-ipfs-config` |
+| MM-016 | IPFS Code Cleanup and Test Improvements | Ready | None | `feature/ipfs-cleanup` |
 
 ## Status Legend
 
@@ -33,10 +37,12 @@
 
 ### Ready for Agent
 Tasks with all dependencies met:
-- MM-003: libp2p DHT Discovery
 - MM-004: mDNS Local Discovery
-- MM-005: boardgame.io P2P Transport
 - MM-008: Stabilize Tests & Acceptance Criteria
+- MM-013: Fix AbortController Reuse in Gateway (from MM-006 review)
+- MM-014: Clear Timeout Timers on Success (from MM-006 review)
+- MM-015: Fix IPFS Config and Gateway Priority (from MM-006 review)
+- MM-016: IPFS Code Cleanup and Test Improvements (from MM-006 review)
 
 ### Blocked
 Tasks waiting on dependencies:
@@ -60,6 +66,10 @@ MM-001 (Complete)
 │   ├── MM-005 (In Progress)
 │   └── MM-007 (Blocked - needs MM-003, MM-004)
 ├── MM-006 (Complete) ✓
+│   ├── MM-013 (Ready - abort controller fix)
+│   ├── MM-014 (Ready - timeout cleanup)
+│   ├── MM-015 (Ready - config fix)
+│   └── MM-016 (Ready - code cleanup)
 └── MM-008 (Ready)
 ```
 
