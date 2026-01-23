@@ -21,7 +21,7 @@
 | MM-015 | Fix IPFS Config and Gateway Priority | Complete | None | N/A |
 | MM-016 | IPFS Code Cleanup and Test Improvements | Complete | None | N/A |
 | MM-017 | Set Up boardgame.io Fork Submodules | Complete | None | N/A |
-| MM-018 | Standard Playing Cards Asset Pack | In Progress | None | N/A |
+| MM-018 | Standard Playing Cards Asset Pack | Complete | None | N/A |
 | MM-019 | Core Game Module Interface | Ready | MM-017 | `feature/game-module-core` |
 | MM-020 | Deck Plugin for boardgame.io | Blocked | MM-017, MM-019 | `feature/deck-plugin` |
 | MM-021 | War Game Module | Blocked | MM-019, MM-020, MM-018 | `feature/game-war` |
@@ -56,7 +56,6 @@ Tasks with all dependencies met:
 - MM-015: Fix IPFS Config and Gateway Priority (from MM-006 review)
 - MM-016: IPFS Code Cleanup and Test Improvements (from MM-006 review)
 - MM-017: Set Up boardgame.io Fork Submodules
-- MM-018: Standard Playing Cards Asset Pack
 - MM-027: Asset Pack Manifest Parser
 
 ### Blocked
@@ -101,9 +100,9 @@ MM-017 (Ready - bgio submodules)
         ├── MM-025 (Blocked - Lorcana)
         └── MM-026 (Blocked - Riftbound)
 
-MM-018 (Ready - playing cards asset pack)
-├── MM-021 (Blocked - War)
-└── MM-022 (Blocked - Poker)
+MM-018 (Complete) ✓
+├── MM-021 (Blocked - War) ← also needs MM-019, MM-020
+└── MM-022 (Blocked - Poker) ← also needs MM-019, MM-020
 
 MM-027 (Ready - manifest parser)
 └── MM-028 (Blocked - asset loader)
