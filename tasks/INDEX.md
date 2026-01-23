@@ -19,7 +19,7 @@
 | MM-013 | Fix AbortController Reuse in Gateway | Complete | None | N/A |
 | MM-014 | Clear Timeout Timers on Success | Complete | None | N/A |
 | MM-015 | Fix IPFS Config and Gateway Priority | Complete | None | N/A |
-| MM-016 | IPFS Code Cleanup and Test Improvements | Ready | None | `feature/ipfs-cleanup` |
+| MM-016 | IPFS Code Cleanup and Test Improvements | Complete | None | N/A |
 | MM-017 | Set Up boardgame.io Fork Submodules | Ready | None | `feature/bgio-submodules` |
 | MM-018 | Standard Playing Cards Asset Pack | Ready | None | `feature/playing-cards-pack` |
 | MM-019 | Core Game Module Interface | Blocked | MM-017 | `feature/game-module-core` |

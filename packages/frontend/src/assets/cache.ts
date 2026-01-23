@@ -3,7 +3,7 @@
  * Stores IPFS assets with LRU eviction for ~100MB quota management
  */
 
-import { get, set, del, keys, createStore, UseStore } from 'idb-keyval';
+import { get, set, del, createStore, UseStore } from 'idb-keyval';
 
 // Constants
 const CACHE_DB_NAME = 'manamesh-asset-cache';

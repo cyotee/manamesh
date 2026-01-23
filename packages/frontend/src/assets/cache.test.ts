@@ -32,11 +32,7 @@ vi.mock('idb-keyval', () => ({
     targetStore.delete(key);
     return Promise.resolve();
   }),
-  keys: vi.fn((store?: unknown) => {
-    const targetStore = store === 'meta' ? mockMetaStore : mockStore;
-    return Promise.resolve(Array.from(targetStore.keys()));
-  }),
-  createStore: vi.fn((dbName: string, storeName: string) => {
+  createStore: vi.fn((dbName: string) => {
     // Return different identifiers for different stores
     if (dbName.includes('meta')) return 'meta';
     return 'assets';
@@ -200,8 +196,131 @@ describe('Cache Module', () => {
       const newBlob = new Blob(['y'.repeat(5 * 1024 * 1024)]);
       await putInCache('new-entry', newBlob);
 
-      // The old entry should have been evicted to make room
-      // (implementation will sort by lastAccessed and remove oldest)
+      // Assert: old entry should have been evicted
+      expect(mockStore.has('old-entry')).toBe(false);
+
+      // Assert: new entry should be stored
+      expect(mockStore.has('new-entry')).toBe(true);
+
+      // Assert: metadata should reflect the change
+      const metadata = mockMetaStore.get('cache-metadata') as {
+        totalSize: number;
+        entries: { cid: string; size: number; lastAccessed: number }[];
+      };
+
+      // Old entry should not be in metadata
+      expect(metadata.entries.find(e => e.cid === 'old-entry')).toBeUndefined();
+
+      // New entry should be in metadata
+      expect(metadata.entries.find(e => e.cid === 'new-entry')).toBeDefined();
+
+      // Total size should be updated (only new entry size)
+      expect(metadata.totalSize).toBe(newBlob.size);
+    });
+
+    it('should evict multiple entries if needed to fit new entry', async () => {
+      // Setup cache with multiple small entries totaling 98MB
+      const now = Date.now();
+      const entries = [
+        { cid: 'entry-1', size: 30 * 1024 * 1024, lastAccessed: now - 30000 }, // oldest
+        { cid: 'entry-2', size: 30 * 1024 * 1024, lastAccessed: now - 20000 },
+        { cid: 'entry-3', size: 38 * 1024 * 1024, lastAccessed: now - 10000 }, // newest
+      ];
+
+      entries.forEach(e => mockStore.set(e.cid, new Blob(['x'])));
+      mockMetaStore.set('cache-metadata', {
+        totalSize: 98 * 1024 * 1024,
+        entries: [...entries],
+      });
+
+      // Try to add a 50MB blob (should evict entry-1 and entry-2)
+      const newBlob = new Blob(['y'.repeat(50 * 1024 * 1024)]);
+      await putInCache('big-entry', newBlob);
+
+      // Assert: oldest entries should be evicted
+      expect(mockStore.has('entry-1')).toBe(false);
+      expect(mockStore.has('entry-2')).toBe(false);
+
+      // Assert: newest old entry might still exist (depending on space)
+      // entry-3 (38MB) + big-entry (50MB) = 88MB < 100MB limit
+      expect(mockStore.has('entry-3')).toBe(true);
+
+      // Assert: new entry should be stored
+      expect(mockStore.has('big-entry')).toBe(true);
+
+      const metadata = mockMetaStore.get('cache-metadata') as {
+        totalSize: number;
+        entries: { cid: string }[];
+      };
+
+      // Should have entry-3 and big-entry
+      expect(metadata.entries).toHaveLength(2);
+      expect(metadata.entries.find(e => e.cid === 'entry-3')).toBeDefined();
+      expect(metadata.entries.find(e => e.cid === 'big-entry')).toBeDefined();
+    });
+
+    it('should preserve recently accessed entries during eviction', async () => {
+      const now = Date.now();
+      // Setup: old large entry (90MB, old access) and recent small entry (5MB, recent)
+      const entries = [
+        { cid: 'old-big', size: 90 * 1024 * 1024, lastAccessed: now - 60000 }, // oldest, should be evicted first
+        { cid: 'recent-small', size: 5 * 1024 * 1024, lastAccessed: now - 1000 }, // recent
+      ];
+
+      entries.forEach(e => mockStore.set(e.cid, new Blob(['x'])));
+      mockMetaStore.set('cache-metadata', {
+        totalSize: 95 * 1024 * 1024,
+        entries: [...entries],
+      });
+
+      // Add 10MB entry - should evict old-big (oldest) to make room
+      const newBlob = new Blob(['y'.repeat(10 * 1024 * 1024)]);
+      await putInCache('new-entry', newBlob);
+
+      // Assert: old entry evicted, recent entry preserved
+      expect(mockStore.has('old-big')).toBe(false);
+      expect(mockStore.has('recent-small')).toBe(true);
+      expect(mockStore.has('new-entry')).toBe(true);
+
+      const metadata = mockMetaStore.get('cache-metadata') as {
+        totalSize: number;
+        entries: { cid: string }[];
+      };
+
+      // Cache should contain recent-small and new-entry
+      expect(metadata.entries).toHaveLength(2);
+      expect(metadata.entries.find(e => e.cid === 'recent-small')).toBeDefined();
+      expect(metadata.entries.find(e => e.cid === 'new-entry')).toBeDefined();
+    });
+
+    it('should not evict anything if cache has room', async () => {
+      // Setup cache with 50MB used
+      const entry = {
+        cid: 'existing',
+        size: 50 * 1024 * 1024,
+        lastAccessed: Date.now() - 10000,
+      };
+
+      mockStore.set('existing', new Blob(['x']));
+      mockMetaStore.set('cache-metadata', {
+        totalSize: 50 * 1024 * 1024,
+        entries: [entry],
+      });
+
+      // Add 10MB entry - plenty of room, no eviction needed
+      const newBlob = new Blob(['y'.repeat(10 * 1024 * 1024)]);
+      await putInCache('new-entry', newBlob);
+
+      // Assert: both entries should exist
+      expect(mockStore.has('existing')).toBe(true);
+      expect(mockStore.has('new-entry')).toBe(true);
+
+      const metadata = mockMetaStore.get('cache-metadata') as {
+        totalSize: number;
+        entries: { cid: string }[];
+      };
+
+      expect(metadata.entries).toHaveLength(2);
     });
   });
 });
