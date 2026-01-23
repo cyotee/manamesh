@@ -29,8 +29,12 @@ export interface IPFSImageProps {
   onError?: (error: Error) => void;
   /** Prefer gateway over helia */
   preferGateway?: boolean;
-  /** Custom timeout in ms */
+  /** @deprecated Use heliaTimeout and gatewayTimeout instead */
   timeout?: number;
+  /** Timeout in ms for helia fetch operations */
+  heliaTimeout?: number;
+  /** Timeout in ms for gateway fetch operations */
+  gatewayTimeout?: number;
 }
 
 type LoadState = 'idle' | 'loading' | 'loaded' | 'error';
@@ -48,6 +52,8 @@ export const IPFSImage: React.FC<IPFSImageProps> = ({
   onError,
   preferGateway = false,
   timeout,
+  heliaTimeout,
+  gatewayTimeout,
 }) => {
   const [loadState, setLoadState] = useState<LoadState>('idle');
   const [imageUrl, setImageUrl] = useState<string | null>(null);
@@ -70,6 +76,8 @@ export const IPFSImage: React.FC<IPFSImageProps> = ({
       const result = await loadAssetUrl(cid, {
         preferGateway,
         timeout,
+        heliaTimeout,
+        gatewayTimeout,
       });
 
       setImageUrl(result.url);
@@ -82,7 +90,7 @@ export const IPFSImage: React.FC<IPFSImageProps> = ({
       setLoadState('error');
       onError?.(loadError);
     }
-  }, [cid, preferGateway, timeout, onLoad, onError]);
+  }, [cid, preferGateway, timeout, heliaTimeout, gatewayTimeout, onLoad, onError]);
 
   // Load image when CID changes
   useEffect(() => {

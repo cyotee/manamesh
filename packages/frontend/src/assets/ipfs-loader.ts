@@ -14,7 +14,12 @@ import { getConfig, getEffectiveGateways } from './config';
 export interface LoadOptions {
   useCache?: boolean;
   preferGateway?: boolean;
+  /** @deprecated Use heliaTimeout and gatewayTimeout instead */
   timeout?: number;
+  /** Timeout in ms for helia fetch operations (default: config.heliaFetchTimeout) */
+  heliaTimeout?: number;
+  /** Timeout in ms for gateway fetch operations (default: config.gatewayTimeout) */
+  gatewayTimeout?: number;
 }
 
 export interface LoadResult {
@@ -170,7 +175,9 @@ export async function loadAsset(
   const {
     useCache = true,
     preferGateway = config.preferGateway,
-    timeout = config.gatewayTimeout,
+    timeout,
+    heliaTimeout = timeout ?? config.heliaFetchTimeout,
+    gatewayTimeout = timeout ?? config.gatewayTimeout,
   } = options;
 
   // Check cache first
@@ -186,23 +193,23 @@ export async function loadAsset(
 
   if (preferGateway) {
     // Try gateway first
-    const gatewayResult = await fetchFromGateway(cid, timeout);
+    const gatewayResult = await fetchFromGateway(cid, gatewayTimeout);
     if (gatewayResult) {
       blob = gatewayResult.blob;
       source = 'gateway';
     } else {
       // Fallback to helia
-      blob = await fetchFromHelia(cid, timeout);
+      blob = await fetchFromHelia(cid, heliaTimeout);
       if (blob) source = 'helia';
     }
   } else {
     // Try helia first
-    blob = await fetchFromHelia(cid, timeout);
+    blob = await fetchFromHelia(cid, heliaTimeout);
     if (blob) {
       source = 'helia';
     } else {
       // Fallback to gateway
-      const gatewayResult = await fetchFromGateway(cid, timeout);
+      const gatewayResult = await fetchFromGateway(cid, gatewayTimeout);
       if (gatewayResult) {
         blob = gatewayResult.blob;
         source = 'gateway';
@@ -282,9 +289,9 @@ export async function isAssetAvailable(cid: string): Promise<boolean> {
     return true;
   }
 
-  // Try to fetch with a short timeout
+  // Try to fetch with short timeouts
   try {
-    await loadAsset(cid, { timeout: 5000 });
+    await loadAsset(cid, { heliaTimeout: 5000, gatewayTimeout: 5000 });
     return true;
   } catch {
     return false;

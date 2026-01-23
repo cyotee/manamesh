@@ -1,6 +1,7 @@
 /**
  * Tests for IPFS asset loader gateway fallback behavior
  * Tests the AbortController reuse fix (MM-013)
+ * Tests the timeout configuration fix (MM-015)
  *
  * Note: These tests verify the gateway fallback logic in isolation
  * without requiring helia, since helia dependencies are hard to mock.
@@ -293,6 +294,223 @@ describe('Gateway Fallback AbortController Behavior (MM-013)', () => {
     it('should handle empty gateway list', async () => {
       const result = await fetchFromGatewayFixed('QmTestCid', [], 5000);
       expect(result).toBeNull();
+    });
+  });
+});
+
+/**
+ * Tests for timeout configuration fix (MM-015)
+ *
+ * The fix ensures that:
+ * - heliaTimeout is used for helia fetch operations
+ * - gatewayTimeout is used for gateway fetch operations
+ * - Legacy timeout option still works for backwards compatibility
+ */
+describe('Timeout Configuration (MM-015)', () => {
+  beforeEach(() => {
+    mockFetch.mockReset();
+  });
+
+  /**
+   * Simulates the loadAsset timeout routing logic
+   */
+  interface LoadOptions {
+    timeout?: number;
+    heliaTimeout?: number;
+    gatewayTimeout?: number;
+    preferGateway?: boolean;
+  }
+
+  interface Config {
+    heliaFetchTimeout: number;
+    gatewayTimeout: number;
+    preferGateway: boolean;
+  }
+
+  function resolveTimeouts(options: LoadOptions, config: Config) {
+    const {
+      timeout,
+      heliaTimeout = timeout ?? config.heliaFetchTimeout,
+      gatewayTimeout = timeout ?? config.gatewayTimeout,
+      preferGateway = config.preferGateway,
+    } = options;
+
+    return { heliaTimeout, gatewayTimeout, preferGateway };
+  }
+
+  describe('Timeout resolution', () => {
+    const defaultConfig: Config = {
+      heliaFetchTimeout: 30000,
+      gatewayTimeout: 10000,
+      preferGateway: false,
+    };
+
+    it('should use config defaults when no options provided', () => {
+      const result = resolveTimeouts({}, defaultConfig);
+
+      expect(result.heliaTimeout).toBe(30000);
+      expect(result.gatewayTimeout).toBe(10000);
+    });
+
+    it('should use specific heliaTimeout and gatewayTimeout when provided', () => {
+      const result = resolveTimeouts(
+        { heliaTimeout: 5000, gatewayTimeout: 3000 },
+        defaultConfig
+      );
+
+      expect(result.heliaTimeout).toBe(5000);
+      expect(result.gatewayTimeout).toBe(3000);
+    });
+
+    it('should use legacy timeout for both when only timeout provided', () => {
+      const result = resolveTimeouts({ timeout: 8000 }, defaultConfig);
+
+      expect(result.heliaTimeout).toBe(8000);
+      expect(result.gatewayTimeout).toBe(8000);
+    });
+
+    it('should override legacy timeout with specific timeouts', () => {
+      const result = resolveTimeouts(
+        { timeout: 8000, heliaTimeout: 5000 },
+        defaultConfig
+      );
+
+      // heliaTimeout explicitly set, gatewayTimeout falls back to legacy timeout
+      expect(result.heliaTimeout).toBe(5000);
+      expect(result.gatewayTimeout).toBe(8000);
+    });
+
+    it('should use config defaults for unspecified specific timeouts', () => {
+      const result = resolveTimeouts({ heliaTimeout: 5000 }, defaultConfig);
+
+      expect(result.heliaTimeout).toBe(5000);
+      expect(result.gatewayTimeout).toBe(10000); // config default
+    });
+  });
+
+  describe('LoadOptions interface', () => {
+    it('should support all timeout options', () => {
+      // Type check - these should compile without errors
+      const options1: LoadOptions = { timeout: 5000 };
+      const options2: LoadOptions = { heliaTimeout: 5000 };
+      const options3: LoadOptions = { gatewayTimeout: 5000 };
+      const options4: LoadOptions = {
+        heliaTimeout: 30000,
+        gatewayTimeout: 10000,
+      };
+      const options5: LoadOptions = {
+        timeout: 8000,
+        heliaTimeout: 5000,
+        gatewayTimeout: 3000,
+      };
+
+      // All should be valid LoadOptions
+      expect(options1.timeout).toBe(5000);
+      expect(options2.heliaTimeout).toBe(5000);
+      expect(options3.gatewayTimeout).toBe(5000);
+      expect(options4.heliaTimeout).toBe(30000);
+      expect(options5.timeout).toBe(8000);
+    });
+  });
+
+  describe('Timeout usage in fetch operations', () => {
+    /**
+     * Simulates calling fetch operations with proper timeouts
+     */
+    async function simulateLoadAsset(
+      cid: string,
+      options: LoadOptions,
+      config: Config,
+      fetchMock: typeof mockFetch
+    ): Promise<{
+      heliaTimeoutUsed: number;
+      gatewayTimeoutUsed: number;
+      source: 'helia' | 'gateway';
+    }> {
+      const { heliaTimeout, gatewayTimeout, preferGateway } = resolveTimeouts(
+        options,
+        config
+      );
+
+      let heliaTimeoutUsed = 0;
+      let gatewayTimeoutUsed = 0;
+      let source: 'helia' | 'gateway' = 'gateway';
+
+      // Simulate fetch operations tracking which timeout was used
+      if (preferGateway) {
+        gatewayTimeoutUsed = gatewayTimeout;
+        source = 'gateway';
+        // Try gateway first, then helia as fallback
+        try {
+          await fetchMock(`https://gateway.test/ipfs/${cid}`, {
+            timeout: gatewayTimeout,
+          });
+        } catch {
+          heliaTimeoutUsed = heliaTimeout;
+          source = 'helia';
+        }
+      } else {
+        heliaTimeoutUsed = heliaTimeout;
+        source = 'helia';
+        // Try helia first, then gateway as fallback
+        try {
+          // Simulating helia operation (would fail)
+          throw new Error('Helia not available');
+        } catch {
+          gatewayTimeoutUsed = gatewayTimeout;
+          source = 'gateway';
+        }
+      }
+
+      return { heliaTimeoutUsed, gatewayTimeoutUsed, source };
+    }
+
+    it('should use correct timeouts in helia-first mode', async () => {
+      const config: Config = {
+        heliaFetchTimeout: 30000,
+        gatewayTimeout: 10000,
+        preferGateway: false,
+      };
+
+      mockFetch.mockResolvedValue({
+        ok: true,
+        blob: () => Promise.resolve(new Blob(['test'])),
+      });
+
+      const result = await simulateLoadAsset(
+        'QmTestCid',
+        { heliaTimeout: 15000, gatewayTimeout: 5000 },
+        config,
+        mockFetch
+      );
+
+      // Helia tried first with heliaTimeout, fell back to gateway with gatewayTimeout
+      expect(result.heliaTimeoutUsed).toBe(15000);
+      expect(result.gatewayTimeoutUsed).toBe(5000);
+    });
+
+    it('should use correct timeouts in gateway-first mode', async () => {
+      const config: Config = {
+        heliaFetchTimeout: 30000,
+        gatewayTimeout: 10000,
+        preferGateway: true,
+      };
+
+      mockFetch.mockResolvedValue({
+        ok: true,
+        blob: () => Promise.resolve(new Blob(['test'])),
+      });
+
+      const result = await simulateLoadAsset(
+        'QmTestCid',
+        { heliaTimeout: 15000, gatewayTimeout: 5000 },
+        config,
+        mockFetch
+      );
+
+      // Gateway tried first with gatewayTimeout
+      expect(result.gatewayTimeoutUsed).toBe(5000);
+      expect(result.source).toBe('gateway');
     });
   });
 });
