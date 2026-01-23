@@ -21,7 +21,7 @@
 | MM-015 | Fix IPFS Config and Gateway Priority | Complete | None | N/A |
 | MM-016 | IPFS Code Cleanup and Test Improvements | Complete | None | N/A |
 | MM-017 | Set Up boardgame.io Fork Submodules | Complete | None | N/A |
-| MM-018 | Standard Playing Cards Asset Pack | Ready | None | `feature/playing-cards-pack` |
+| MM-018 | Standard Playing Cards Asset Pack | In Progress | None | N/A |
 | MM-019 | Core Game Module Interface | Ready | MM-017 | `feature/game-module-core` |
 | MM-020 | Deck Plugin for boardgame.io | Blocked | MM-017, MM-019 | `feature/deck-plugin` |
 | MM-021 | War Game Module | Blocked | MM-019, MM-020, MM-018 | `feature/game-war` |
