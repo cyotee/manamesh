@@ -17,7 +17,7 @@
 | MM-011 | Confirm/Document Runtime Support | Complete | MM-003 | N/A |
 | MM-012 | Add DHT Record Expiry/Republish | Complete | MM-003 | N/A |
 | MM-013 | Fix AbortController Reuse in Gateway | Complete | None | N/A |
-| MM-014 | Clear Timeout Timers on Success | Ready | None | `feature/fix-timeout-cleanup` |
+| MM-014 | Clear Timeout Timers on Success | Complete | None | N/A |
 | MM-015 | Fix IPFS Config and Gateway Priority | Ready | None | `feature/fix-ipfs-config` |
 | MM-016 | IPFS Code Cleanup and Test Improvements | Ready | None | `feature/ipfs-cleanup` |
 | MM-017 | Set Up boardgame.io Fork Submodules | Ready | None | `feature/bgio-submodules` |
