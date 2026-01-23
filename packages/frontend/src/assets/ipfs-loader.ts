@@ -53,15 +53,21 @@ async function getHelia(): Promise<Helia | null> {
   const config = getConfig();
 
   heliaInitPromise = (async () => {
-    try {
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error('Helia init timeout')), config.heliaInitTimeout);
-      });
+    // Create timeout with explicit timer so we can clean it up on success
+    let timeoutId: NodeJS.Timeout | undefined;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(() => reject(new Error('Helia init timeout')), config.heliaInitTimeout);
+    });
 
+    try {
       const initPromise = createHelia();
       heliaInstance = await Promise.race([initPromise, timeoutPromise]);
+      // Clear timeout on success to prevent late rejection
+      if (timeoutId) clearTimeout(timeoutId);
       return heliaInstance;
     } catch (error) {
+      // Clear timeout on error as well
+      if (timeoutId) clearTimeout(timeoutId);
       console.warn('Failed to initialize helia, falling back to gateway:', error);
       heliaFailed = true;
       heliaInitPromise = null;
@@ -81,15 +87,17 @@ async function fetchFromHelia(cidString: string, timeout: number): Promise<Blob 
     return null;
   }
 
+  // Create timeout with explicit timer so we can clean it up on success
+  let timeoutId: NodeJS.Timeout | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error('Helia fetch timeout')), timeout);
+  });
+
   try {
     const fs = unixfs(helia);
     const cid = CID.parse(cidString);
 
     const chunks: Uint8Array[] = [];
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => reject(new Error('Helia fetch timeout')), timeout);
-    });
-
     const fetchPromise = (async () => {
       for await (const chunk of fs.cat(cid)) {
         chunks.push(chunk);
@@ -97,8 +105,13 @@ async function fetchFromHelia(cidString: string, timeout: number): Promise<Blob 
       return new Blob(chunks);
     })();
 
-    return await Promise.race([fetchPromise, timeoutPromise]);
+    const result = await Promise.race([fetchPromise, timeoutPromise]);
+    // Clear timeout on success to prevent late rejection
+    if (timeoutId) clearTimeout(timeoutId);
+    return result;
   } catch (error) {
+    // Clear timeout on error as well
+    if (timeoutId) clearTimeout(timeoutId);
     console.warn('Helia fetch failed:', error);
     return null;
   }
