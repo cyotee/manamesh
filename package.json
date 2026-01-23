@@ -3,13 +3,16 @@
     "private": true,
     "packageManager": "yarn@4.6.0",
     "workspaces": [
-        "packages/*"
+        "packages/*",
+        "vendor/*"
     ],
     "scripts": {
         "dev:frontend": "yarn workspace @manamesh/frontend dev",
         "dev:backend": "yarn workspace @manamesh/backend dev",
-        "build": "yarn workspaces foreach --all run build",
-        "test": "yarn workspaces foreach --all run test"
+        "build": "yarn workspace @manamesh/frontend build",
+        "build:all": "yarn workspaces foreach --all run build",
+        "test": "yarn workspace @manamesh/frontend test",
+        "test:all": "yarn workspaces foreach --all run test"
     },
     "devDependencies": {
         "@types/node": "^24.5.2",

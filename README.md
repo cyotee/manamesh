@@ -103,5 +103,81 @@ Open-source (MIT/Apache) + modular design
 Anyone can host servers, contribute games, or fork the project
 
 
+Development Setup
+
+## Prerequisites
+
+- Node.js 20.x or later
+- Yarn 4.x (Berry)
+
+## Cloning with Submodules
+
+This repository uses git submodules for forked dependencies. Clone with:
+
+```bash
+git clone --recurse-submodules https://github.com/cyotee/manamesh.git
+```
+
+Or if you've already cloned:
+
+```bash
+git submodule update --init --recursive
+```
+
+## Vendor Submodules
+
+The `vendor/` directory contains forked versions of boardgame.io dependencies:
+
+| Package | Path | Description |
+|---------|------|-------------|
+| boardgame.io | vendor/boardgame.io | Core game framework (forked for P2P transport) |
+| @boardgame.io/p2p | vendor/boardgameIO-p2p | P2P transport layer |
+
+### Working with Submodules
+
+**Update submodules to latest:**
+```bash
+git submodule update --remote --merge
+```
+
+**Make changes to a submodule:**
+```bash
+cd vendor/boardgame.io
+# Make your changes
+git commit -am "Your changes"
+git push origin main
+cd ../..
+git add vendor/boardgame.io
+git commit -m "Update boardgame.io submodule"
+```
+
+**Switch submodule to a different branch:**
+```bash
+cd vendor/boardgame.io
+git checkout feature-branch
+cd ../..
+git add vendor/boardgame.io
+git commit -m "Switch boardgame.io to feature-branch"
+```
+
+## Installation
+
+```bash
+yarn install
+```
+
+## Running
+
+```bash
+# Start frontend development server
+yarn dev:frontend
+
+# Run tests
+yarn test
+
+# Build all packages
+yarn build
+```
+
 Future Vision
 ManaMesh aims to become a platform where the community collectively maintains card data, hosts game servers, and extends support for new games. By combining modern web technologies with decentralization primitives, we hope to create a lasting, player-owned alternative in the digital card game space.

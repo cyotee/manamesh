@@ -1,0 +1,6 @@
+[submodule "vendor/boardgame.io"]
+	path = vendor/boardgame.io
+	url = https://github.com/cyotee/boardgame.io
+[submodule "vendor/boardgameIO-p2p"]
+	path = vendor/boardgameIO-p2p
+	url = https://github.com/cyotee/boardgameIO-p2p
