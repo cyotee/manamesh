@@ -22,8 +22,8 @@
 | MM-016 | IPFS Code Cleanup and Test Improvements | Complete | None | N/A |
 | MM-017 | Set Up boardgame.io Fork Submodules | Complete | None | N/A |
 | MM-018 | Standard Playing Cards Asset Pack | Complete | None | N/A |
-| MM-019 | Core Game Module Interface | Ready | MM-017 | `feature/game-module-core` |
-| MM-020 | Deck Plugin for boardgame.io | Blocked | MM-017, MM-019 | `feature/deck-plugin` |
+| MM-019 | Core Game Module Interface | Complete | MM-017 | N/A |
+| MM-020 | Deck Plugin for boardgame.io | Ready | MM-017, MM-019 | `feature/deck-plugin` |
 | MM-021 | War Game Module | Blocked | MM-019, MM-020, MM-018 | `feature/game-war` |
 | MM-022 | Poker Game Module | Blocked | MM-019, MM-020, MM-018 | `feature/game-poker` |
 | MM-023 | One Piece TCG Game Module | Blocked | MM-019, MM-020 | `feature/game-onepiece` |
@@ -60,8 +60,7 @@ Tasks with all dependencies met:
 
 ### Blocked
 Tasks waiting on dependencies:
-- MM-019: Core Game Module Interface (waiting on MM-017)
-- MM-020: Deck Plugin for boardgame.io (waiting on MM-017, MM-019)
+- MM-020: Deck Plugin for boardgame.io (Ready - all deps complete)
 - MM-021: War Game Module (waiting on MM-019, MM-020, MM-018)
 - MM-022: Poker Game Module (waiting on MM-019, MM-020, MM-018)
 - MM-023: One Piece TCG Game Module (waiting on MM-019, MM-020)
@@ -90,9 +89,9 @@ MM-014 (Ready - timeout cleanup)
 MM-015 (Ready - config fix)
 MM-016 (Ready - code cleanup)
 
-MM-017 (Ready - bgio submodules)
-└── MM-019 (Blocked - game module core)
-    └── MM-020 (Blocked - deck plugin)
+MM-017 (Complete) ✓
+└── MM-019 (Complete) ✓
+    └── MM-020 (Ready - deck plugin)
         ├── MM-021 (Blocked - War) ← also needs MM-018
         ├── MM-022 (Blocked - Poker) ← also needs MM-018
         ├── MM-023 (Blocked - One Piece)
