@@ -24,7 +24,7 @@
 | MM-018 | Standard Playing Cards Asset Pack | Complete | None | N/A |
 | MM-019 | Core Game Module Interface | Complete | MM-017 | N/A |
 | MM-020 | Deck Plugin for boardgame.io | Complete | MM-017, MM-019 | N/A |
-| MM-021 | War Game Module | Ready | MM-019, MM-020, MM-018 | `feature/game-war` |
+| MM-021 | War Game Module | Complete | MM-019, MM-020, MM-018 | N/A |
 | MM-022 | Poker Game Module | Ready | MM-019, MM-020, MM-018 | `feature/game-poker` |
 | MM-023 | One Piece TCG Game Module | Ready | MM-019, MM-020 | `feature/game-onepiece` |
 | MM-024 | MTG Game Module | Ready | MM-019, MM-020 | `feature/game-mtg` |
@@ -60,7 +60,6 @@ Tasks with all dependencies met:
 
 ### Ready for Agent
 Game modules now ready (all deps complete):
-- MM-021: War Game Module
 - MM-022: Poker Game Module
 - MM-023: One Piece TCG Game Module
 - MM-024: MTG Game Module
@@ -95,7 +94,7 @@ MM-016 (Ready - code cleanup)
 MM-017 (Complete) ✓
 └── MM-019 (Complete) ✓
     └── MM-020 (Complete) ✓
-        ├── MM-021 (Ready - War)
+        ├── MM-021 (Complete) ✓
         ├── MM-022 (Ready - Poker)
         ├── MM-023 (Ready - One Piece)
         ├── MM-024 (Ready - MTG)
@@ -103,7 +102,7 @@ MM-017 (Complete) ✓
         └── MM-026 (Ready - Riftbound)
 
 MM-018 (Complete) ✓
-├── MM-021 (Ready - War)
+├── MM-021 (Complete) ✓
 └── MM-022 (Ready - Poker)
 
 MM-027 (Ready - manifest parser)
