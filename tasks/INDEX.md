@@ -23,13 +23,13 @@
 | MM-017 | Set Up boardgame.io Fork Submodules | Complete | None | N/A |
 | MM-018 | Standard Playing Cards Asset Pack | Complete | None | N/A |
 | MM-019 | Core Game Module Interface | Complete | MM-017 | N/A |
-| MM-020 | Deck Plugin for boardgame.io | Ready | MM-017, MM-019 | `feature/deck-plugin` |
-| MM-021 | War Game Module | Blocked | MM-019, MM-020, MM-018 | `feature/game-war` |
-| MM-022 | Poker Game Module | Blocked | MM-019, MM-020, MM-018 | `feature/game-poker` |
-| MM-023 | One Piece TCG Game Module | Blocked | MM-019, MM-020 | `feature/game-onepiece` |
-| MM-024 | MTG Game Module | Blocked | MM-019, MM-020 | `feature/game-mtg` |
-| MM-025 | Lorcana Game Module | Blocked | MM-019, MM-020 | `feature/game-lorcana` |
-| MM-026 | Riftbound Game Module | Blocked | MM-019, MM-020 | `feature/game-riftbound` |
+| MM-020 | Deck Plugin for boardgame.io | Complete | MM-017, MM-019 | N/A |
+| MM-021 | War Game Module | Ready | MM-019, MM-020, MM-018 | `feature/game-war` |
+| MM-022 | Poker Game Module | Ready | MM-019, MM-020, MM-018 | `feature/game-poker` |
+| MM-023 | One Piece TCG Game Module | Ready | MM-019, MM-020 | `feature/game-onepiece` |
+| MM-024 | MTG Game Module | Ready | MM-019, MM-020 | `feature/game-mtg` |
+| MM-025 | Lorcana Game Module | Ready | MM-019, MM-020 | `feature/game-lorcana` |
+| MM-026 | Riftbound Game Module | Ready | MM-019, MM-020 | `feature/game-riftbound` |
 | MM-027 | Asset Pack Manifest Parser | Ready | None | `feature/asset-manifest-parser` |
 | MM-028 | Asset Pack Loader | Blocked | MM-027 | `feature/asset-loader` |
 
@@ -58,15 +58,18 @@ Tasks with all dependencies met:
 - MM-017: Set Up boardgame.io Fork Submodules
 - MM-027: Asset Pack Manifest Parser
 
+### Ready for Agent
+Game modules now ready (all deps complete):
+- MM-021: War Game Module
+- MM-022: Poker Game Module
+- MM-023: One Piece TCG Game Module
+- MM-024: MTG Game Module
+- MM-025: Lorcana Game Module
+- MM-026: Riftbound Game Module
+- MM-027: Asset Pack Manifest Parser
+
 ### Blocked
 Tasks waiting on dependencies:
-- MM-020: Deck Plugin for boardgame.io (Ready - all deps complete)
-- MM-021: War Game Module (waiting on MM-019, MM-020, MM-018)
-- MM-022: Poker Game Module (waiting on MM-019, MM-020, MM-018)
-- MM-023: One Piece TCG Game Module (waiting on MM-019, MM-020)
-- MM-024: MTG Game Module (waiting on MM-019, MM-020)
-- MM-025: Lorcana Game Module (waiting on MM-019, MM-020)
-- MM-026: Riftbound Game Module (waiting on MM-019, MM-020)
 - MM-028: Asset Pack Loader (waiting on MM-027)
 
 ## Dependency Graph
@@ -91,17 +94,17 @@ MM-016 (Ready - code cleanup)
 
 MM-017 (Complete) ✓
 └── MM-019 (Complete) ✓
-    └── MM-020 (Ready - deck plugin)
-        ├── MM-021 (Blocked - War) ← also needs MM-018
-        ├── MM-022 (Blocked - Poker) ← also needs MM-018
-        ├── MM-023 (Blocked - One Piece)
-        ├── MM-024 (Blocked - MTG)
-        ├── MM-025 (Blocked - Lorcana)
-        └── MM-026 (Blocked - Riftbound)
+    └── MM-020 (Complete) ✓
+        ├── MM-021 (Ready - War)
+        ├── MM-022 (Ready - Poker)
+        ├── MM-023 (Ready - One Piece)
+        ├── MM-024 (Ready - MTG)
+        ├── MM-025 (Ready - Lorcana)
+        └── MM-026 (Ready - Riftbound)
 
 MM-018 (Complete) ✓
-├── MM-021 (Blocked - War) ← also needs MM-019, MM-020
-└── MM-022 (Blocked - Poker) ← also needs MM-019, MM-020
+├── MM-021 (Ready - War)
+└── MM-022 (Ready - Poker)
 
 MM-027 (Ready - manifest parser)
 └── MM-028 (Blocked - asset loader)
