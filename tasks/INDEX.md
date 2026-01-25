@@ -30,8 +30,8 @@
 | MM-024 | MTG Game Module | Ready | MM-019, MM-020 | `feature/game-mtg` |
 | MM-025 | Lorcana Game Module | Ready | MM-019, MM-020 | `feature/game-lorcana` |
 | MM-026 | Riftbound Game Module | Ready | MM-019, MM-020 | `feature/game-riftbound` |
-| MM-027 | Asset Pack Manifest Parser | In Progress | None | `feature/asset-manifest-parser` |
-| MM-028 | Asset Pack Loader | Blocked | MM-027 | `feature/asset-loader` |
+| MM-027 | Asset Pack Manifest Parser | Complete | None | N/A |
+| MM-028 | Asset Pack Loader | Ready | MM-027 | `feature/asset-loader` |
 
 ## Status Legend
 
@@ -56,7 +56,7 @@ Tasks with all dependencies met:
 - MM-015: Fix IPFS Config and Gateway Priority (from MM-006 review)
 - MM-016: IPFS Code Cleanup and Test Improvements (from MM-006 review)
 - MM-017: Set Up boardgame.io Fork Submodules
-- MM-027: Asset Pack Manifest Parser
+- MM-028: Asset Pack Loader (unblocked by MM-027)
 
 ### Ready for Agent
 Game modules now ready (all deps complete):
@@ -65,11 +65,11 @@ Game modules now ready (all deps complete):
 - MM-024: MTG Game Module
 - MM-025: Lorcana Game Module
 - MM-026: Riftbound Game Module
-- MM-027: Asset Pack Manifest Parser
+- MM-028: Asset Pack Loader
 
 ### Blocked
 Tasks waiting on dependencies:
-- MM-028: Asset Pack Loader (waiting on MM-027)
+- (none)
 
 ## Dependency Graph
 
@@ -105,8 +105,8 @@ MM-018 (Complete) ✓
 ├── MM-021 (Complete) ✓
 └── MM-022 (Ready - Poker)
 
-MM-027 (Ready - manifest parser)
-└── MM-028 (Blocked - asset loader)
+MM-027 (Complete) ✓
+└── MM-028 (Ready - asset loader)
 ```
 
 ## Cross-Repo Dependencies
