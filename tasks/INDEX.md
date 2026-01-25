@@ -33,6 +33,7 @@
 | MM-027 | Asset Pack Manifest Parser | Complete | None | N/A |
 | MM-028 | Asset Pack Loader | Ready | MM-027 | `feature/asset-loader` |
 | MM-029 | Cryptographic Deck Plugin (Mental Poker) | Complete | MM-020 | N/A |
+| MM-030 | War Game Crypto Integration | Ready | MM-021, MM-029 | `feature/war-crypto` |
 
 ## Status Legend
 
@@ -67,7 +68,7 @@ Game modules now ready (all deps complete):
 - MM-025: Lorcana Game Module
 - MM-026: Riftbound Game Module
 - MM-028: Asset Pack Loader
-- MM-029: Cryptographic Deck Plugin (Mental Poker)
+- MM-030: War Game Crypto Integration
 
 ### Blocked
 Tasks waiting on dependencies:
@@ -97,12 +98,14 @@ MM-017 (Complete) ✓
 └── MM-019 (Complete) ✓
     └── MM-020 (Complete) ✓
         ├── MM-021 (Complete) ✓
+        │   └── MM-030 (Ready - War Crypto Integration)
         ├── MM-022 (Ready - Poker)
         ├── MM-023 (Ready - One Piece)
         ├── MM-024 (Ready - MTG)
         ├── MM-025 (Ready - Lorcana)
         ├── MM-026 (Ready - Riftbound)
-        └── MM-029 (Ready - Crypto Deck Plugin)
+        └── MM-029 (Complete) ✓
+            └── MM-030 (Ready - War Crypto Integration)
 
 MM-018 (Complete) ✓
 ├── MM-021 (Complete) ✓
