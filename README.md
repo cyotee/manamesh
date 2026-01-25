@@ -179,5 +179,72 @@ yarn test
 yarn build
 ```
 
+## Game Modules
+
+ManaMesh uses a pluggable game module system. Each game (War, Poker, MTG, etc.) is implemented as a module that provides:
+- Card types and schemas
+- Zone definitions (deck, hand, battlefield, etc.)
+- Game logic and moves
+- boardgame.io integration
+
+### Available Game Modules
+
+| Module | Status | Description |
+|--------|--------|-------------|
+| War | Complete | Classic War card game - flip cards, higher wins |
+| Poker | Ready | Texas Hold'em (planned) |
+| MTG | Ready | Magic: The Gathering (planned) |
+
+### Testing the War Game Module
+
+The War game module is the first complete implementation. To run its tests:
+
+```bash
+# Run War game tests
+yarn workspace @manamesh/frontend test src/game/modules/war/game.test.ts
+
+# Run with watch mode for development
+yarn workspace @manamesh/frontend test src/game/modules/war/game.test.ts --watch
+
+# Run all game module tests
+yarn workspace @manamesh/frontend test src/game/modules/
+```
+
+#### War Game Rules
+
+1. **Setup**: A standard 52-card deck is shuffled and split evenly between two players (26 cards each)
+2. **Gameplay**: Each player flips their top card simultaneously
+3. **Winning a Round**: The player with the higher card wins both cards
+4. **War**: If cards match, each player places 3 cards face-down and 1 face-up. Higher face-up card wins all cards
+5. **Victory**: First player to collect all 52 cards wins
+
+#### War Module Structure
+
+```
+packages/frontend/src/game/modules/war/
+├── types.ts       # WarCard, WarState, zone definitions
+├── game.ts        # boardgame.io Game, moves, validation
+├── index.ts       # Module exports
+└── game.test.ts   # 56 tests covering full game flow
+```
+
+#### Using the War Module
+
+```typescript
+import { WarModule, WarGame } from './game/modules/war';
+
+// Get the boardgame.io Game definition
+const game = WarModule.getBoardgameIOGame();
+
+// Create initial state
+const state = WarModule.initialState({
+  numPlayers: 2,
+  playerIDs: ['0', '1'],
+});
+
+// Validate a move
+const result = WarModule.validateMove(state, 'flipCard', '0');
+```
+
 Future Vision
 ManaMesh aims to become a platform where the community collectively maintains card data, hosts game servers, and extends support for new games. By combining modern web technologies with decentralization primitives, we hope to create a lasting, player-owned alternative in the digital card game space.
