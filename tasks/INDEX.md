@@ -30,7 +30,7 @@
 | MM-024 | MTG Game Module | Ready | MM-019, MM-020 | `feature/game-mtg` |
 | MM-025 | Lorcana Game Module | Ready | MM-019, MM-020 | `feature/game-lorcana` |
 | MM-026 | Riftbound Game Module | Ready | MM-019, MM-020 | `feature/game-riftbound` |
-| MM-027 | Asset Pack Manifest Parser | Ready | None | `feature/asset-manifest-parser` |
+| MM-027 | Asset Pack Manifest Parser | In Progress | None | `feature/asset-manifest-parser` |
 | MM-028 | Asset Pack Loader | Blocked | MM-027 | `feature/asset-loader` |
 
 ## Status Legend
