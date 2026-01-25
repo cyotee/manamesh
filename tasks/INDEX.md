@@ -1,7 +1,7 @@
 # Task Index: ManaMesh
 
 **Repo:** MM
-**Last Updated:** 2026-01-22
+**Last Updated:** 2026-01-25
 
 ## Active Tasks
 
@@ -32,6 +32,7 @@
 | MM-026 | Riftbound Game Module | Ready | MM-019, MM-020 | `feature/game-riftbound` |
 | MM-027 | Asset Pack Manifest Parser | Complete | None | N/A |
 | MM-028 | Asset Pack Loader | Ready | MM-027 | `feature/asset-loader` |
+| MM-029 | Cryptographic Deck Plugin (Mental Poker) | Complete | MM-020 | N/A |
 
 ## Status Legend
 
@@ -66,6 +67,7 @@ Game modules now ready (all deps complete):
 - MM-025: Lorcana Game Module
 - MM-026: Riftbound Game Module
 - MM-028: Asset Pack Loader
+- MM-029: Cryptographic Deck Plugin (Mental Poker)
 
 ### Blocked
 Tasks waiting on dependencies:
@@ -99,7 +101,8 @@ MM-017 (Complete) ✓
         ├── MM-023 (Ready - One Piece)
         ├── MM-024 (Ready - MTG)
         ├── MM-025 (Ready - Lorcana)
-        └── MM-026 (Ready - Riftbound)
+        ├── MM-026 (Ready - Riftbound)
+        └── MM-029 (Ready - Crypto Deck Plugin)
 
 MM-018 (Complete) ✓
 ├── MM-021 (Complete) ✓
