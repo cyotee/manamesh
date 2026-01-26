@@ -1,7 +1,7 @@
 # Task Index: ManaMesh
 
 **Repo:** MM
-**Last Updated:** 2026-01-25
+**Last Updated:** 2026-01-26
 
 ## Active Tasks
 
@@ -34,6 +34,7 @@
 | MM-028 | Asset Pack Loader | Complete | MM-027 | N/A |
 | MM-029 | Cryptographic Deck Plugin (Mental Poker) | Complete | MM-020 | N/A |
 | MM-030 | War Game Crypto Integration | Complete | MM-021, MM-029 | N/A |
+| MM-031 | Blockchain-Enabled Poker | Blocked | MM-022, MM-029 | `feature/blockchain-poker` |
 
 ## Status Legend
 
@@ -72,7 +73,7 @@ Game modules now ready (all deps complete):
 
 ### Blocked
 Tasks waiting on dependencies:
-- (none)
+- MM-031: Blockchain-Enabled Poker (waiting on MM-022)
 
 ## Dependency Graph
 
@@ -105,11 +106,13 @@ MM-017 (Complete) ✓
         ├── MM-025 (Ready - Lorcana)
         ├── MM-026 (Ready - Riftbound)
         └── MM-029 (Complete) ✓
-            └── MM-030 (Ready - War Crypto Integration)
+            ├── MM-030 (Ready - War Crypto Integration)
+            └── MM-031 (Blocked - Blockchain Poker)
 
 MM-018 (Complete) ✓
 ├── MM-021 (Complete) ✓
 └── MM-022 (Ready - Poker)
+    └── MM-031 (Blocked - Blockchain Poker)
 
 MM-027 (Complete) ✓
 └── MM-028 (Ready - asset loader)
