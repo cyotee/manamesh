@@ -11,7 +11,7 @@
 
 ## Description
 
-Implement the Poker game module (Texas Hold'em variant) with full cryptographic integration. This includes both a standard (trusted server) version and a crypto version using mental poker for P2P play. The task also requires extending the CryptoPlugin to support Poker-specific mechanics: shared deck dealing, hole card self-reveal, zone visibility types, and fold state tracking.
+Implement the Poker game module (Texas Hold'em variant) with full cryptographic integration. This includes both a standard (trusted server) version and a crypto version using mental poker for P2P play. The task also requires extending the CryptoPlugin to support Poker-specific mechanics: shared deck dealing, hole card self-reveal, zone visibility types, fold state tracking, and **player abandonment support** (key release on fold, threshold key escrow, disconnect handling).
 
 ## Dependencies
 
@@ -95,6 +95,65 @@ As a game, I want correct poker hand evaluation for showdown.
 - [ ] Tie-breaking with kickers
 - [ ] Tests cover all hand types and edge cases
 
+### US-MM-022.6: Key Release on Fold
+
+As a folded player, I want to release my encryption key so that I can leave the game without blocking other players.
+
+**Acceptance Criteria:**
+- [ ] When player folds, they MUST release their private key
+- [ ] Optional "show hand" action available BEFORE key release (for bluff reveals)
+- [ ] Released keys stored in game state (`releasedKeys` map)
+- [ ] All remaining players receive and store the released key
+- [ ] Reveals use released keys for absent players (no participation needed)
+- [ ] Folded player can safely disconnect after key release
+- [ ] Folded player's hand remains protected (other layers still encrypt it)
+- [ ] Tests cover fold → key release → leave → reveal sequence
+
+### US-MM-022.7: Threshold Key Escrow
+
+As a player, I want key escrow so that disconnected players don't permanently block the game.
+
+**Acceptance Criteria:**
+- [ ] Key escrow phase added after key exchange
+- [ ] Each player splits their private key using Shamir's Secret Sharing
+- [ ] Shares distributed to all other players (N-1 shares per key)
+- [ ] Configurable threshold K (default: N-1, meaning any N-1 players can reconstruct)
+- [ ] Shares encrypted for recipient before transmission
+- [ ] Key reconstruction triggered when player disconnects without releasing key
+- [ ] Reconstructed keys functionally equivalent to released keys
+- [ ] Tests cover share distribution and threshold reconstruction
+
+### US-MM-022.8: Disconnect Handling
+
+As a remaining player, I want the game to continue when someone disconnects.
+
+**Acceptance Criteria:**
+- [ ] Heartbeat/ping mechanism detects disconnections (5s interval, 15s threshold)
+- [ ] Action timeout triggers auto-fold (30s default, configurable)
+- [ ] Auto-fold attempts to get key release from disconnected player
+- [ ] If no key release within timeout, attempt threshold reconstruction
+- [ ] Game viability check after each disconnect:
+  - Can remaining keys reveal community cards?
+  - Can remaining keys reveal active players' hands at showdown?
+- [ ] If game not viable (below threshold), void hand and return bets
+- [ ] Disconnected player can rejoin as spectator (no game impact)
+- [ ] Tests cover disconnect scenarios at each game phase
+
+### US-MM-022.9: Game Viability Check
+
+As a game, I want to detect when the game cannot continue fairly.
+
+**Acceptance Criteria:**
+- [ ] `checkGameViability()` returns 'continue' or 'void'
+- [ ] Viability requires:
+  - All encryption layers removable for community cards
+  - All encryption layers removable for active players' hands
+- [ ] Available keys = released keys + active players + reconstructable keys
+- [ ] If viability check fails, game enters 'voided' state
+- [ ] Voided games return all bets to players proportionally
+- [ ] Voided game state preserved for audit/logging
+- [ ] Tests cover viability edge cases
+
 ## Technical Details
 
 ### Game State (Standard)
@@ -125,18 +184,28 @@ interface PokerPlayerState {
 ```typescript
 interface CryptoPokerState extends Omit<PokerState, 'players' | 'phase'> {
   players: Record<string, CryptoPokerPlayerState>;
-  phase: 'keyExchange' | 'encrypt' | 'shuffle' | 'preflop' | 'flop' | 'turn' | 'river' | 'showdown' | 'gameOver';
+  phase: 'keyExchange' | 'keyEscrow' | 'encrypt' | 'shuffle' | 'preflop' | 'flop' | 'turn' | 'river' | 'showdown' | 'gameOver' | 'voided';
   crypto: CryptoPluginState;
   cardIds: string[];
   playerOrder: string[];
   setupPlayerIndex: number;
+
+  // Abandonment support
+  releasedKeys: Record<string, string>;           // playerId → privateKey (from folds)
+  keyEscrowShares: Record<string, Record<string, string>>;  // playerId → { recipientId → encryptedShare }
+  escrowThreshold: number;                        // K value for K-of-N reconstruction
+  disconnectedPlayers: string[];                  // Players who disconnected without key release
+  lastHeartbeat: Record<string, number>;          // playerId → timestamp
 }
 
 interface CryptoPokerPlayerState extends PokerPlayerState {
   publicKey: string | null;
   hasEncrypted: boolean;
   hasShuffled: boolean;
-  hasPeeked: boolean;        // Whether they've revealed their hole cards to themselves
+  hasPeeked: boolean;           // Whether they've revealed their hole cards to themselves
+  hasReleasedKey: boolean;      // Whether they've released their key (after fold)
+  hasDistributedShares: boolean; // Whether they've distributed escrow shares
+  isConnected: boolean;         // Connection status
 }
 ```
 
@@ -149,12 +218,25 @@ interface ZoneMetadata {
   owner?: string;  // For owner-only zones
 }
 
+interface KeyShare {
+  fromPlayer: string;
+  forPlayer: string;
+  encryptedShare: string;  // Encrypted with recipient's public key
+  shareIndex: number;
+}
+
 // New state additions
 interface CryptoPluginState {
   // ... existing fields ...
   zoneMetadata: Record<ZoneId, ZoneMetadata>;
   foldedPlayers: string[];
   peekNotifications: Array<{ playerId: string; timestamp: number }>;
+
+  // Abandonment support
+  releasedKeys: Record<string, string>;
+  keyEscrowShares: Record<string, KeyShare[]>;  // playerId → shares of their key
+  escrowThreshold: number;
+  disconnectedPlayers: string[];
 }
 
 // New API methods
@@ -181,19 +263,53 @@ interface CryptoPluginApi {
   notifyPeek(playerId: string): void;
   getPeekNotifications(): Array<{ playerId: string; timestamp: number }>;
   clearPeekNotifications(): void;
+
+  // Key release (for fold abandonment)
+  releaseKey(playerId: string, privateKey: string): void;
+  hasReleasedKey(playerId: string): boolean;
+  getReleasedKey(playerId: string): string | null;
+  getAllAvailableKeys(): Record<string, string>;  // Released + active players' keys
+
+  // Key escrow (for disconnect recovery)
+  setEscrowThreshold(k: number): void;
+  getEscrowThreshold(): number;
+  storeKeyShare(share: KeyShare): void;
+  getKeyShares(playerId: string): KeyShare[];
+  reconstructKey(playerId: string): string | null;  // Returns null if below threshold
+  canReconstructKey(playerId: string): boolean;
+
+  // Disconnect handling
+  markDisconnected(playerId: string): void;
+  markReconnected(playerId: string): void;
+  isDisconnected(playerId: string): boolean;
+  getDisconnectedPlayers(): string[];
+
+  // Game viability
+  checkGameViability(): 'continue' | 'void';
+  getAvailableKeyCount(): number;
+  getRequiredKeyCount(): number;
+
+  // Decryption with fallback (uses released/reconstructed keys)
+  decryptWithFallback(
+    encryptedCard: EncryptedCard,
+    activeDecryptors: string[]  // Players providing live decryption
+  ): DecryptedCard | null;
 }
 ```
 
 ### Phases
 
 1. **keyExchange**: Players submit public keys
-2. **encrypt**: Sequential deck encryption
-3. **shuffle**: Sequential shuffle with proofs
-4. **preflop**: Deal hole cards, first betting round
-5. **flop**: Deal 3 community cards, betting round
-6. **turn**: Deal 1 community card, betting round
-7. **river**: Deal 1 community card, final betting
-8. **showdown**: Reveal hands, compare, award pot
+2. **keyEscrow**: Players distribute threshold key shares (for abandonment recovery)
+3. **encrypt**: Sequential deck encryption
+4. **shuffle**: Sequential shuffle with proofs
+5. **preflop**: Deal hole cards, first betting round
+6. **flop**: Deal 3 community cards, betting round
+7. **turn**: Deal 1 community card, betting round
+8. **river**: Deal 1 community card, final betting
+9. **showdown**: Reveal hands, compare, award pot
+10. **gameOver**: Pot awarded, hand complete
+11. **voided**: Game unrecoverable, bets returned
 
 ### Zones
 
@@ -227,6 +343,128 @@ End of hand: optionally move to mucked zone (stays encrypted)
 OR: player can call "show" move to voluntarily reveal
 ```
 
+### Player Abandonment Workflow
+
+**Key Escrow Setup (during keyEscrow phase):**
+```
+For N=4 players, threshold K=3:
+
+Alice splits privA into 4 shares using Shamir's Secret Sharing:
+  share_A0 (Alice keeps, optional)
+  share_A1 → encrypted for Bob
+  share_A2 → encrypted for Carol
+  share_A3 → encrypted for Dave
+
+All players do the same. Result: Any 3 players can reconstruct any key.
+```
+
+**Fold Flow (voluntary departure):**
+```
+1. Carol decides to fold
+2. Carol optionally calls "showHand" (reveals bluff before leaving)
+3. Carol calls "fold" move:
+   a. Mark Carol as folded
+   b. Carol broadcasts privateKey to all players
+   c. Store in releasedKeys['carol']
+4. Carol can safely disconnect
+5. Future reveals use releasedKeys['carol'] instead of Carol's participation
+```
+
+**Disconnect Flow (involuntary departure):**
+```
+1. Dave stops responding (no heartbeat for 15s)
+2. Dave's turn times out (30s)
+3. Auto-fold triggered for Dave
+4. Attempt to get key release (Dave may be AFK, not disconnected)
+5. If no response:
+   a. Mark Dave as disconnected
+   b. Gather key shares from Alice, Bob, Carol
+   c. If 3+ shares available: reconstruct Dave's key
+   d. Store reconstructed key in releasedKeys['dave']
+6. Continue game with reconstructed key
+7. If reconstruction fails (< threshold shares): check game viability
+```
+
+**Game Viability Check:**
+```
+Available keys = {
+  active players (can decrypt live),
+  released keys (from folds),
+  reconstructable keys (from escrow)
+}
+
+Required for community reveals: ALL player keys
+Required for showdown: ALL player keys EXCEPT the hand owner (owner peeked)
+
+If required keys unavailable:
+  → phase = 'voided'
+  → Return bets proportionally
+  → Log game state for audit
+```
+
+### Timeout Configuration
+
+```typescript
+const TIMEOUT_CONFIG = {
+  heartbeatInterval: 5_000,      // Ping every 5 seconds
+  disconnectThreshold: 15_000,   // 3 missed heartbeats = disconnect
+  actionTimeout: 30_000,         // 30 seconds to act before auto-fold
+  keyReleaseTimeout: 10_000,     // 10 seconds to release key after fold
+  reconstructionTimeout: 5_000,  // 5 seconds to gather shares
+};
+```
+
+### Abandonment State Diagram
+
+```
+                    ┌─────────────┐
+                    │   ACTIVE    │
+                    │   PLAYER    │
+                    └──────┬──────┘
+                           │
+           ┌───────────────┼───────────────┐
+           │               │               │
+           ▼               ▼               ▼
+    ┌─────────────┐ ┌─────────────┐ ┌─────────────┐
+    │    FOLD     │ │  DISCONNECT │ │   TIMEOUT   │
+    │ (voluntary) │ │ (detected)  │ │  (no action)│
+    └──────┬──────┘ └──────┬──────┘ └──────┬──────┘
+           │               │               │
+           ▼               │               │
+    ┌─────────────┐        │               │
+    │   RELEASE   │        │               │
+    │     KEY     │◄───────┴───────────────┘
+    └──────┬──────┘        │
+           │               │ (no response)
+           │               ▼
+           │        ┌─────────────┐
+           │        │ RECONSTRUCT │
+           │        │     KEY     │
+           │        └──────┬──────┘
+           │               │
+           │    ┌──────────┴──────────┐
+           │    │                     │
+           │    ▼                     ▼
+           │  ┌─────────────┐  ┌─────────────┐
+           │  │   SUCCESS   │  │   FAILED    │
+           │  │ (key avail) │  │ (< threshold)│
+           │  └──────┬──────┘  └──────┬──────┘
+           │         │                │
+           ▼         ▼                ▼
+    ┌─────────────────────┐    ┌─────────────┐
+    │   GAME CONTINUES    │    │ VIABILITY   │
+    │ (with released key) │    │    CHECK    │
+    └─────────────────────┘    └──────┬──────┘
+                                      │
+                            ┌─────────┴─────────┐
+                            ▼                   ▼
+                     ┌─────────────┐     ┌─────────────┐
+                     │  CONTINUE   │     │    VOID     │
+                     │   (viable)  │     │   (return   │
+                     │             │     │    bets)    │
+                     └─────────────┘     └─────────────┘
+```
+
 ## Files to Create/Modify
 
 **New (Poker Module):**
@@ -236,14 +474,24 @@ OR: player can call "show" move to voluntarily reveal
 - `packages/frontend/src/game/modules/poker/crypto.ts` - Crypto Poker
 - `packages/frontend/src/game/modules/poker/hands.ts` - Hand ranking logic
 - `packages/frontend/src/game/modules/poker/betting.ts` - Betting round logic
+- `packages/frontend/src/game/modules/poker/abandonment.ts` - Disconnect/timeout handling
+- `packages/frontend/src/game/modules/poker/viability.ts` - Game viability checks
+
+**New (Crypto Utilities):**
+- `packages/frontend/src/crypto/shamirs/index.ts` - Shamir's Secret Sharing implementation
+- `packages/frontend/src/crypto/shamirs/split.ts` - Key splitting into shares
+- `packages/frontend/src/crypto/shamirs/reconstruct.ts` - Key reconstruction from shares
+- `packages/frontend/src/crypto/shamirs/types.ts` - Share types
 
 **Modified (CryptoPlugin):**
-- `packages/frontend/src/crypto/plugin/crypto-plugin.ts` - Add batch dealing, self-decrypt, zone metadata, fold tracking
+- `packages/frontend/src/crypto/plugin/crypto-plugin.ts` - Add batch dealing, self-decrypt, zone metadata, fold tracking, key release, key escrow, disconnect handling, viability checks
 
 **Tests:**
 - `packages/frontend/src/game/modules/poker/game.test.ts`
 - `packages/frontend/src/game/modules/poker/crypto.test.ts`
 - `packages/frontend/src/game/modules/poker/hands.test.ts`
+- `packages/frontend/src/game/modules/poker/abandonment.test.ts`
+- `packages/frontend/src/crypto/shamirs/shamirs.test.ts`
 - `packages/frontend/src/crypto/plugin/crypto-plugin.test.ts` - Add tests for new features
 
 ## Inventory Check
@@ -264,6 +512,11 @@ Before starting, verify:
 - [ ] Hand ranking works correctly for all hand types
 - [ ] Hole card peek/reveal flow works
 - [ ] Fold state properly tracked and respected
+- [ ] **Key release on fold works** (folded players can leave)
+- [ ] **Threshold key escrow works** (Shamir's Secret Sharing)
+- [ ] **Disconnect handling works** (timeout → auto-fold → key recovery)
+- [ ] **Game viability check works** (void when unrecoverable)
+- [ ] **Reveals work with released/reconstructed keys**
 - [ ] Tests pass
 - [ ] Build succeeds
 
