@@ -33,7 +33,7 @@
 | MM-027 | Asset Pack Manifest Parser | Complete | None | N/A |
 | MM-028 | Asset Pack Loader | Ready | MM-027 | `feature/asset-loader` |
 | MM-029 | Cryptographic Deck Plugin (Mental Poker) | Complete | MM-020 | N/A |
-| MM-030 | War Game Crypto Integration | Ready | MM-021, MM-029 | `feature/war-crypto` |
+| MM-030 | War Game Crypto Integration | Complete | MM-021, MM-029 | N/A |
 
 ## Status Legend
 
