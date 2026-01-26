@@ -31,7 +31,7 @@
 | MM-025 | Lorcana Game Module | Ready | MM-019, MM-020 | `feature/game-lorcana` |
 | MM-026 | Riftbound Game Module | Ready | MM-019, MM-020 | `feature/game-riftbound` |
 | MM-027 | Asset Pack Manifest Parser | Complete | None | N/A |
-| MM-028 | Asset Pack Loader | In Progress | MM-027 | N/A |
+| MM-028 | Asset Pack Loader | Complete | MM-027 | N/A |
 | MM-029 | Cryptographic Deck Plugin (Mental Poker) | Complete | MM-020 | N/A |
 | MM-030 | War Game Crypto Integration | Complete | MM-021, MM-029 | N/A |
 
