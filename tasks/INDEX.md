@@ -25,7 +25,7 @@
 | MM-019 | Core Game Module Interface | Complete | MM-017 | N/A |
 | MM-020 | Deck Plugin for boardgame.io | Complete | MM-017, MM-019 | N/A |
 | MM-021 | War Game Module | Complete | MM-019, MM-020, MM-018 | N/A |
-| MM-022 | Poker Game Module (with Crypto) | Ready | MM-019, MM-020, MM-018, MM-029 | `feature/game-poker` |
+| MM-022 | Poker Game Module (with Crypto) | In Progress | MM-019, MM-020, MM-018, MM-029 | `feature/game-poker` |
 | MM-023 | One Piece TCG Game Module | Ready | MM-019, MM-020 | `feature/game-onepiece` |
 | MM-024 | MTG Game Module | Ready | MM-019, MM-020 | `feature/game-mtg` |
 | MM-025 | Lorcana Game Module | Ready | MM-019, MM-020 | `feature/game-lorcana` |
