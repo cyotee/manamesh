@@ -41,3 +41,18 @@ export {
   resolveRound,
   validateMove,
 } from './game';
+
+// Crypto-enabled War (mental poker)
+export {
+  CryptoWarGame,
+  CryptoWarModule,
+  createCryptoWarState,
+  getShuffleProofs,
+  verifyPlayerShuffle,
+} from './crypto';
+
+export type {
+  CryptoWarState,
+  CryptoWarPlayerState,
+  CryptoWarConfig,
+} from './crypto';
