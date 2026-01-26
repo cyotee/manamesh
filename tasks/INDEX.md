@@ -25,7 +25,7 @@
 | MM-019 | Core Game Module Interface | Complete | MM-017 | N/A |
 | MM-020 | Deck Plugin for boardgame.io | Complete | MM-017, MM-019 | N/A |
 | MM-021 | War Game Module | Complete | MM-019, MM-020, MM-018 | N/A |
-| MM-022 | Poker Game Module (with Crypto) | In Progress | MM-019, MM-020, MM-018, MM-029 | `feature/game-poker` |
+| MM-022 | Poker Game Module (with Crypto) | Complete | MM-019, MM-020, MM-018, MM-029 | N/A |
 | MM-023 | One Piece TCG Game Module | Ready | MM-019, MM-020 | `feature/game-onepiece` |
 | MM-024 | MTG Game Module | Ready | MM-019, MM-020 | `feature/game-mtg` |
 | MM-025 | Lorcana Game Module | Ready | MM-019, MM-020 | `feature/game-lorcana` |
@@ -34,7 +34,7 @@
 | MM-028 | Asset Pack Loader | Complete | MM-027 | N/A |
 | MM-029 | Cryptographic Deck Plugin (Mental Poker) | Complete | MM-020 | N/A |
 | MM-030 | War Game Crypto Integration | Complete | MM-021, MM-029 | N/A |
-| MM-031 | Blockchain-Enabled Poker | Blocked | MM-022, MM-029 | `feature/blockchain-poker` |
+| MM-031 | Blockchain-Enabled Poker | Ready | MM-022, MM-029 | `feature/blockchain-poker` |
 
 ## Status Legend
 
