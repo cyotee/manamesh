@@ -9,7 +9,7 @@ import { WarBoard } from './components/WarBoard';
 import { P2PLobby, type P2PRole } from './components/P2PLobby';
 import { startP2P, P2PMultiplayer, type JoinCodeConnection } from './p2p';
 import { GAMES, getGameById, type GameInfo } from './game/registry';
-import { getBlockchainService } from './blockchain';
+import { getBlockchainService, WalletContextProvider } from './blockchain';
 import type { PokerHandResult } from './game/modules/poker/types';
 import { createCryptoInitialState } from './game/modules/poker/crypto';
 
@@ -638,7 +638,7 @@ const P2PGame: React.FC<P2PGameProps> = ({ game, connection, role, onBack }) => 
   );
 };
 
-const App: React.FC = () => {
+const AppContent: React.FC = () => {
   const [gameMode, setGameMode] = useState<GameMode>('gameSelect');
   const [selectedGameId, setSelectedGameId] = useState<string | null>(null);
   const [p2pConnection, setP2pConnection] = useState<JoinCodeConnection | null>(null);
@@ -719,6 +719,18 @@ const App: React.FC = () => {
 
   // Fallback to game selection
   return <GameSelector onSelectGame={handleSelectGame} />;
+};
+
+/**
+ * App component wrapped with WalletContextProvider for demo.
+ * The WalletContextProvider creates a mock wallet for each session.
+ */
+const App: React.FC = () => {
+  return (
+    <WalletContextProvider>
+      <AppContent />
+    </WalletContextProvider>
+  );
 };
 
 export default App;

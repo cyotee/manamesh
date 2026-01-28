@@ -2,8 +2,8 @@
 
 ## Current Checkpoint
 
-**Last checkpoint:** 2026-01-27 - Wallet UI integrated into P2P Lobby
-**Next step:** Run dev server and test P2P with wallet display, then test "Deal Next Hand" flow
+**Last checkpoint:** 2026-01-27 - Wallet context provider added to App
+**Next step:** Test P2P with wallet display, then integrate wallet-derived keys into PokerBoard
 **Build status:** ⚠️ Pre-existing TS errors (unrelated to new code)
 **Test status:** ✅ P2P gameplay working - crypto setup completes, betting works
 
@@ -76,6 +76,47 @@ Same keys used for mental poker encryption
 
 #### Visual Demo
 Players now see their mock wallet address when entering the P2P lobby, demonstrating the wallet-based identity system that will be used for blockchain settlement.
+
+---
+
+### 2026-01-27 - Wallet Context Provider
+
+**Added React context for app-wide wallet access.**
+
+#### Files Created/Modified
+
+1. **`/src/blockchain/wallet/context.tsx`** - New wallet context
+   - `WalletContextProvider` - wraps app, auto-connects mock wallet
+   - `useWallet()` hook - access wallet state anywhere
+   - `useGameKeys(gameId)` hook - derive keys for a specific game (with caching)
+   - Caches derived keys by gameId for efficiency
+
+2. **Updated `/src/blockchain/wallet/index.ts`** - exports context
+
+3. **Updated `/src/App.tsx`**
+   - Wrapped `AppContent` with `WalletContextProvider`
+   - Wallet is now available throughout the app
+
+4. **Updated `/src/components/P2PLobby.tsx`**
+   - Uses `useWallet()` hook instead of creating its own wallet
+   - Simplified component (no longer manages wallet lifecycle)
+
+#### Architecture
+```
+App
+ └── WalletContextProvider  ← Creates mock wallet once
+      └── AppContent
+           ├── GameSelector
+           ├── ModeSelect
+           ├── LocalGame
+           ├── P2PLobby       ← Uses useWallet() hook
+           └── P2PGame
+                └── PokerBoard  ← Will use useGameKeys() for wallet-derived crypto
+```
+
+#### Next Steps
+1. Integrate `useGameKeys()` into PokerBoard for wallet-derived crypto keys
+2. Test P2P gameplay with wallet context
 
 ---
 

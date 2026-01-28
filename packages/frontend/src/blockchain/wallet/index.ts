@@ -7,3 +7,4 @@
 
 export * from './types';
 export * from './mock-wallet';
+export * from './context';
