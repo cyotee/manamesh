@@ -470,6 +470,28 @@ export function createPlayerCryptoContext(
 }
 
 /**
+ * Create a player crypto context from wallet-derived keys.
+ * Same wallet + gameId always produces the same keys (deterministic).
+ *
+ * @param playerId - The player's ID
+ * @param derivedKeys - Keys derived from wallet signature
+ * @returns Player's crypto context
+ */
+export function createPlayerCryptoContextFromWallet(
+  playerId: string,
+  derivedKeys: { privateKey: string; publicKey: string }
+): CryptoPlayerContext {
+  return {
+    playerId,
+    keyPair: {
+      privateKey: derivedKeys.privateKey,
+      publicKey: derivedKeys.publicKey,
+    },
+    shuffleNonces: new Map(),
+  };
+}
+
+/**
  * Generate card IDs for a standard 52-card deck.
  */
 export function generateStandard52CardIds(): string[] {

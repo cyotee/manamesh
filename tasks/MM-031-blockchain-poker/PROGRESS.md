@@ -2,14 +2,65 @@
 
 ## Current Checkpoint
 
-**Last checkpoint:** 2026-01-27 - P2P state sync bugs FIXED
-**Next step:** Test "Deal Next Hand" flow, then continue with wallet authentication (US-MM-031.1)
+**Last checkpoint:** 2026-01-27 - Mock wallet module created
+**Next step:** Integrate wallet-derived keys with game UI, verify TypeScript compiles
 **Build status:** ⚠️ Pre-existing TS errors (unrelated to new code)
 **Test status:** ✅ P2P gameplay working - crypto setup completes, betting works
 
 ---
 
 ## Session Log
+
+### 2026-01-27 - Mock Wallet Module Created
+
+**Created mock wallet infrastructure for demo purposes.**
+
+Goal: Prove P2P + secure encryption works without real blockchain integration.
+
+#### Files Created
+
+1. **`/src/blockchain/wallet/types.ts`** - Wallet types
+   - `WalletStatus`, `ConnectedWallet`, `DerivedGameKeys`
+   - `WalletProvider` interface (abstraction over different wallet types)
+   - `EIP1193Provider` for MetaMask compatibility
+
+2. **`/src/blockchain/wallet/mock-wallet.ts`** - Mock wallet provider
+   - `MockWalletProvider` class - simulates wallet connection
+   - `deriveGameKeys(provider, gameId)` - derives game keys from wallet signature
+   - Deterministic: same player + gameId always produces same keys
+   - Uses SRA key generation with signature-derived seed
+
+3. **`/src/blockchain/wallet/index.ts`** - Module exports
+
+4. **Updated `/src/crypto/plugin/crypto-plugin.ts`**
+   - Added `createPlayerCryptoContextFromWallet()` function
+   - Takes wallet-derived keys and creates crypto context
+
+#### Architecture
+
+```
+Player connects wallet (mock)
+        ↓
+Wallet signs message: "ManaMesh Poker Game Key\nGame ID: {gameId}\nVersion: 1"
+        ↓
+Signature → keccak256 → seed
+        ↓
+SRA generateKeyPair(seed) → deterministic keypair
+        ↓
+Same keys used for mental poker encryption
+```
+
+#### Benefits
+- Keys derived from wallet signature = cryptographic identity
+- Deterministic: rejoin same game with same keys
+- Future-ready for real wallet integration (just swap MockWallet for MetaMask)
+
+#### Next Steps
+1. Integrate wallet connection into App.tsx UI
+2. Verify TypeScript compiles
+3. Test P2P gameplay with wallet-derived keys
+
+---
 
 ### 2026-01-27 (Very Late Night) - P2P State Sync Bugs FIXED
 
