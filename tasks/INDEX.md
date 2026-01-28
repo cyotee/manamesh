@@ -11,7 +11,7 @@
 | MM-024 | MTG Game Module | Ready | MM-019, MM-020 | `feature/game-mtg` |
 | MM-025 | Lorcana Game Module | Ready | MM-019, MM-020 | `feature/game-lorcana` |
 | MM-026 | Riftbound Game Module | Ready | MM-019, MM-020 | `feature/game-riftbound` |
-| MM-032 | Hybrid P2P Transport | Ready | MM-002, MM-003, MM-004 | `feature/hybrid-p2p-transport` |
+| MM-032 | Hybrid P2P Transport | In Progress | MM-002, MM-003, MM-004 | `feature/hybrid-p2p-transport` |
 
 ## Status Legend
 

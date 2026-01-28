@@ -2,11 +2,15 @@
  * P2P Lobby Component
  * Handles the two-way join code exchange for establishing P2P connections
  * Uses wallet context for demo wallet display
+ * Now includes transport settings for configurable P2P connections
  */
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { JoinCodeConnection, type JoinCodeState, type ConnectionState } from '../p2p';
 import { useWallet } from '../blockchain/wallet';
+import { useTransportConfig } from '../hooks/useTransportConfig';
+import { TransportBadge } from './TransportBadge';
+import { TransportToggles, TransportSettingsModal } from './TransportSettings';
 
 export type P2PRole = 'host' | 'guest';
 
@@ -25,10 +29,14 @@ export const P2PLobby: React.FC<P2PLobbyProps> = ({ onConnected, onBack }) => {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [isCreatingGame, setIsCreatingGame] = useState(false);
+  const [showTransportSettings, setShowTransportSettings] = useState(false);
 
   // Use wallet from context (provided by App)
   const { wallet, status: walletStatus } = useWallet();
   const isConnectingWallet = walletStatus === 'connecting';
+
+  // Transport configuration
+  const { status: transportStatus, config: transportConfig, isForced } = useTransportConfig();
 
   const connectionRef = useRef<JoinCodeConnection | null>(null);
   const roleRef = useRef<P2PRole>('host');
@@ -236,11 +244,49 @@ export const P2PLobby: React.FC<P2PLobbyProps> = ({ onConnected, onBack }) => {
     </div>
   );
 
+  // Transport status header component
+  const TransportHeader = () => (
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: '16px',
+      padding: '8px 12px',
+      backgroundColor: '#0f3460',
+      borderRadius: '8px',
+      border: '1px solid #3a3a5c',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <TransportBadge
+          status={transportStatus}
+          onClick={() => setShowTransportSettings(true)}
+        />
+        {isForced && (
+          <span style={{
+            fontSize: '10px',
+            padding: '2px 6px',
+            backgroundColor: '#f59e0b',
+            color: '#000',
+            borderRadius: '4px',
+            fontWeight: 600,
+          }}>
+            FORCED: {transportConfig.forced}
+          </span>
+        )}
+      </div>
+      <TransportToggles
+        compact
+        onSettingsClick={() => setShowTransportSettings(true)}
+      />
+    </div>
+  );
+
   // Mode: Select (Create or Join)
   if (mode === 'select') {
     return (
       <div style={containerStyle}>
         <WalletBadge />
+        <TransportHeader />
         <h1 style={{ color: '#e4e4e4', marginBottom: '8px' }}>P2P Online Game</h1>
         <p style={{ color: '#a0a0a0', marginBottom: '24px' }}>
           Connect directly with another player - no server required!
@@ -290,6 +336,10 @@ export const P2PLobby: React.FC<P2PLobbyProps> = ({ onConnected, onBack }) => {
         >
           Back to Lobby
         </button>
+
+        {showTransportSettings && (
+          <TransportSettingsModal onClose={() => setShowTransportSettings(false)} />
+        )}
       </div>
     );
   }
@@ -303,6 +353,7 @@ export const P2PLobby: React.FC<P2PLobbyProps> = ({ onConnected, onBack }) => {
     return (
       <div style={containerStyle}>
         <WalletBadge />
+        <TransportHeader />
         <h1 style={{ color: '#e4e4e4', marginBottom: '8px' }}>Host Game</h1>
 
         {/* Step 1: Share your offer code */}
@@ -374,6 +425,10 @@ export const P2PLobby: React.FC<P2PLobbyProps> = ({ onConnected, onBack }) => {
         <button style={secondaryButtonStyle} onClick={handleBack}>
           Cancel
         </button>
+
+        {showTransportSettings && (
+          <TransportSettingsModal onClose={() => setShowTransportSettings(false)} />
+        )}
       </div>
     );
   }
@@ -387,6 +442,7 @@ export const P2PLobby: React.FC<P2PLobbyProps> = ({ onConnected, onBack }) => {
     return (
       <div style={containerStyle}>
         <WalletBadge />
+        <TransportHeader />
         <h1 style={{ color: '#e4e4e4', marginBottom: '8px' }}>Join Game</h1>
 
         {/* Step 1: Enter their offer code */}
@@ -458,6 +514,10 @@ export const P2PLobby: React.FC<P2PLobbyProps> = ({ onConnected, onBack }) => {
         <button style={secondaryButtonStyle} onClick={handleBack}>
           Cancel
         </button>
+
+        {showTransportSettings && (
+          <TransportSettingsModal onClose={() => setShowTransportSettings(false)} />
+        )}
       </div>
     );
   }
