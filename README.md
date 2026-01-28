@@ -179,6 +179,95 @@ yarn test
 yarn build
 ```
 
+## P2P Transport Options
+
+ManaMesh uses a hybrid P2P transport system that automatically selects the best connection method. This eliminates dependency on centralized STUN servers while maintaining compatibility with various network environments.
+
+### Transport Priority
+
+The system tries transports in this order (first successful wins):
+
+| Priority | Transport | Best For | STUN Required |
+|----------|-----------|----------|---------------|
+| 1 | **LAN / Local Network** | Same WiFi/network, LAN parties | No |
+| 2 | **Direct IP** | VPN users, port-forwarded setups | No |
+| 3 | **Circuit Relay** | NAT traversal via Protocol Labs nodes | No |
+| 4 | **Join Code** | Fallback with copy/paste SDP exchange | Yes (Google STUN) |
+
+### Configuring Transports
+
+#### In-App Settings
+
+Click the **settings gear** in the P2P Lobby to open the Transport Settings modal:
+
+- **Enable/Disable** individual transports
+- **Force Transport** - Select a specific transport for testing
+- **Verbose Logging** - Enable detailed console logs for debugging
+- **Generate URL** - Create shareable links with your transport config
+
+#### URL Parameters
+
+Override transport settings via URL for testing or sharing:
+
+```bash
+# Force a specific transport
+http://localhost:3000/?transport=relay     # Force Circuit Relay only
+http://localhost:3000/?transport=lan       # Force LAN only
+http://localhost:3000/?transport=joinCode  # Force Join Code only
+
+# Reset to defaults
+http://localhost:3000/?transport=all       # Enable all transports
+
+# Enable specific transports
+http://localhost:3000/?transport=lan,relay # Only LAN and Relay
+
+# Enable verbose logging
+http://localhost:3000/?verbose=true
+```
+
+### Transport Details
+
+#### LAN / Local Network (Recommended for Local Play)
+- Uses mDNS for automatic peer discovery on the same network
+- No internet required - works completely offline
+- Lowest latency for local multiplayer
+
+#### Direct IP
+- Manual IP:port exchange for custom setups
+- Ideal for VPN connections or port-forwarded home servers
+- Bypasses NAT issues when you control the network
+
+#### Circuit Relay
+- NAT traversal via Protocol Labs' decentralized relay network
+- No STUN servers - uses libp2p circuit relay v2
+- Works across most network configurations
+
+#### Join Code (Legacy Fallback)
+- Two-way SDP offer/answer exchange via copy/paste
+- Uses Google STUN servers for ICE candidate gathering
+- Most compatible but requires external code sharing (Discord, etc.)
+
+### Persistence
+
+- Settings are automatically saved to `localStorage`
+- URL parameters override localStorage for the current session
+- Use "Reset to Defaults" to clear saved preferences
+
+### Troubleshooting
+
+**Connection fails on all transports:**
+1. Check if both players have at least one common transport enabled
+2. Try forcing a specific transport to isolate the issue
+3. Enable verbose logging and check the browser console
+
+**LAN transport not working:**
+- Verify both devices are on the same network
+- Some networks block mDNS - try Direct IP instead
+
+**Relay transport slow:**
+- Relay adds latency due to routing through third-party nodes
+- If on same network, ensure LAN transport is enabled
+
 ## Game Modules
 
 ManaMesh uses a pluggable game module system. Each game (War, Poker, MTG, etc.) is implemented as a module that provides:
