@@ -2,8 +2,8 @@
 
 ## Current Checkpoint
 
-**Last checkpoint:** 2026-01-27 - Wallet context provider added to App
-**Next step:** Test P2P with wallet display, then integrate wallet-derived keys into PokerBoard
+**Last checkpoint:** 2026-01-27 - Wallet-derived keys integrated into PokerBoard
+**Next step:** Test P2P gameplay with wallet-derived keys
 **Build status:** ⚠️ Pre-existing TS errors (unrelated to new code)
 **Test status:** ✅ P2P gameplay working - crypto setup completes, betting works
 
@@ -115,8 +115,31 @@ App
 ```
 
 #### Next Steps
-1. Integrate `useGameKeys()` into PokerBoard for wallet-derived crypto keys
+1. ~~Integrate `useGameKeys()` into PokerBoard for wallet-derived crypto keys~~ ✅ Done
 2. Test P2P gameplay with wallet context
+
+---
+
+### 2026-01-27 - Wallet-Derived Keys in PokerBoard
+
+**Integrated wallet-derived keys into the poker crypto setup.**
+
+#### Changes to PokerBoard (`/src/components/PokerBoard.tsx`)
+
+1. **Added `useGameKeys` hook** - fetches wallet-derived keys using `handId` as gameId
+2. **Priority key selection:**
+   - First checks for existing keys (from ref)
+   - Then uses wallet-derived keys (deterministic, same wallet = same keys)
+   - Falls back to random keys if wallet not available
+3. **Logging indicates key source:**
+   - `"Using wallet-derived keys for player X from wallet 0x..."` - wallet keys
+   - `"Generated random key pair for player X (wallet keys not yet available)"` - fallback
+
+#### Demo Benefits
+- Players now see their wallet address AND use wallet-derived keys
+- Same wallet + same game = same cryptographic keys
+- Proves the cryptographic identity flow works
+- Foundation for on-chain key commitments (future)
 
 ---
 

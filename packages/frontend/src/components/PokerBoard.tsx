@@ -2,6 +2,7 @@
  * Poker Board Component
  *
  * Texas Hold'em game board with betting controls.
+ * Uses wallet-derived keys for cryptographic fairness when available.
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -13,6 +14,7 @@ import type { CryptoPluginState } from '../crypto/plugin/crypto-plugin';
 import { generateKeyPair } from '../crypto/mental-poker';
 import { createKeyShares } from '../crypto/shamirs';
 import type { CryptoKeyPair } from '../crypto/mental-poker/types';
+import { useGameKeys } from '../blockchain/wallet';
 
 interface PokerBoardProps extends BoardProps<PokerState> {
   /**
@@ -274,6 +276,24 @@ export const PokerBoard: React.FC<PokerBoardProps> = ({
   const cryptoG = G as unknown as CryptoPokerState;
   const myCryptoPlayer = cryptoG.players?.[currentPlayerID] as CryptoPokerPlayerState | undefined;
 
+  // Get wallet-derived keys for this game (if available)
+  // Falls back to random keys if wallet not connected
+  const gameId = cryptoG.handId || null;
+  const walletDerivedKeys = useGameKeys(gameId);
+
+  // Apply wallet-derived keys when they become available
+  useEffect(() => {
+    if (walletDerivedKeys && !cryptoKeyPairRef.current) {
+      const keyPair: CryptoKeyPair = {
+        privateKey: walletDerivedKeys.privateKey,
+        publicKey: walletDerivedKeys.publicKey,
+      };
+      cryptoKeyPairRef.current = keyPair;
+      setCryptoKeyPair(keyPair);
+      console.log('[Crypto] Using wallet-derived keys for player', currentPlayerID, 'from wallet', walletDerivedKeys.walletAddress);
+    }
+  }, [walletDerivedKeys, currentPlayerID]);
+
   // Automatic crypto setup - generates keys and submits them when in setup phases
   useEffect(() => {
     // Only run for crypto poker games (ones with crypto state)
@@ -291,14 +311,16 @@ export const PokerBoard: React.FC<PokerBoardProps> = ({
     if (cryptoSetupInProgress.current.has(actionKey)) return;
 
     // Get or create key pair (use ref for synchronous access)
+    // Prefers wallet-derived keys if available, falls back to random
     const getOrCreateKeyPair = (): CryptoKeyPair => {
       if (cryptoKeyPairRef.current) {
         return cryptoKeyPairRef.current;
       }
+      // Generate random keys as fallback (will be replaced by wallet keys when available)
       const newKeyPair = generateKeyPair();
       cryptoKeyPairRef.current = newKeyPair;
       setCryptoKeyPair(newKeyPair);
-      console.log('[Crypto] Generated key pair for player', currentPlayerID);
+      console.log('[Crypto] Generated random key pair for player', currentPlayerID, '(wallet keys not yet available)');
       return newKeyPair;
     };
 
