@@ -268,6 +268,110 @@ http://localhost:3000/?verbose=true
 - Relay adds latency due to routing through third-party nodes
 - If on same network, ensure LAN transport is enabled
 
+## Asset Loading (IPFS)
+
+Card assets (images, metadata) are loaded from IPFS with automatic caching for offline play. Assets are **not embedded** in the app bundle - they're fetched on-demand and cached locally.
+
+### Loading Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     Asset Request                            │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│  1. IndexedDB Cache (local)                                  │
+│     • Instant if cached                                      │
+│     • Works completely offline                               │
+└─────────────────────────────────────────────────────────────┘
+                              │ cache miss
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│  2. Helia (Browser IPFS Node)                                │
+│     • Direct P2P fetch from IPFS network                     │
+│     • Content-addressed by CID                               │
+│     • Timeout: configurable (default 10s)                    │
+└─────────────────────────────────────────────────────────────┘
+                              │ fail/timeout
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│  3. HTTP Gateways (fallback)                                 │
+│     • ipfs.io, dweb.link, cloudflare-ipfs.com               │
+│     • Tries multiple gateways in sequence                    │
+│     • Most reliable but centralized                          │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│  Cache Result → IndexedDB                                    │
+│  (for future offline access)                                 │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Asset Packs
+
+Card assets are organized into **asset packs** stored in `assets/packs/`:
+
+```
+assets/packs/standard-playing-cards/
+├── manifest.json      # Pack metadata, card list, CIDs
+├── cards/             # Card images (PNG)
+│   ├── ace-spades.png
+│   ├── king-hearts.png
+│   └── ...
+└── README.md          # Pack documentation
+```
+
+Each pack has a **manifest** that describes:
+- Pack metadata (name, version, author)
+- Card definitions (id, name, suit, rank)
+- IPFS CIDs for each asset
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `src/assets/ipfs-loader.ts` | Core loader with Helia + gateway fallback |
+| `src/assets/config.ts` | Gateway URLs, timeouts, preferences |
+| `src/assets/cache.ts` | IndexedDB caching layer |
+| `src/assets/loader/` | Asset pack manifest parsing |
+
+### Configuration
+
+Gateway and timeout settings in `src/assets/config.ts`:
+
+```typescript
+// Default configuration
+{
+  gateways: [
+    'https://ipfs.io/ipfs/',
+    'https://dweb.link/ipfs/',
+    'https://cloudflare-ipfs.com/ipfs/',
+  ],
+  heliaInitTimeout: 5000,    // Max time to initialize Helia
+  heliaFetchTimeout: 10000,  // Max time for Helia fetch
+  gatewayTimeout: 15000,     // Max time per gateway attempt
+  preferGateway: false,      // Try Helia first by default
+}
+```
+
+### Offline Play
+
+Once assets are cached:
+1. **No internet required** - All cached assets load from IndexedDB
+2. **Instant loading** - No network latency for cached content
+3. **Persistent** - Cache survives browser restarts
+
+To pre-cache assets for offline play, simply load them once while online. The app automatically caches everything it fetches.
+
+### Adding Custom Asset Packs
+
+1. Create a manifest following the schema in `src/assets/loader/types.ts`
+2. Upload images to IPFS (via `ipfs add` or a pinning service)
+3. Add CIDs to your manifest
+4. Place the pack in `assets/packs/your-pack-name/`
+
 ## Game Modules
 
 ManaMesh uses a pluggable game module system. Each game (War, Poker, MTG, etc.) is implemented as a module that provides:
