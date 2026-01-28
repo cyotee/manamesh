@@ -1,10 +1,12 @@
 /**
  * P2P Lobby Component
  * Handles the two-way join code exchange for establishing P2P connections
+ * Includes mock wallet connection for demo purposes
  */
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { JoinCodeConnection, type JoinCodeState, type ConnectionState } from '../p2p';
+import { createMockWallet, type MockWalletProvider, type ConnectedWallet } from '../blockchain/wallet';
 
 export type P2PRole = 'host' | 'guest';
 
@@ -24,8 +26,33 @@ export const P2PLobby: React.FC<P2PLobbyProps> = ({ onConnected, onBack }) => {
   const [copied, setCopied] = useState(false);
   const [isCreatingGame, setIsCreatingGame] = useState(false);
 
+  // Mock wallet state
+  const [wallet, setWallet] = useState<ConnectedWallet | null>(null);
+  const [isConnectingWallet, setIsConnectingWallet] = useState(false);
+  const walletRef = useRef<MockWalletProvider | null>(null);
+
   const connectionRef = useRef<JoinCodeConnection | null>(null);
   const roleRef = useRef<P2PRole>('host');
+
+  // Connect mock wallet on mount (auto-connect for demo)
+  useEffect(() => {
+    const playerName = `Player_${Math.random().toString(36).slice(2, 8)}`;
+    walletRef.current = createMockWallet(playerName);
+    setIsConnectingWallet(true);
+
+    walletRef.current.connect().then((connectedWallet) => {
+      setWallet(connectedWallet);
+      setIsConnectingWallet(false);
+      console.log('[P2PLobby] Mock wallet connected:', connectedWallet.address);
+    }).catch((err) => {
+      console.error('[P2PLobby] Wallet connection failed:', err);
+      setIsConnectingWallet(false);
+    });
+
+    return () => {
+      walletRef.current?.disconnect();
+    };
+  }, []);
 
   // Initialize connection on mount
   useEffect(() => {
@@ -191,10 +218,50 @@ export const P2PLobby: React.FC<P2PLobbyProps> = ({ onConnected, onBack }) => {
     textAlign: 'center',
   };
 
+  // Wallet badge component
+  const WalletBadge = () => (
+    <div style={{
+      backgroundColor: '#0f3460',
+      padding: '8px 12px',
+      borderRadius: '8px',
+      marginBottom: '16px',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '8px',
+      border: '1px solid #3a3a5c',
+    }}>
+      <span style={{ color: '#6fcf6f', fontSize: '10px' }}>●</span>
+      <span style={{ color: '#a0a0a0', fontSize: '12px' }}>Wallet:</span>
+      {isConnectingWallet ? (
+        <span style={{ color: '#ff9800', fontSize: '12px' }}>Connecting...</span>
+      ) : wallet ? (
+        <span style={{
+          color: '#e4e4e4',
+          fontSize: '12px',
+          fontFamily: 'monospace',
+        }}>
+          {wallet.address.slice(0, 6)}...{wallet.address.slice(-4)}
+        </span>
+      ) : (
+        <span style={{ color: '#ff6b6b', fontSize: '12px' }}>Not connected</span>
+      )}
+      <span style={{
+        backgroundColor: '#3a3a5c',
+        padding: '2px 6px',
+        borderRadius: '4px',
+        fontSize: '10px',
+        color: '#a0a0a0',
+      }}>
+        Demo
+      </span>
+    </div>
+  );
+
   // Mode: Select (Create or Join)
   if (mode === 'select') {
     return (
       <div style={containerStyle}>
+        <WalletBadge />
         <h1 style={{ color: '#e4e4e4', marginBottom: '8px' }}>P2P Online Game</h1>
         <p style={{ color: '#a0a0a0', marginBottom: '24px' }}>
           Connect directly with another player - no server required!
@@ -256,6 +323,7 @@ export const P2PLobby: React.FC<P2PLobbyProps> = ({ onConnected, onBack }) => {
 
     return (
       <div style={containerStyle}>
+        <WalletBadge />
         <h1 style={{ color: '#e4e4e4', marginBottom: '8px' }}>Host Game</h1>
 
         {/* Step 1: Share your offer code */}
@@ -339,6 +407,7 @@ export const P2PLobby: React.FC<P2PLobbyProps> = ({ onConnected, onBack }) => {
 
     return (
       <div style={containerStyle}>
+        <WalletBadge />
         <h1 style={{ color: '#e4e4e4', marginBottom: '8px' }}>Join Game</h1>
 
         {/* Step 1: Enter their offer code */}

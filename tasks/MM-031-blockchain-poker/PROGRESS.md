@@ -2,8 +2,8 @@
 
 ## Current Checkpoint
 
-**Last checkpoint:** 2026-01-27 - Mock wallet module created
-**Next step:** Integrate wallet-derived keys with game UI, verify TypeScript compiles
+**Last checkpoint:** 2026-01-27 - Wallet UI integrated into P2P Lobby
+**Next step:** Run dev server and test P2P with wallet display, then test "Deal Next Hand" flow
 **Build status:** ⚠️ Pre-existing TS errors (unrelated to new code)
 **Test status:** ✅ P2P gameplay working - crypto setup completes, betting works
 
@@ -56,9 +56,26 @@ Same keys used for mental poker encryption
 - Future-ready for real wallet integration (just swap MockWallet for MetaMask)
 
 #### Next Steps
-1. Integrate wallet connection into App.tsx UI
-2. Verify TypeScript compiles
-3. Test P2P gameplay with wallet-derived keys
+1. ~~Integrate wallet connection into App.tsx UI~~ ✅ Done - Added to P2PLobby
+2. ~~Verify TypeScript compiles~~ ✅ Done
+3. Test P2P gameplay with wallet display
+
+---
+
+### 2026-01-27 - Wallet UI Integration
+
+**Added wallet display to P2P Lobby for demo.**
+
+#### Changes to P2PLobby (`/src/components/P2PLobby.tsx`)
+- Added mock wallet auto-connection on component mount
+- Added `WalletBadge` component showing:
+  - Connection status (green dot)
+  - Truncated wallet address (0x1234...5678)
+  - "Demo" badge to indicate mock mode
+- Wallet badge displayed in all lobby modes (select, host, join)
+
+#### Visual Demo
+Players now see their mock wallet address when entering the P2P lobby, demonstrating the wallet-based identity system that will be used for blockchain settlement.
 
 ---
 
