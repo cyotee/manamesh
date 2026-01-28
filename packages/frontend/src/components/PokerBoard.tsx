@@ -1,0 +1,1119 @@
+/**
+ * Poker Board Component
+ *
+ * Texas Hold'em game board with betting controls.
+ */
+
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import type { BoardProps } from 'boardgame.io/react';
+import type { PokerState, PokerCard, PokerPhase, CryptoPokerPhase, PokerHandResult } from '../game/modules/poker/types';
+import type { CryptoPokerState, CryptoPokerPlayerState } from '../game/modules/poker/types';
+import { CryptoTransparencyPanel } from './CryptoTransparencyPanel';
+import type { CryptoPluginState } from '../crypto/plugin/crypto-plugin';
+import { generateKeyPair } from '../crypto/mental-poker';
+import { createKeyShares } from '../crypto/shamirs';
+import type { CryptoKeyPair } from '../crypto/mental-poker/types';
+
+interface PokerBoardProps extends BoardProps<PokerState> {
+  /**
+   * Callback when player wants to start a new hand.
+   * Called with the hand result for blockchain settlement.
+   * Parent component should settle the pot and create a new game instance.
+   */
+  onNewHand?: (handResult: PokerHandResult) => void;
+}
+
+const SUIT_SYMBOLS: Record<string, string> = {
+  hearts: '\u2665',
+  diamonds: '\u2666',
+  clubs: '\u2663',
+  spades: '\u2660',
+};
+
+const SUIT_COLORS: Record<string, string> = {
+  hearts: '#e74c3c',
+  diamonds: '#e74c3c',
+  clubs: '#2c3e50',
+  spades: '#2c3e50',
+};
+
+const CardDisplay: React.FC<{
+  card: PokerCard;
+  faceDown?: boolean;
+  small?: boolean;
+}> = ({ card, faceDown, small }) => {
+  const width = small ? 50 : 70;
+  const height = small ? 70 : 100;
+
+  if (faceDown) {
+    return (
+      <div style={{
+        width,
+        height,
+        backgroundColor: '#1a365d',
+        border: '2px solid #3182ce',
+        borderRadius: '8px',
+        margin: '4px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundImage: 'repeating-linear-gradient(45deg, #2a4365, #2a4365 10px, #1a365d 10px, #1a365d 20px)',
+      }}>
+        <span style={{ fontSize: small ? '16px' : '24px', color: '#63b3ed' }}>🂠</span>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{
+      width,
+      height,
+      backgroundColor: '#fff',
+      border: '2px solid #ccc',
+      borderRadius: '8px',
+      margin: '4px',
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+    }}>
+      <span style={{
+        fontSize: small ? '18px' : '24px',
+        fontWeight: 'bold',
+        color: SUIT_COLORS[card.suit],
+      }}>
+        {card.rank}
+      </span>
+      <span style={{
+        fontSize: small ? '20px' : '28px',
+        color: SUIT_COLORS[card.suit],
+      }}>
+        {SUIT_SYMBOLS[card.suit]}
+      </span>
+    </div>
+  );
+};
+
+const PlayerPanel: React.FC<{
+  playerId: string;
+  player: PokerState['players'][string];
+  isDealer: boolean;
+  isSmallBlind: boolean;
+  isBigBlind: boolean;
+  isActive: boolean;
+  isCurrentUser: boolean;
+  showCards: boolean;
+  encryptedCardCount?: number;
+  peekedCards?: PokerCard[];
+}> = ({ playerId, player, isDealer, isSmallBlind, isBigBlind, isActive, isCurrentUser, showCards, encryptedCardCount = 0, peekedCards }) => {
+  return (
+    <div style={{
+      padding: '16px',
+      backgroundColor: isActive ? '#1e4d2b' : isCurrentUser ? '#1e2a45' : '#16213e',
+      borderRadius: '12px',
+      border: isActive ? '2px solid #4CAF50' : '1px solid #3a3a5c',
+      margin: '8px',
+      minWidth: '180px',
+    }}>
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: '12px',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{ fontWeight: 'bold', color: '#e4e4e4' }}>
+            Player {playerId} {isCurrentUser && '(You)'}
+          </span>
+          {player.folded && (
+            <span style={{
+              fontSize: '10px',
+              padding: '2px 6px',
+              backgroundColor: '#7f1d1d',
+              color: '#fca5a5',
+              borderRadius: '4px',
+            }}>
+              FOLDED
+            </span>
+          )}
+          {player.isAllIn && (
+            <span style={{
+              fontSize: '10px',
+              padding: '2px 6px',
+              backgroundColor: '#7c3aed',
+              color: '#c4b5fd',
+              borderRadius: '4px',
+            }}>
+              ALL-IN
+            </span>
+          )}
+        </div>
+        <div style={{ display: 'flex', gap: '4px' }}>
+          {isDealer && (
+            <span style={{
+              fontSize: '10px',
+              padding: '2px 6px',
+              backgroundColor: '#f59e0b',
+              color: '#1f2937',
+              borderRadius: '4px',
+              fontWeight: 'bold',
+            }}>D</span>
+          )}
+          {isSmallBlind && (
+            <span style={{
+              fontSize: '10px',
+              padding: '2px 6px',
+              backgroundColor: '#3b82f6',
+              color: '#fff',
+              borderRadius: '4px',
+            }}>SB</span>
+          )}
+          {isBigBlind && (
+            <span style={{
+              fontSize: '10px',
+              padding: '2px 6px',
+              backgroundColor: '#ef4444',
+              color: '#fff',
+              borderRadius: '4px',
+            }}>BB</span>
+          )}
+        </div>
+      </div>
+
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        marginBottom: '12px',
+        color: '#a0a0a0',
+        fontSize: '14px',
+      }}>
+        <span>Chips: <strong style={{ color: '#fbbf24' }}>{player.chips}</strong></span>
+        {player.bet > 0 && (
+          <span>Bet: <strong style={{ color: '#4ade80' }}>{player.bet}</strong></span>
+        )}
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'center' }}>
+        {/* Show peeked cards if available (decrypted hole cards) */}
+        {peekedCards && peekedCards.length > 0 ? (
+          peekedCards.map(card => (
+            <CardDisplay key={card.id} card={card} small />
+          ))
+        ) : player.hand.length > 0 ? (
+          showCards ? (
+            player.hand.map(card => (
+              <CardDisplay key={card.id} card={card} small />
+            ))
+          ) : (
+            player.hand.map((_, i) => (
+              <CardDisplay key={i} card={{} as PokerCard} faceDown small />
+            ))
+          )
+        ) : encryptedCardCount > 0 ? (
+          /* Show encrypted cards as face-down */
+          Array.from({ length: encryptedCardCount }).map((_, i) => (
+            <CardDisplay key={i} card={{} as PokerCard} faceDown small />
+          ))
+        ) : (
+          <span style={{ color: '#6a6a8a', fontSize: '12px' }}>No cards</span>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// Support both standard and crypto poker phases
+const PHASE_LABELS: Record<PokerPhase | CryptoPokerPhase, string> = {
+  // Standard phases
+  waiting: 'Waiting to Start',
+  preflop: 'Pre-Flop',
+  flop: 'Flop',
+  turn: 'Turn',
+  river: 'River',
+  showdown: 'Showdown',
+  gameOver: 'Hand Complete',
+  // Crypto setup phases
+  keyExchange: '🔐 Key Exchange',
+  keyEscrow: '🔐 Key Escrow',
+  encrypt: '🔐 Encrypting Deck',
+  shuffle: '🔐 Shuffling Deck',
+  voided: '⚠️ Game Voided',
+};
+
+export const PokerBoard: React.FC<PokerBoardProps> = ({
+  G,
+  ctx,
+  moves,
+  playerID,
+  onNewHand,
+}) => {
+  // Debug: Expose full state to window
+  useEffect(() => {
+    (window as any).__POKER_G__ = G;
+    (window as any).__POKER_CTX__ = ctx;
+    console.log('[PokerBoard] G.phase:', G.phase, 'ctx.phase:', ctx.phase);
+  }, [G, ctx]);
+
+  const [betAmount, setBetAmount] = useState<number>(G.bigBlindAmount);
+  const currentPlayerID = playerID || '0';
+  const myPlayer = G.players[currentPlayerID];
+  const isMyTurn = G.bettingRound.activePlayer === currentPlayerID;
+  const canAct = isMyTurn && !myPlayer?.folded && !myPlayer?.isAllIn;
+
+  const callAmount = G.bettingRound.currentBet - (myPlayer?.bet || 0);
+  const minBet = G.bigBlindAmount;
+  const minRaise = G.bettingRound.currentBet + G.bettingRound.minRaise;
+
+  // Crypto key pair - use ref for synchronous access, state for re-renders
+  const cryptoKeyPairRef = useRef<CryptoKeyPair | null>(null);
+  const [cryptoKeyPair, setCryptoKeyPair] = useState<CryptoKeyPair | null>(null);
+  const cryptoSetupInProgress = useRef<Set<string>>(new Set());
+
+  // Cast to crypto state for checking crypto-specific properties
+  const cryptoG = G as unknown as CryptoPokerState;
+  const myCryptoPlayer = cryptoG.players?.[currentPlayerID] as CryptoPokerPlayerState | undefined;
+
+  // Automatic crypto setup - generates keys and submits them when in setup phases
+  useEffect(() => {
+    // Only run for crypto poker games (ones with crypto state)
+    if (!cryptoG.crypto) {
+      return;
+    }
+
+    const phase = G.phase;
+    const actionKey = `${phase}-${currentPlayerID}`;
+
+    // Debug logging
+    console.log('[Crypto] G.phase:', phase, 'ctx.phase:', ctx.phase, 'Player:', currentPlayerID, 'Available moves:', Object.keys(moves || {}));
+
+    // Prevent duplicate setup attempts for this phase
+    if (cryptoSetupInProgress.current.has(actionKey)) return;
+
+    // Get or create key pair (use ref for synchronous access)
+    const getOrCreateKeyPair = (): CryptoKeyPair => {
+      if (cryptoKeyPairRef.current) {
+        return cryptoKeyPairRef.current;
+      }
+      const newKeyPair = generateKeyPair();
+      cryptoKeyPairRef.current = newKeyPair;
+      setCryptoKeyPair(newKeyPair);
+      console.log('[Crypto] Generated key pair for player', currentPlayerID);
+      return newKeyPair;
+    };
+
+    // Key Exchange Phase - generate and submit public key
+    if (phase === 'keyExchange' && !myCryptoPlayer?.publicKey) {
+      cryptoSetupInProgress.current.add(actionKey);
+      const keyPair = getOrCreateKeyPair();
+
+      console.log('[Crypto] Submitting public key for player', currentPlayerID, 'moves:', Object.keys(moves));
+      setTimeout(() => {
+        try {
+          if (moves.submitPublicKey) {
+            console.log('[Crypto] Calling moves.submitPublicKey for', currentPlayerID);
+            const result = moves.submitPublicKey(currentPlayerID, keyPair.publicKey);
+            console.log('[Crypto] submitPublicKey result:', result);
+          } else {
+            console.error('[Crypto] moves.submitPublicKey is not defined!');
+          }
+        } catch (err) {
+          console.error('[Crypto] Error calling submitPublicKey:', err);
+        }
+      }, 100); // Small delay to ensure state is ready
+
+      return;
+    }
+
+    // Key Escrow Phase - distribute key shares
+    if (phase === 'keyEscrow' && !myCryptoPlayer?.hasDistributedShares) {
+      // Get or create key pair - in P2P mode, state may sync before local keyExchange completed
+      const keyPair = cryptoKeyPairRef.current || getOrCreateKeyPair();
+      if (!keyPair) {
+        console.log('[Crypto] Waiting for key pair in escrow phase...');
+        return;
+      }
+
+      cryptoSetupInProgress.current.add(actionKey);
+
+      // Get other player IDs (everyone except current player)
+      const allPlayerIds = Object.keys(G.players);
+      const otherPlayerIds = allPlayerIds.filter(pid => pid !== currentPlayerID);
+      const threshold = Math.max(2, otherPlayerIds.length);
+
+      console.log('[Crypto] Creating key shares for escrow, other players:', otherPlayerIds, 'threshold:', threshold);
+      const shares = createKeyShares(keyPair.privateKey, currentPlayerID, otherPlayerIds, threshold);
+
+      setTimeout(() => {
+        if (moves.distributeKeyShares) {
+          moves.distributeKeyShares(currentPlayerID, keyPair.privateKey, shares);
+        }
+      }, 100);
+
+      return;
+    }
+
+    // Encrypt Phase - encrypt deck when it's our turn
+    if (phase === 'encrypt' && !myCryptoPlayer?.hasEncrypted) {
+      const keyPair = cryptoKeyPairRef.current || getOrCreateKeyPair();
+      if (!keyPair) return;
+
+      // Check if it's our turn to encrypt (based on setupPlayerIndex)
+      const setupPlayerIndex = cryptoG.setupPlayerIndex || 0;
+      const currentSetupPlayer = cryptoG.playerOrder?.[setupPlayerIndex];
+
+      if (currentSetupPlayer === currentPlayerID) {
+        cryptoSetupInProgress.current.add(actionKey);
+        console.log('[Crypto] Encrypting deck for player', currentPlayerID);
+
+        setTimeout(() => {
+          if (moves.encryptDeck) {
+            moves.encryptDeck(currentPlayerID, keyPair.privateKey);
+          }
+        }, 100);
+      }
+
+      return;
+    }
+
+    // Shuffle Phase - shuffle deck when it's our turn
+    if (phase === 'shuffle' && !myCryptoPlayer?.hasShuffled) {
+      const keyPair = cryptoKeyPairRef.current || getOrCreateKeyPair();
+      if (!keyPair) return;
+
+      // Check if it's our turn to shuffle
+      const setupPlayerIndex = cryptoG.setupPlayerIndex || 0;
+      const currentSetupPlayer = cryptoG.playerOrder?.[setupPlayerIndex];
+
+      if (currentSetupPlayer === currentPlayerID) {
+        cryptoSetupInProgress.current.add(actionKey);
+        console.log('[Crypto] Shuffling deck for player', currentPlayerID);
+
+        setTimeout(() => {
+          if (moves.shuffleDeck) {
+            moves.shuffleDeck(currentPlayerID, keyPair.privateKey);
+          }
+        }, 100);
+      }
+
+      return;
+    }
+  }, [G.phase, cryptoG, currentPlayerID, myCryptoPlayer, moves]);
+
+  // Reset betAmount to the current minimum whenever the betting situation changes
+  // This ensures the slider always starts at the correct minimum for the current action
+  useEffect(() => {
+    const currentMin = G.bettingRound.currentBet === 0 ? minBet : minRaise;
+    setBetAmount(currentMin);
+  }, [G.phase, G.bettingRound.currentBet, minBet, minRaise]);
+
+  const handleNewHand = () => {
+    // Get hand result from game over state
+    const handResult = ctx.gameover?.handResult as PokerHandResult | undefined;
+    if (!handResult) {
+      console.error('[PokerBoard] No hand result available for settlement');
+      return;
+    }
+
+    console.log('[PokerBoard] Starting new hand with result:', handResult);
+
+    // Call the parent callback to settle and create new game
+    if (onNewHand) {
+      onNewHand(handResult);
+    } else {
+      console.warn('[PokerBoard] No onNewHand callback provided - cannot start new hand');
+    }
+  };
+
+  const handleFold = () => {
+    moves.fold(currentPlayerID);
+  };
+
+  const handleCheck = () => {
+    moves.check(currentPlayerID);
+  };
+
+  const handleCall = () => {
+    moves.call(currentPlayerID);
+  };
+
+  const handleBet = () => {
+    moves.bet(betAmount, currentPlayerID);
+  };
+
+  const handleRaise = () => {
+    moves.raise(betAmount, currentPlayerID);
+  };
+
+  const handleAllIn = () => {
+    moves.allIn(currentPlayerID);
+  };
+
+  // Determine which actions are available
+  const canCheck = canAct && G.bettingRound.currentBet === (myPlayer?.bet || 0);
+  const canCall = canAct && callAmount > 0 && callAmount < (myPlayer?.chips || 0);
+  const canBet = canAct && G.bettingRound.currentBet === 0 && (myPlayer?.chips || 0) >= minBet;
+  const canRaise = canAct && G.bettingRound.currentBet > 0 && (myPlayer?.chips || 0) >= minRaise - (myPlayer?.bet || 0);
+
+  // Check if we're in a crypto setup phase
+  const cryptoSetupPhases = ['keyExchange', 'keyEscrow', 'encrypt', 'shuffle'];
+  const isInCryptoSetup = cryptoSetupPhases.includes(G.phase);
+  const cryptoState = (G as unknown as { crypto?: CryptoPluginState }).crypto;
+
+  // Game over screen - show hand result and option to continue or end
+  if (ctx.gameover) {
+    const handResult = ctx.gameover.handResult as PokerHandResult | undefined;
+    const isVoided = ctx.gameover.reason === 'voided';
+    const winners = ctx.gameover.winners as string[] | undefined;
+
+    // Check if any player is busted (for tournament mode)
+    const playersWithChips = Object.entries(G.players).filter(([_, p]) => p.chips > 0);
+    const isTournamentOver = playersWithChips.length <= 1;
+
+    if (isTournamentOver && playersWithChips.length === 1) {
+      // Tournament is over - one player has all the chips
+      return (
+        <div style={{
+          padding: '40px',
+          textAlign: 'center',
+          fontFamily: 'system-ui, sans-serif',
+          color: '#e4e4e4',
+        }}>
+          <h1>Tournament Over!</h1>
+          <p style={{ fontSize: '24px' }}>
+            Player {playersWithChips[0][0]} wins the tournament!
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            style={{
+              padding: '12px 24px',
+              fontSize: '16px',
+              cursor: 'pointer',
+              backgroundColor: '#4CAF50',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              marginTop: '20px',
+            }}
+          >
+            Play Again
+          </button>
+        </div>
+      );
+    }
+
+    // Hand complete - show result and offer to continue
+    return (
+      <div style={{
+        padding: '40px',
+        textAlign: 'center',
+        fontFamily: 'system-ui, sans-serif',
+        color: '#e4e4e4',
+        backgroundColor: '#16213e',
+        borderRadius: '12px',
+        maxWidth: '600px',
+        margin: '40px auto',
+      }}>
+        <h2 style={{ color: '#fbbf24', marginBottom: '20px' }}>
+          {isVoided ? 'Hand Voided' : 'Hand Complete!'}
+        </h2>
+
+        {winners && winners.length > 0 && (
+          <p style={{ fontSize: '20px', marginBottom: '16px' }}>
+            {winners.length === 1
+              ? `Player ${winners[0]} wins the pot!`
+              : `Split pot: Players ${winners.join(', ')}`}
+          </p>
+        )}
+
+        {handResult && (
+          <div style={{
+            backgroundColor: '#0f172a',
+            borderRadius: '8px',
+            padding: '16px',
+            marginBottom: '20px',
+            textAlign: 'left',
+          }}>
+            <h4 style={{ margin: '0 0 12px 0', color: '#94a3b8' }}>Settlement Details</h4>
+            <div style={{ display: 'grid', gap: '8px', fontSize: '14px', color: '#cbd5e1' }}>
+              <div>Pot: <strong style={{ color: '#fbbf24' }}>{handResult.totalPot}</strong></div>
+              {Object.entries(handResult.payouts).map(([playerId, amount]) => (
+                <div key={playerId}>
+                  Player {playerId}: {amount > 0 ? (
+                    <span style={{ color: '#4ade80' }}>+{amount}</span>
+                  ) : (
+                    <span style={{ color: '#6b7280' }}>0</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Show current chip counts */}
+        <div style={{
+          backgroundColor: '#1e293b',
+          borderRadius: '8px',
+          padding: '16px',
+          marginBottom: '24px',
+        }}>
+          <h4 style={{ margin: '0 0 12px 0', color: '#94a3b8' }}>Chip Counts</h4>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: '24px' }}>
+            {Object.entries(G.players).map(([playerId, player]) => (
+              <div key={playerId} style={{ textAlign: 'center' }}>
+                <div style={{ color: '#9ca3af', fontSize: '12px' }}>Player {playerId}</div>
+                <div style={{ color: player.chips > 0 ? '#fbbf24' : '#ef4444', fontSize: '18px', fontWeight: 'bold' }}>
+                  {player.chips}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <button
+          onClick={handleNewHand}
+          disabled={!onNewHand}
+          style={{
+            padding: '16px 32px',
+            fontSize: '18px',
+            cursor: onNewHand ? 'pointer' : 'not-allowed',
+            backgroundColor: onNewHand ? '#4CAF50' : '#374151',
+            color: 'white',
+            border: 'none',
+            borderRadius: '8px',
+            opacity: onNewHand ? 1 : 0.6,
+          }}
+        >
+          Deal Next Hand
+        </button>
+
+        {!onNewHand && (
+          <p style={{ color: '#6b7280', fontSize: '12px', marginTop: '8px' }}>
+            New hand callback not configured
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{
+      padding: '20px',
+      maxWidth: '1000px',
+      margin: '0 auto',
+      fontFamily: 'system-ui, sans-serif',
+      color: '#e4e4e4',
+    }}>
+      {/* Header */}
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: '20px',
+        padding: '12px 20px',
+        backgroundColor: '#16213e',
+        borderRadius: '8px',
+        border: '1px solid #3a3a5c',
+      }}>
+        <h2 style={{ margin: 0 }}>Texas Hold'em</h2>
+        <div style={{ display: 'flex', gap: '24px', color: '#a0a0a0' }}>
+          <span>Phase: <strong style={{ color: '#4ade80' }}>{PHASE_LABELS[G.phase]}</strong></span>
+          <span>Blinds: <strong>{G.smallBlindAmount}/{G.bigBlindAmount}</strong></span>
+        </div>
+      </div>
+
+      {/* Waiting/Game Over state */}
+      {(G.phase === 'waiting' || G.phase === 'gameOver') && (
+        <div style={{
+          textAlign: 'center',
+          padding: '40px',
+          backgroundColor: '#16213e',
+          borderRadius: '12px',
+          marginBottom: '20px',
+        }}>
+          {G.phase === 'gameOver' && G.winners.length > 0 && (
+            <div style={{ marginBottom: '20px' }}>
+              <h3 style={{ color: '#fbbf24' }}>
+                {G.winners.length === 1
+                  ? `Player ${G.winners[0]} wins the hand!`
+                  : `Split pot: ${G.winners.join(', ')}`}
+              </h3>
+            </div>
+          )}
+          <button
+            onClick={handleNewHand}
+            style={{
+              padding: '16px 32px',
+              fontSize: '18px',
+              cursor: 'pointer',
+              backgroundColor: '#4CAF50',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+            }}
+          >
+            {G.phase === 'waiting' ? 'Start Hand' : 'Deal Next Hand'}
+          </button>
+        </div>
+      )}
+
+      {/* Crypto Setup Phase Progress */}
+      {isInCryptoSetup && (
+        <div style={{
+          backgroundColor: '#1a2d4a',
+          borderRadius: '12px',
+          padding: '24px',
+          marginBottom: '20px',
+          border: '1px solid #3b82f6',
+        }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            marginBottom: '16px',
+          }}>
+            <span style={{ fontSize: '24px' }}>🔐</span>
+            <div>
+              <h3 style={{ margin: 0, color: '#60a5fa' }}>Cryptographic Setup</h3>
+              <p style={{ margin: '4px 0 0 0', color: '#94a3b8', fontSize: '14px' }}>
+                Establishing secure P2P card encryption
+              </p>
+            </div>
+          </div>
+
+          {/* Progress Steps */}
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+            {['keyExchange', 'keyEscrow', 'encrypt', 'shuffle'].map((phase, index) => {
+              const currentPhaseIndex = cryptoSetupPhases.indexOf(G.phase);
+              const isComplete = index < currentPhaseIndex;
+              const isCurrent = phase === G.phase;
+
+              return (
+                <div
+                  key={phase}
+                  style={{
+                    flex: 1,
+                    padding: '12px',
+                    borderRadius: '8px',
+                    backgroundColor: isComplete ? '#166534' : isCurrent ? '#1e3a5f' : '#1f2937',
+                    border: `2px solid ${isComplete ? '#22c55e' : isCurrent ? '#3b82f6' : '#374151'}`,
+                    textAlign: 'center',
+                  }}
+                >
+                  <div style={{ fontSize: '16px', marginBottom: '4px' }}>
+                    {isComplete ? '✓' : isCurrent ? '⏳' : '○'}
+                  </div>
+                  <div style={{
+                    fontSize: '12px',
+                    color: isComplete ? '#86efac' : isCurrent ? '#93c5fd' : '#6b7280',
+                  }}>
+                    {phase === 'keyExchange' && 'Keys'}
+                    {phase === 'keyEscrow' && 'Escrow'}
+                    {phase === 'encrypt' && 'Encrypt'}
+                    {phase === 'shuffle' && 'Shuffle'}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div style={{
+            padding: '16px',
+            backgroundColor: '#0f172a',
+            borderRadius: '8px',
+            color: '#94a3b8',
+            fontSize: '14px',
+          }}>
+            {G.phase === 'keyExchange' && (
+              <>
+                <strong style={{ color: '#60a5fa' }}>Key Exchange:</strong> Players are exchanging public keys for secure card encryption.
+                {cryptoState && (
+                  <div style={{ marginTop: '8px' }}>
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                      {Object.keys(G.players).map(pid => {
+                        const hasKey = cryptoState.publicKeys?.[pid];
+                        return (
+                          <span key={pid} style={{
+                            padding: '4px 8px',
+                            borderRadius: '4px',
+                            backgroundColor: hasKey ? '#166534' : '#374151',
+                            color: hasKey ? '#86efac' : '#9ca3af',
+                            fontSize: '12px',
+                          }}>
+                            Player {pid}: {hasKey ? '✓ Key submitted' : '⏳ Waiting...'}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+            {G.phase === 'keyEscrow' && (
+              <>
+                <strong style={{ color: '#60a5fa' }}>Key Escrow:</strong> Players are distributing key shares for abandonment recovery.
+                <div style={{ marginTop: '8px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  {Object.entries(cryptoG.players || {}).map(([pid, player]) => {
+                    const p = player as CryptoPokerPlayerState;
+                    return (
+                      <span key={pid} style={{
+                        padding: '4px 8px',
+                        borderRadius: '4px',
+                        backgroundColor: p.hasDistributedShares ? '#166534' : '#374151',
+                        color: p.hasDistributedShares ? '#86efac' : '#9ca3af',
+                        fontSize: '12px',
+                      }}>
+                        Player {pid}: {p.hasDistributedShares ? '✓ Shares distributed' : '⏳ Waiting...'}
+                      </span>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+            {G.phase === 'encrypt' && (
+              <>
+                <strong style={{ color: '#60a5fa' }}>Encryption:</strong> Each player encrypts the deck in turn.
+                <div style={{ marginTop: '8px' }}>
+                  {(() => {
+                    const setupPlayerIndex = cryptoG.setupPlayerIndex || 0;
+                    const currentSetupPlayer = cryptoG.playerOrder?.[setupPlayerIndex];
+                    return (
+                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        {Object.entries(cryptoG.players || {}).map(([pid, player]) => {
+                          const p = player as CryptoPokerPlayerState;
+                          const isTurn = currentSetupPlayer === pid && !p.hasEncrypted;
+                          return (
+                            <span key={pid} style={{
+                              padding: '4px 8px',
+                              borderRadius: '4px',
+                              backgroundColor: p.hasEncrypted ? '#166534' : isTurn ? '#1e3a5f' : '#374151',
+                              color: p.hasEncrypted ? '#86efac' : isTurn ? '#93c5fd' : '#9ca3af',
+                              fontSize: '12px',
+                              border: isTurn ? '1px solid #3b82f6' : 'none',
+                            }}>
+                              Player {pid}: {p.hasEncrypted ? '✓ Encrypted' : isTurn ? '🔄 Encrypting...' : '⏳ Waiting'}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                </div>
+              </>
+            )}
+            {G.phase === 'shuffle' && (
+              <>
+                <strong style={{ color: '#60a5fa' }}>Shuffle:</strong> Each player shuffles the encrypted deck in turn.
+                <div style={{ marginTop: '8px' }}>
+                  {(() => {
+                    const setupPlayerIndex = cryptoG.setupPlayerIndex || 0;
+                    const currentSetupPlayer = cryptoG.playerOrder?.[setupPlayerIndex];
+                    return (
+                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        {Object.entries(cryptoG.players || {}).map(([pid, player]) => {
+                          const p = player as CryptoPokerPlayerState;
+                          const isTurn = currentSetupPlayer === pid && !p.hasShuffled;
+                          return (
+                            <span key={pid} style={{
+                              padding: '4px 8px',
+                              borderRadius: '4px',
+                              backgroundColor: p.hasShuffled ? '#166534' : isTurn ? '#1e3a5f' : '#374151',
+                              color: p.hasShuffled ? '#86efac' : isTurn ? '#93c5fd' : '#9ca3af',
+                              fontSize: '12px',
+                              border: isTurn ? '1px solid #3b82f6' : 'none',
+                            }}>
+                              Player {pid}: {p.hasShuffled ? '✓ Shuffled' : isTurn ? '🔄 Shuffling...' : '⏳ Waiting'}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Console log hint */}
+          <div style={{
+            marginTop: '12px',
+            padding: '8px 12px',
+            backgroundColor: '#1e293b',
+            borderRadius: '4px',
+            fontSize: '12px',
+            color: '#64748b',
+          }}>
+            💡 Check browser console (F12) for crypto operation logs
+          </div>
+        </div>
+      )}
+
+      {/* Community Cards */}
+      {G.phase !== 'waiting' && !isInCryptoSetup && (
+        <div style={{
+          backgroundColor: '#0f3460',
+          borderRadius: '12px',
+          padding: '20px',
+          marginBottom: '20px',
+          textAlign: 'center',
+        }}>
+          <div style={{ marginBottom: '16px' }}>
+            <span style={{
+              padding: '8px 24px',
+              backgroundColor: '#16213e',
+              borderRadius: '20px',
+              color: '#fbbf24',
+              fontWeight: 'bold',
+              fontSize: '18px',
+            }}>
+              Pot: {G.pot}
+            </span>
+          </div>
+          <div style={{
+            display: 'flex',
+            justifyContent: 'center',
+            minHeight: '108px',
+            alignItems: 'center',
+          }}>
+            {G.community.length > 0 ? (
+              G.community.map(card => (
+                <CardDisplay key={card.id} card={card} />
+              ))
+            ) : (
+              <span style={{ color: '#6a6a8a' }}>Community cards will appear here</span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Players */}
+      <div style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        justifyContent: 'center',
+        marginBottom: '20px',
+      }}>
+        {Object.entries(G.players).map(([pid, player]) => {
+          // Get encrypted card count for this player
+          const encryptedHandZone = cryptoG.crypto?.encryptedZones?.[`hand:${pid}`];
+          const encryptedCardCount = encryptedHandZone?.length || 0;
+
+          // Get peeked cards if available (will be stored in player state after peek)
+          const cryptoPlayer = cryptoG.players?.[pid] as CryptoPokerPlayerState | undefined;
+          const peekedCards = cryptoPlayer?.peekedCards as PokerCard[] | undefined;
+
+          return (
+            <PlayerPanel
+              key={pid}
+              playerId={pid}
+              player={player}
+              isDealer={G.dealer === pid}
+              isSmallBlind={G.smallBlind === pid}
+              isBigBlind={G.bigBlind === pid}
+              isActive={G.bettingRound.activePlayer === pid}
+              isCurrentUser={pid === currentPlayerID}
+              showCards={pid === currentPlayerID || G.phase === 'showdown'}
+              encryptedCardCount={encryptedCardCount}
+              peekedCards={pid === currentPlayerID ? peekedCards : undefined}
+            />
+          );
+        })}
+      </div>
+
+      {/* Turn indicator */}
+      {G.phase !== 'waiting' && G.phase !== 'gameOver' && G.phase !== 'showdown' && !isInCryptoSetup && (
+        <div style={{
+          padding: '12px',
+          backgroundColor: isMyTurn ? '#1a4a3a' : '#3d2a1a',
+          borderRadius: '8px',
+          marginBottom: '20px',
+          textAlign: 'center',
+          border: '1px solid #3a3a5c',
+        }}>
+          {isMyTurn ? (
+            <span style={{ color: '#6fcf6f', fontWeight: 'bold' }}>
+              Your turn! {callAmount > 0 ? `${callAmount} to call.` : 'Check or bet.'}
+            </span>
+          ) : (
+            <span style={{ color: '#ff9800' }}>
+              Waiting for Player {G.bettingRound.activePlayer}...
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Peek at Cards button - only for crypto games when player hasn't peeked */}
+      {cryptoG.crypto && !myCryptoPlayer?.hasPeeked && !myCryptoPlayer?.folded && !isInCryptoSetup && (
+        cryptoG.crypto.encryptedZones?.[`hand:${currentPlayerID}`]?.length > 0
+      ) && (
+        <div style={{
+          marginBottom: '20px',
+          textAlign: 'center',
+        }}>
+          <button
+            onClick={() => {
+              const keyPair = cryptoKeyPairRef.current;
+              if (keyPair && moves.peekHoleCards) {
+                console.log('[PokerBoard] Peeking at hole cards');
+                moves.peekHoleCards(currentPlayerID, keyPair.privateKey);
+              } else {
+                console.error('[PokerBoard] Cannot peek: missing key pair or move');
+              }
+            }}
+            style={{
+              padding: '16px 32px',
+              fontSize: '18px',
+              cursor: 'pointer',
+              backgroundColor: '#8b5cf6',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              boxShadow: '0 4px 6px rgba(139, 92, 246, 0.3)',
+            }}
+          >
+            👁️ Peek at Your Cards
+          </button>
+          <p style={{ color: '#a0a0a0', fontSize: '12px', marginTop: '8px' }}>
+            Click to reveal your hole cards (only you can see them)
+          </p>
+        </div>
+      )}
+
+      {/* Action buttons */}
+      {canAct && G.phase !== 'waiting' && G.phase !== 'gameOver' && G.phase !== 'showdown' && !isInCryptoSetup && (
+        <div style={{
+          backgroundColor: '#16213e',
+          borderRadius: '12px',
+          padding: '20px',
+          border: '1px solid #3a3a5c',
+        }}>
+          <div style={{
+            display: 'flex',
+            gap: '12px',
+            justifyContent: 'center',
+            flexWrap: 'wrap',
+            marginBottom: '16px',
+          }}>
+            <button
+              onClick={handleFold}
+              style={{
+                padding: '12px 24px',
+                fontSize: '16px',
+                cursor: 'pointer',
+                backgroundColor: '#dc2626',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+              }}
+            >
+              Fold
+            </button>
+
+            {canCheck && (
+              <button
+                onClick={handleCheck}
+                style={{
+                  padding: '12px 24px',
+                  fontSize: '16px',
+                  cursor: 'pointer',
+                  backgroundColor: '#3b82f6',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                }}
+              >
+                Check
+              </button>
+            )}
+
+            {canCall && (
+              <button
+                onClick={handleCall}
+                style={{
+                  padding: '12px 24px',
+                  fontSize: '16px',
+                  cursor: 'pointer',
+                  backgroundColor: '#3b82f6',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                }}
+              >
+                Call {callAmount}
+              </button>
+            )}
+
+            <button
+              onClick={handleAllIn}
+              style={{
+                padding: '12px 24px',
+                fontSize: '16px',
+                cursor: 'pointer',
+                backgroundColor: '#7c3aed',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+              }}
+            >
+              All-In ({myPlayer?.chips})
+            </button>
+          </div>
+
+          {(canBet || canRaise) && (
+            <div style={{
+              display: 'flex',
+              gap: '12px',
+              justifyContent: 'center',
+              alignItems: 'center',
+            }}>
+              <input
+                type="range"
+                min={canBet ? minBet : minRaise}
+                max={myPlayer?.chips || 0}
+                value={betAmount}
+                onChange={(e) => setBetAmount(Number(e.target.value))}
+                style={{ width: '200px' }}
+              />
+              <input
+                type="number"
+                min={canBet ? minBet : minRaise}
+                max={myPlayer?.chips || 0}
+                value={betAmount}
+                onChange={(e) => setBetAmount(Number(e.target.value))}
+                style={{
+                  width: '80px',
+                  padding: '8px',
+                  borderRadius: '4px',
+                  border: '1px solid #3a3a5c',
+                  backgroundColor: '#0f3460',
+                  color: '#e4e4e4',
+                }}
+              />
+              <button
+                onClick={canBet ? handleBet : handleRaise}
+                style={{
+                  padding: '12px 24px',
+                  fontSize: '16px',
+                  cursor: 'pointer',
+                  backgroundColor: '#4CAF50',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                }}
+              >
+                {canBet ? 'Bet' : 'Raise to'} {betAmount}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Crypto Transparency Panel - shows encryption state for verification */}
+      <CryptoTransparencyPanel
+        crypto={(G as unknown as { crypto?: CryptoPluginState }).crypto}
+        numPlayers={Object.keys(G.players).length}
+        currentPlayerId={currentPlayerID}
+      />
+    </div>
+  );
+};

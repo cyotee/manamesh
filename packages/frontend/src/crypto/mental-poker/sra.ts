@@ -160,7 +160,7 @@ export function hashToPoint(cardId: string): InstanceType<typeof EC>['curve']['p
 
     // Hash to get x-coordinate candidate
     const hash = sha256Sync(input);
-    const x = Buffer.from(hash).toString('hex');
+    const x = uint8ArrayToHex(hash);
 
     try {
       // Try to construct point with this x-coordinate (even y)
@@ -283,6 +283,15 @@ export function decryptDeck(
 // ============================================================================
 // Internal helpers
 // ============================================================================
+
+/**
+ * Convert Uint8Array to hex string (browser-compatible Buffer replacement).
+ */
+function uint8ArrayToHex(bytes: Uint8Array): string {
+  return Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
 
 /**
  * Simple SHA-256 implementation for hash-to-curve.

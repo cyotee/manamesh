@@ -47,7 +47,15 @@ import { pokerCardSchema, createStandardDeck, shuffleDeck as shuffleStandardDeck
 import type { CryptoPluginState, CryptoPluginApi } from '../../../crypto/plugin/crypto-plugin';
 import { CryptoPlugin } from '../../../crypto/plugin/crypto-plugin';
 import { createKeyShares, reconstructKeyFromShares, type KeyShare } from '../../../crypto/shamirs';
-import { generateKeyPair, decrypt } from '../../../crypto/mental-poker';
+import {
+  generateKeyPair,
+  decrypt,
+  encryptDeck as encryptDeckCrypto,
+  reencryptDeck,
+  quickShuffle,
+  getCardPoint,
+  type EncryptedCard,
+} from '../../../crypto/mental-poker';
 
 // =============================================================================
 // Constants
@@ -132,6 +140,11 @@ export function checkGameViability(state: CryptoPokerState): 'continue' | 'void'
 
 /**
  * Create initial crypto poker state.
+ *
+ * @param config - Game configuration
+ * @param config.options.initialBalances - Optional balances from blockchain (playerId -> chips)
+ * @param config.options.handId - Optional hand ID for settlement tracking
+ * @param config.options.dealerIndex - Optional dealer position (for multi-hand sessions)
  */
 export function createCryptoInitialState(config: GameConfig): CryptoPokerState {
   const pokerConfig: PokerConfig = {
@@ -139,9 +152,16 @@ export function createCryptoInitialState(config: GameConfig): CryptoPokerState {
     ...config.options,
   };
 
+  // Get initial balances from blockchain or use default
+  const initialBalances = (config.options?.initialBalances as Record<string, number>) || {};
+  const handId = (config.options?.handId as string) || `hand-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const dealerIndex = (config.options?.dealerIndex as number) || 0;
+
   const cardIds = getAllCardIds();
 
   const players: Record<string, CryptoPokerPlayerState> = {};
+  const startingChips: Record<string, number> = {};
+  const contributions: Record<string, number> = {};
   const zones: Record<string, Record<string, PokerCard[]>> = {
     deck: { shared: [] },
     hand: {},
@@ -150,11 +170,15 @@ export function createCryptoInitialState(config: GameConfig): CryptoPokerState {
     mucked: { shared: [] },
   };
 
-  // Initialize player states
+  // Initialize player states with balances from blockchain
   for (const playerId of config.playerIDs) {
+    const chips = initialBalances[playerId] ?? pokerConfig.startingChips;
+    startingChips[playerId] = chips;
+    contributions[playerId] = 0;
+
     players[playerId] = {
       hand: [],
-      chips: pokerConfig.startingChips,
+      chips,
       bet: 0,
       folded: false,
       hasActed: false,
@@ -163,6 +187,7 @@ export function createCryptoInitialState(config: GameConfig): CryptoPokerState {
       hasEncrypted: false,
       hasShuffled: false,
       hasPeeked: false,
+      peekedCards: [],
       hasReleasedKey: false,
       hasDistributedShares: false,
       isConnected: true,
@@ -172,7 +197,7 @@ export function createCryptoInitialState(config: GameConfig): CryptoPokerState {
   }
 
   const playerOrder = [...config.playerIDs];
-  const dealer = playerOrder[0];
+  const dealer = playerOrder[dealerIndex % playerOrder.length];
 
   // Initialize crypto state
   const cryptoState: CryptoPluginState = {
@@ -211,6 +236,11 @@ export function createCryptoInitialState(config: GameConfig): CryptoPokerState {
     crypto: cryptoState,
     cardIds,
     setupPlayerIndex: 0,
+    // Settlement tracking
+    handId,
+    contributions,
+    startingChips,
+    // Abandonment support
     releasedKeys: {},
     keyEscrowShares: {},
     escrowThreshold: Math.max(2, playerOrder.length - 1), // N-1 threshold
@@ -238,7 +268,11 @@ function submitPublicKey(
   playerId: string,
   publicKey: string
 ): CryptoPokerState | typeof INVALID_MOVE {
-  if (G.phase !== 'keyExchange') return INVALID_MOVE;
+  console.log('[CryptoPoker] submitPublicKey called for player', playerId, 'phase:', G.phase, 'existing key:', G.players[playerId]?.publicKey);
+  if (G.phase !== 'keyExchange') {
+    console.log('[CryptoPoker] submitPublicKey INVALID_MOVE: not in keyExchange phase');
+    return INVALID_MOVE;
+  }
 
   const player = G.players[playerId];
   if (!player) return INVALID_MOVE;
@@ -250,11 +284,12 @@ function submitPublicKey(
   // Check if all players have submitted
   const allSubmitted = G.playerOrder.every((pid) => G.players[pid].publicKey !== null);
   if (allSubmitted) {
-    // Initialize card point lookup
+    // Build the card point lookup with actual curve points
+    // This maps cardId -> curve point (hex string) for reverse lookup after decryption
     for (const cardId of G.cardIds) {
-      // The crypto plugin will build this, but we track it here too
-      G.crypto.cardPointLookup[cardId] = cardId; // Simplified - actual impl uses curve points
+      G.crypto.cardPointLookup[cardId] = getCardPoint(cardId);
     }
+    console.log('[CryptoPoker] Built card point lookup with', Object.keys(G.crypto.cardPointLookup).length, 'cards');
 
     G.phase = 'keyEscrow';
     resetSetupPlayer(G);
@@ -283,6 +318,13 @@ function distributeKeyShares(
   G.keyEscrowShares[playerId] = shares;
   player.hasDistributedShares = true;
 
+  // DEMO ONLY: Store private key for decryption (NOT SECURE - for demo purposes only)
+  // In real implementation, keys would never be shared; only decryption shares would be exchanged
+  if (!G.crypto.privateKeys) {
+    G.crypto.privateKeys = {};
+  }
+  G.crypto.privateKeys[playerId] = privateKey;
+
   // Check if all players have distributed
   const allDistributed = G.playerOrder.every((pid) => G.players[pid].hasDistributedShares);
   if (allDistributed) {
@@ -310,9 +352,29 @@ function encryptDeck(
   const player = G.players[playerId];
   if (player.hasEncrypted) return INVALID_MOVE;
 
-  // Call crypto plugin to encrypt
-  // In a real implementation, this would call CryptoPlugin.api().encryptDeckForPlayer()
-  // For now, we just mark it done and track state
+  // Perform actual encryption
+  const existingDeck = G.crypto.encryptedZones['deck'];
+
+  if (!existingDeck || existingDeck.length === 0) {
+    // First player: encrypt all card IDs
+    const cardIds = G.cardIds;
+    console.log('[CryptoPoker] First encryption by player', playerId, '- encrypting', cardIds.length, 'cards');
+
+    // Card point lookup should already be built in submitPublicKey
+    // Encrypt the deck
+    const encryptedDeck = encryptDeckCrypto(cardIds, privateKey);
+    G.crypto.encryptedZones['deck'] = encryptedDeck;
+    console.log('[CryptoPoker] Encrypted deck has', encryptedDeck.length, 'cards with', encryptedDeck[0]?.layers, 'layers');
+  } else {
+    // Subsequent players: re-encrypt the already encrypted deck
+    console.log('[CryptoPoker] Re-encryption by player', playerId, '- current layers:', existingDeck[0]?.layers);
+    const reencryptedDeck = reencryptDeck(existingDeck, privateKey);
+    G.crypto.encryptedZones['deck'] = reencryptedDeck;
+    console.log('[CryptoPoker] Re-encrypted deck has', reencryptedDeck.length, 'cards with', reencryptedDeck[0]?.layers, 'layers');
+  }
+
+  // Update crypto phase
+  G.crypto.phase = 'encrypt';
   player.hasEncrypted = true;
 
   // Advance to next player or next phase
@@ -331,7 +393,8 @@ function shuffleEncryptedDeck(
   G: CryptoPokerState,
   ctx: Ctx,
   playerId: string,
-  privateKey: string
+  privateKey: string,
+  events?: { endPhase?: () => void }
 ): CryptoPokerState | typeof INVALID_MOVE {
   if (G.phase !== 'shuffle') return INVALID_MOVE;
 
@@ -341,11 +404,28 @@ function shuffleEncryptedDeck(
   const player = G.players[playerId];
   if (player.hasShuffled) return INVALID_MOVE;
 
-  // In a real implementation, this would call CryptoPlugin.api().shuffleDeckWithProof()
+  // Get the encrypted deck
+  const encryptedDeck = G.crypto.encryptedZones['deck'];
+  if (!encryptedDeck || encryptedDeck.length === 0) {
+    console.error('[CryptoPoker] No encrypted deck to shuffle!');
+    return INVALID_MOVE;
+  }
+
+  // Shuffle the deck
+  console.log('[CryptoPoker] Shuffling deck for player', playerId, '- deck has', encryptedDeck.length, 'cards');
+  const shuffledDeck = quickShuffle(encryptedDeck);
+  G.crypto.encryptedZones['deck'] = shuffledDeck;
+  console.log('[CryptoPoker] Deck shuffled by player', playerId);
+
+  // Update crypto phase
+  G.crypto.phase = 'shuffle';
   player.hasShuffled = true;
 
   // Advance to next player or start game
   if (advanceSetupPlayer(G)) {
+    // Update crypto phase to ready
+    G.crypto.phase = 'ready';
+
     // Transition to preflop - deal hole cards
     dealHoleCards(G);
     G.phase = 'preflop';
@@ -355,6 +435,18 @@ function shuffleEncryptedDeck(
     const utgPlayer = getUTGPlayer(G);
     G.bettingRound = initBettingRound(G, utgPlayer);
     G.bettingRound.currentBet = G.bigBlindAmount;
+
+    // Only end the setup phase if we're actually in setup (first hand)
+    // For new hands, we're already in play phase, so don't call endPhase
+    const isInSetupPhase = ctx.phase === 'setup';
+    console.log('[CryptoPoker] Shuffle complete. ctx.phase:', ctx.phase, 'isInSetupPhase:', isInSetupPhase);
+    if (isInSetupPhase && events?.endPhase) {
+      console.log('[CryptoPoker] Ending setup phase, transitioning to play');
+      events.endPhase();
+      console.log('[CryptoPoker] Called events.endPhase()');
+    } else {
+      console.warn('[CryptoPoker] events.endPhase not available!');
+    }
   }
 
   return G;
@@ -367,12 +459,121 @@ function dealHoleCards(G: CryptoPokerState): void {
   // In crypto mode, this moves encrypted cards to player hand zones
   // The actual card values remain encrypted until peek/reveal
 
-  // For each player, "deal" 2 cards from encrypted deck zone to their hand zone
-  // This is done by the CryptoPlugin's moveEncryptedCard method
-  for (const playerId of G.playerOrder) {
-    // Deal 2 cards
-    // In real implementation: crypto.moveEncryptedCard(DECK_ZONE, `hand:${playerId}`, 0) x2
+  const deck = G.crypto.encryptedZones['deck'];
+  if (!deck || deck.length === 0) {
+    console.error('[CryptoPoker] No deck to deal from!');
+    return;
   }
+
+  console.log('[CryptoPoker] Dealing hole cards to', G.playerOrder.length, 'players');
+
+  // Deal 2 cards to each player (deal one card at a time in rotation, like real poker)
+  for (let round = 0; round < 2; round++) {
+    for (const playerId of G.playerOrder) {
+      const handZone = `hand:${playerId}`;
+
+      // Initialize hand zone if needed
+      if (!G.crypto.encryptedZones[handZone]) {
+        G.crypto.encryptedZones[handZone] = [];
+      }
+
+      // Take top card from deck and add to player's hand
+      const card = deck.shift();
+      if (card) {
+        G.crypto.encryptedZones[handZone].push(card);
+      }
+    }
+  }
+
+  console.log('[CryptoPoker] Dealt cards. Deck remaining:', deck.length);
+}
+
+/**
+ * Deal community cards (flop/turn/river) from encrypted deck.
+ * For simplicity, we decrypt these immediately (in full mental poker,
+ * this would require collaborative reveal from all players).
+ */
+function dealCommunityCards(G: CryptoPokerState, count: number): void {
+  const deck = G.crypto.encryptedZones['deck'];
+  if (!deck || deck.length < count) {
+    console.error('[CryptoPoker] Not enough cards in deck to deal community cards!');
+    return;
+  }
+
+  // Initialize community zone if needed
+  if (!G.crypto.encryptedZones['community']) {
+    G.crypto.encryptedZones['community'] = [];
+  }
+
+  console.log('[CryptoPoker] Dealing', count, 'community cards');
+
+  // Move cards from deck to community zone
+  for (let i = 0; i < count; i++) {
+    const card = deck.shift();
+    if (card) {
+      G.crypto.encryptedZones['community'].push(card);
+
+      // For demo: try to decrypt and add to visible community cards
+      // In real implementation, this would require all players to submit decryption shares
+      const cardId = tryDecryptCommunityCard(G, card);
+      if (cardId) {
+        G.community.push(parseCardId(cardId));
+        console.log('[CryptoPoker] Revealed community card:', cardId);
+      } else {
+        // Add placeholder for now
+        // Type assertion needed because "?" isn't a valid rank - this is temporary until proper reveal
+        G.community.push({ id: `community-${G.community.length}`, rank: '?' as PokerCard['rank'], suit: 'spades' as const });
+        console.log('[CryptoPoker] Added placeholder community card (not yet revealed)');
+      }
+    }
+  }
+
+  console.log('[CryptoPoker] Community cards:', G.community.length, ', Deck remaining:', deck.length);
+}
+
+/**
+ * Try to decrypt a community card using the stored private keys.
+ *
+ * DEMO NOTE: This uses stored private keys, which breaks the security model.
+ * In real mental poker, each player would submit a decryption share for the
+ * community card without revealing their private key.
+ */
+function tryDecryptCommunityCard(G: CryptoPokerState, encryptedCard: EncryptedCard): string | null {
+  // Collect all available private keys
+  const allPrivateKeys: string[] = [];
+  if (G.crypto.privateKeys) {
+    for (const key of Object.values(G.crypto.privateKeys)) {
+      if (key) {
+        allPrivateKeys.push(key);
+      }
+    }
+  }
+
+  if (allPrivateKeys.length === 0) {
+    console.log('[CryptoPoker] No private keys available for community card decryption');
+    return null;
+  }
+
+  let decrypted = { ...encryptedCard };
+
+  // Apply decryption with each key until fully decrypted
+  for (const key of allPrivateKeys) {
+    if (decrypted.layers > 0) {
+      try {
+        decrypted = decrypt(decrypted, key);
+      } catch (err) {
+        console.error('[CryptoPoker] Community card decryption failed:', err);
+      }
+    }
+  }
+
+  if (decrypted.layers === 0) {
+    // Fully decrypted - look up the card ID from the point
+    const cardId = lookupCardIdFromPoint(G.crypto.cardPointLookup, decrypted.ciphertext);
+    return cardId;
+  }
+
+  return null;
 }
 
 // =============================================================================
@@ -381,6 +582,11 @@ function dealHoleCards(G: CryptoPokerState): void {
 
 /**
  * Peek at hole cards (self-decrypt).
+ *
+ * DEMO NOTE: This implementation uses stored private keys from all players,
+ * which breaks the security model of mental poker. In a real implementation,
+ * peeking would require each other player to submit a decryption share for
+ * this specific card, without revealing their private key.
  */
 function peekHoleCards(
   G: CryptoPokerState,
@@ -395,10 +601,70 @@ function peekHoleCards(
   if (player.hasPeeked) return INVALID_MOVE;
   if (player.folded) return INVALID_MOVE;
 
-  // In a real implementation:
-  // For each card in hand zone, call selfDecrypt to remove only this player's layer
-  // This allows the player to see their cards without revealing to others
+  // Get encrypted cards from hand zone
+  const handZone = G.crypto.encryptedZones[`hand:${playerId}`];
+  if (!handZone || handZone.length === 0) {
+    console.error('[CryptoPoker] No encrypted cards in hand zone for player', playerId);
+    return INVALID_MOVE;
+  }
 
+  // Collect all available private keys for decryption
+  // DEMO ONLY: In real mental poker, we'd request decryption shares, not use raw keys
+  const allPrivateKeys: string[] = [];
+
+  // Add the peeking player's key first
+  allPrivateKeys.push(privateKey);
+
+  // Add other players' stored keys (DEMO ONLY - insecure!)
+  if (G.crypto.privateKeys) {
+    for (const [pid, key] of Object.entries(G.crypto.privateKeys)) {
+      if (pid !== playerId && key) {
+        allPrivateKeys.push(key);
+      }
+    }
+  }
+
+  console.log('[CryptoPoker] Peeking with', allPrivateKeys.length, 'private keys');
+
+  // Decrypt each card using ALL private keys
+  const peekedCards: PokerCard[] = [];
+
+  for (const encryptedCard of handZone) {
+    let decrypted = { ...encryptedCard };
+
+    // Apply decryption with each key until fully decrypted
+    for (const key of allPrivateKeys) {
+      if (decrypted.layers > 0) {
+        try {
+          decrypted = decrypt(decrypted, key);
+          console.log('[CryptoPoker] Decrypted one layer, remaining:', decrypted.layers);
+        } catch (err) {
+          console.error('[CryptoPoker] Decryption failed with key:', err);
+        }
+      }
+    }
+
+    if (decrypted.layers === 0) {
+      // Fully decrypted - look up the card ID from the point
+      const cardId = lookupCardIdFromPoint(G.crypto.cardPointLookup, decrypted.ciphertext);
+      if (cardId) {
+        console.log('[CryptoPoker] Decrypted card:', cardId);
+        peekedCards.push(parseCardId(cardId));
+      } else {
+        console.error('[CryptoPoker] Could not find card for point:', decrypted.ciphertext);
+        // Type assertion for placeholder - "?" isn't a valid rank
+        peekedCards.push({ id: 'unknown', rank: '?' as PokerCard['rank'], suit: 'spades' as const });
+      }
+    } else {
+      // Still encrypted - missing some keys
+      console.log('[CryptoPoker] Card still has', decrypted.layers, 'encryption layers remaining');
+      // Type assertion for placeholder - "?" isn't a valid rank
+      peekedCards.push({ id: 'unknown', rank: '?' as PokerCard['rank'], suit: 'spades' as const });
+    }
+  }
+
+  console.log('[CryptoPoker] Player', playerId, 'peeked at cards:', peekedCards.map(c => `${c.rank}${c.suit[0]}`));
+  player.peekedCards = peekedCards;
   player.hasPeeked = true;
 
   // Add notification for other players
@@ -408,6 +674,56 @@ function peekHoleCards(
   });
 
   return G;
+}
+
+/**
+ * Look up a card ID from its curve point.
+ */
+function lookupCardIdFromPoint(
+  cardPointLookup: Record<string, string>,
+  point: string
+): string | null {
+  for (const [cardId, cardPoint] of Object.entries(cardPointLookup)) {
+    if (cardPoint === point) {
+      return cardId;
+    }
+  }
+  return null;
+}
+
+/**
+ * Parse a card ID (e.g., "Ah", "2c") into a PokerCard.
+ */
+/**
+ * Parse a card ID (e.g., "hearts-A", "spades-K") into a PokerCard.
+ * Card ID format is "${suit}-${rank}" as defined in types.ts getCardId().
+ */
+function parseCardId(cardId: string): PokerCard {
+  const validRanks: PokerCard['rank'][] = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+  const validSuits: PokerCard['suit'][] = ['hearts', 'diamonds', 'clubs', 'spades'];
+
+  const parts = cardId.split('-');
+  if (parts.length !== 2) {
+    console.error('[CryptoPoker] Invalid card ID format:', cardId);
+    // Type assertion for placeholder - "?" isn't a valid rank but we need to show something
+    return { id: cardId, rank: '?' as PokerCard['rank'], suit: 'spades' };
+  }
+
+  const [suit, rank] = parts;
+
+  // Validate suit
+  if (!validSuits.includes(suit as PokerCard['suit'])) {
+    console.error('[CryptoPoker] Invalid suit in card ID:', suit);
+    return { id: cardId, rank: rank as PokerCard['rank'], suit: 'spades' };
+  }
+
+  // Validate rank
+  if (!validRanks.includes(rank as PokerCard['rank'])) {
+    console.error('[CryptoPoker] Invalid rank in card ID:', rank);
+    return { id: cardId, rank: rank as PokerCard['rank'], suit: suit as PokerCard['suit'] };
+  }
+
+  return { id: cardId, rank: rank as PokerCard['rank'], suit: suit as PokerCard['suit'] };
 }
 
 /**
@@ -706,15 +1022,21 @@ function advancePhase(G: CryptoPokerState): void {
 
   switch (nextPhase) {
     case 'flop':
-      // Deal 3 community cards (initiate collaborative reveal)
-      // In real implementation: deal from encrypted deck, all players reveal
+      // Deal 3 community cards from encrypted deck
+      dealCommunityCards(G, 3);
       G.phase = 'flop';
       break;
 
     case 'turn':
+      // Deal 1 community card (the turn)
+      dealCommunityCards(G, 1);
+      G.phase = 'turn';
+      break;
+
     case 'river':
-      // Deal 1 community card
-      G.phase = nextPhase;
+      // Deal 1 community card (the river)
+      dealCommunityCards(G, 1);
+      G.phase = 'river';
       break;
 
     case 'showdown':
@@ -754,18 +1076,83 @@ function resolveShowdown(G: CryptoPokerState): void {
     return;
   }
 
-  // In crypto mode: initiate collaborative reveal of all active players' hands
-  // Each player (except the hand owner, who already peeked) submits decryption shares
-  // Using released keys for folded players
+  // Evaluate each active player's hand
+  // In crypto mode, we use peekedCards (decrypted hole cards) + community cards
+  const playerHands: { playerId: string; hand: ReturnType<typeof findBestHand> }[] = [];
 
-  // For now, simulate result (real implementation would wait for all reveals)
-  // Award pot to first active player (placeholder)
-  const winner = activePlayers[0];
-  G.players[winner].chips += G.pot;
-  G.winners = [winner];
+  for (const playerId of activePlayers) {
+    const player = G.players[playerId];
+    const holeCards = player.peekedCards;
+
+    // If player hasn't peeked, we can't evaluate their hand
+    // In a real implementation, we'd force reveal at showdown
+    if (!holeCards || holeCards.length === 0) {
+      console.warn('[CryptoPoker] Player', playerId, 'has no peeked cards at showdown');
+      continue;
+    }
+
+    // Find best 5-card hand from hole cards + community cards
+    const bestHand = findBestHand(holeCards, G.community);
+    playerHands.push({ playerId, hand: bestHand });
+
+    console.log('[CryptoPoker] Player', playerId, 'best hand:', bestHand.description);
+  }
+
+  if (playerHands.length === 0) {
+    console.error('[CryptoPoker] No valid hands at showdown!');
+    G.phase = 'gameOver';
+    return;
+  }
+
+  // Determine winner(s) by comparing hands
+  let winners: string[] = [];
+
+  // Sort hands to find winner(s) - highest hand wins
+  playerHands.sort((a, b) => {
+    // Compare by rank first
+    if (a.hand.rank !== b.hand.rank) {
+      return b.hand.rank - a.hand.rank; // Higher rank wins
+    }
+    // Same rank - compare values (kickers)
+    for (let i = 0; i < a.hand.values.length; i++) {
+      if (a.hand.values[i] !== b.hand.values[i]) {
+        return b.hand.values[i] - a.hand.values[i]; // Higher value wins
+      }
+    }
+    return 0; // Tie
+  });
+
+  // Find all players with the same best hand (for split pots)
+  const bestHand = playerHands[0].hand;
+  winners = playerHands
+    .filter(ph => {
+      if (ph.hand.rank !== bestHand.rank) return false;
+      for (let i = 0; i < ph.hand.values.length; i++) {
+        if (ph.hand.values[i] !== bestHand.values[i]) return false;
+      }
+      return true;
+    })
+    .map(ph => ph.playerId);
+
+  console.log('[CryptoPoker] Winner(s):', winners, 'with', bestHand.description);
+
+  // Award pot (split if tie)
+  const potShare = Math.floor(G.pot / winners.length);
+  for (const winnerId of winners) {
+    G.players[winnerId].chips += potShare;
+  }
+
+  G.winners = winners;
   G.pot = 0;
   G.phase = 'gameOver';
 }
+
+// Note: newHand function removed - each hand is now a new game instance
+// To start a new hand:
+// 1. Get hand result from ctx.gameover.handResult
+// 2. Settle pot via blockchain service
+// 3. Get new balances from blockchain
+// 4. Create a new game instance with those balances
 
 // =============================================================================
 // boardgame.io Game Definition
@@ -803,6 +1190,8 @@ export const CryptoPokerGame: Game<CryptoPokerState> = {
     setup: {
       start: true,
       moves: {
+        // All moves have client: false to prevent optimistic updates in P2P mode.
+        // This ensures GUEST doesn't increment stateID locally before HOST confirms.
         submitPublicKey: {
           move: ({ G, ctx }, playerId: string, publicKey: string) =>
             submitPublicKey(G, ctx, playerId, publicKey),
@@ -819,8 +1208,8 @@ export const CryptoPokerGame: Game<CryptoPokerState> = {
           client: false,
         },
         shuffleDeck: {
-          move: ({ G, ctx }, playerId: string, privateKey: string) =>
-            shuffleEncryptedDeck(G, ctx, playerId, privateKey),
+          move: ({ G, ctx, events }, playerId: string, privateKey: string) =>
+            shuffleEncryptedDeck(G, ctx, playerId, privateKey, events),
           client: false,
         },
       },
@@ -829,6 +1218,27 @@ export const CryptoPokerGame: Game<CryptoPokerState> = {
     },
     play: {
       moves: {
+        // Setup moves (for new hands - need full crypto setup again)
+        submitPublicKey: {
+          move: ({ G, ctx }, playerId: string, publicKey: string) =>
+            submitPublicKey(G, ctx, playerId, publicKey),
+          client: false,
+        },
+        distributeKeyShares: {
+          move: ({ G, ctx }, playerId: string, privateKey: string, shares: KeyShare[]) =>
+            distributeKeyShares(G, ctx, playerId, privateKey, shares),
+          client: false,
+        },
+        encryptDeck: {
+          move: ({ G, ctx }, playerId: string, privateKey: string) =>
+            encryptDeck(G, ctx, playerId, privateKey),
+          client: false,
+        },
+        shuffleDeck: {
+          move: ({ G, ctx, events }, playerId: string, privateKey: string) =>
+            shuffleEncryptedDeck(G, ctx, playerId, privateKey, events),
+          client: false,
+        },
         // Peek
         peekHoleCards: {
           move: ({ G, ctx }, playerId: string, privateKey: string) =>
@@ -876,22 +1286,73 @@ export const CryptoPokerGame: Game<CryptoPokerState> = {
             showHand(G, ctx, playerId, privateKey),
           client: false,
         },
+        // Note: newHand move removed - each hand is a new game instance
+        // Use the blockchain service to settle and create a new game
       },
     },
   },
 
   endIf: ({ G }) => {
     if (G.phase === 'voided') {
-      return { draw: true, reason: 'voided' };
+      return { draw: true, reason: 'voided', handResult: buildHandResult(G) };
     }
-    // Game ends when only one player has chips
-    const playersWithChips = Object.entries(G.players).filter(([_, p]) => p.chips > 0);
-    if (playersWithChips.length === 1) {
-      return { winner: playersWithChips[0][0] };
+
+    // Game ends when hand is complete (showdown resolved or gameOver)
+    if (G.phase === 'gameOver') {
+      return {
+        winners: G.winners,
+        handResult: buildHandResult(G),
+      };
     }
+
     return undefined;
   },
 };
+
+/**
+ * Build hand result for blockchain settlement.
+ */
+function buildHandResult(G: CryptoPokerState): {
+  handId: string;
+  winners: string[];
+  payouts: Record<string, number>;
+  contributions: Record<string, number>;
+  totalPot: number;
+  timestamp: number;
+} {
+  // Calculate contributions as difference from starting chips
+  const contributions: Record<string, number> = {};
+  for (const [playerId, player] of Object.entries(G.players)) {
+    contributions[playerId] = G.startingChips[playerId] - player.chips;
+  }
+
+  // Calculate payouts - each player gets back their contribution plus any winnings
+  const payouts: Record<string, number> = {};
+  const totalPot = Object.values(contributions).reduce((a, b) => a + b, 0);
+
+  // Initialize payouts to 0
+  for (const playerId of Object.keys(G.players)) {
+    payouts[playerId] = 0;
+  }
+
+  // Winners split the pot
+  if (G.winners.length > 0) {
+    const winShare = Math.floor(totalPot / G.winners.length);
+    const remainder = totalPot % G.winners.length;
+    for (let i = 0; i < G.winners.length; i++) {
+      payouts[G.winners[i]] = winShare + (i < remainder ? 1 : 0);
+    }
+  }
+
+  return {
+    handId: G.handId,
+    winners: G.winners,
+    payouts,
+    contributions,
+    totalPot,
+    timestamp: Date.now(),
+  };
+}
 
 // =============================================================================
 // Move Validation

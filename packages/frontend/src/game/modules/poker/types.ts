@@ -176,6 +176,8 @@ export interface CryptoPokerPlayerState extends PokerPlayerState {
   hasShuffled: boolean;
   /** Has peeked at their hole cards */
   hasPeeked: boolean;
+  /** Decrypted hole cards (only visible to this player after peek) */
+  peekedCards: PokerCard[];
   /** Has released their key (after folding) */
   hasReleasedKey: boolean;
   /** Has distributed key escrow shares */
@@ -254,6 +256,14 @@ export interface CryptoPokerState extends Omit<BasePokerState, 'players'> {
   /** Player order for setup phases */
   setupPlayerIndex: number;
 
+  // Settlement support
+  /** Unique hand identifier for blockchain settlement */
+  handId: string;
+  /** Total contributions per player (for settlement) */
+  contributions: Record<string, number>;
+  /** Starting chip counts at hand start (for settlement verification) */
+  startingChips: Record<string, number>;
+
   // Abandonment support
   /** Released private keys from folded players */
   releasedKeys: Record<string, string>;
@@ -265,6 +275,24 @@ export interface CryptoPokerState extends Omit<BasePokerState, 'players'> {
   disconnectedPlayers: string[];
   /** Peek notifications for UI */
   peekNotifications: PeekNotification[];
+}
+
+/**
+ * Hand result for blockchain settlement
+ */
+export interface PokerHandResult {
+  /** Unique hand identifier */
+  handId: string;
+  /** Winners of the hand */
+  winners: string[];
+  /** Payout per player */
+  payouts: Record<string, number>;
+  /** Contribution per player */
+  contributions: Record<string, number>;
+  /** Total pot */
+  totalPot: number;
+  /** Timestamp */
+  timestamp: number;
 }
 
 /**

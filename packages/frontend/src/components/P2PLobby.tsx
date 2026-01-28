@@ -22,6 +22,7 @@ export const P2PLobby: React.FC<P2PLobbyProps> = ({ onConnected, onBack }) => {
   const [inputCode, setInputCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [isCreatingGame, setIsCreatingGame] = useState(false);
 
   const connectionRef = useRef<JoinCodeConnection | null>(null);
   const roleRef = useRef<P2PRole>('host');
@@ -60,9 +61,10 @@ export const P2PLobby: React.FC<P2PLobbyProps> = ({ onConnected, onBack }) => {
   }, [onConnected]);
 
   const handleCreateGame = useCallback(async () => {
-    if (!connectionRef.current) return;
+    if (!connectionRef.current || isCreatingGame) return;
     setError(null);
     setCopied(false);
+    setIsCreatingGame(true);
 
     try {
       const code = await connectionRef.current.createGame();
@@ -70,8 +72,10 @@ export const P2PLobby: React.FC<P2PLobbyProps> = ({ onConnected, onBack }) => {
       setMode('host');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create game');
+    } finally {
+      setIsCreatingGame(false);
     }
-  }, []);
+  }, [isCreatingGame]);
 
   const handleJoinGame = useCallback(async () => {
     if (!connectionRef.current || !inputCode.trim()) return;
@@ -199,8 +203,16 @@ export const P2PLobby: React.FC<P2PLobbyProps> = ({ onConnected, onBack }) => {
         <div style={cardStyle}>
           <h2 style={{ color: '#e4e4e4', marginBottom: '16px' }}>Start a Game</h2>
 
-          <button style={buttonStyle} onClick={handleCreateGame}>
-            Create Game (Host)
+          <button
+            style={{
+              ...buttonStyle,
+              opacity: isCreatingGame ? 0.7 : 1,
+              cursor: isCreatingGame ? 'wait' : 'pointer',
+            }}
+            onClick={handleCreateGame}
+            disabled={isCreatingGame}
+          >
+            {isCreatingGame ? 'Creating Game...' : 'Create Game (Host)'}
           </button>
 
           <button

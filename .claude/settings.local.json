@@ -8,7 +8,23 @@
       "WebFetch(domain:localhost)",
       "Bash(cat:*)",
       "Bash(yarn tsc:*)",
-      "Skill(backlog:complete)"
+      "Skill(backlog:complete)",
+      "Skill(backlog:work)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Skill(design:design)",
+      "Bash(ls:*)",
+      "Bash(yarn dev:frontend)",
+      "Bash(wc:*)",
+      "Bash(yarn workspace:*)",
+      "Bash(yarn vitest run:*)",
+      "Bash(curl:*)",
+      "Bash(npx tsc:*)",
+      "Bash(yarn dev:frontend --port 3001)",
+      "Bash(lsof:*)",
+      "Skill(commit-commands:commit)"
     ]
   }
 }

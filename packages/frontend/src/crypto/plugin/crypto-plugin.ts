@@ -53,6 +53,14 @@ export interface CryptoPluginState {
   /** Player public keys (playerId -> publicKey hex) */
   publicKeys: Record<string, string>;
 
+  /**
+   * Player private keys (playerId -> privateKey hex).
+   * DEMO ONLY: In real mental poker, private keys are never shared.
+   * This is only for demo/testing to allow decryption without proper
+   * decryption share exchange protocol.
+   */
+  privateKeys?: Record<string, string>;
+
   /** Deck commitments (playerId -> commitment) */
   commitments: Record<string, SerializedCommitment>;
 

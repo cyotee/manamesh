@@ -1,7 +1,7 @@
 # Task MM-031: Blockchain-Enabled Poker (Ethereum Settlement)
 
 **Repo:** ManaMesh
-**Status:** Blocked
+**Status:** In Progress
 **Created:** 2026-01-26
 **Dependencies:** MM-022, MM-029
 **Worktree:** `feature/blockchain-poker`

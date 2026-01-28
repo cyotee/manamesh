@@ -58,6 +58,16 @@ export class JoinCodeConnection {
         }
       },
       onMessage: (data) => {
+        // Check for signal messages and dispatch them separately
+        try {
+          const parsed = JSON.parse(data);
+          if (parsed.type === '__signal__') {
+            this._dispatchSignal(parsed.payload);
+            return; // Don't forward signal messages to regular handler
+          }
+        } catch (e) {
+          // Not JSON or not a signal, forward normally
+        }
         this.events.onMessage(data);
       },
       onError: (error) => {
@@ -178,5 +188,48 @@ export class JoinCodeConnection {
    */
   close(): void {
     this.cleanup();
+  }
+
+  // Signal handlers for custom messages (e.g., new-hand signals)
+  private signalHandlers: Set<(signal: unknown) => void> = new Set();
+
+  /**
+   * Send a signal (custom message) to the peer
+   * Used for out-of-band communication like new-hand notifications
+   */
+  sendSignal(signal: unknown): void {
+    const message = JSON.stringify({
+      type: '__signal__',
+      payload: signal,
+    });
+    this.send(message);
+  }
+
+  /**
+   * Register a handler for incoming signals
+   */
+  onSignal(handler: (signal: unknown) => void): void {
+    this.signalHandlers.add(handler);
+  }
+
+  /**
+   * Unregister a signal handler
+   */
+  offSignal(handler: (signal: unknown) => void): void {
+    this.signalHandlers.delete(handler);
+  }
+
+  /**
+   * Internal: dispatch signal to handlers
+   * Called when a signal message is received
+   */
+  _dispatchSignal(signal: unknown): void {
+    this.signalHandlers.forEach(handler => {
+      try {
+        handler(signal);
+      } catch (e) {
+        console.error('[JoinCodeConnection] Signal handler error:', e);
+      }
+    });
   }
 }
