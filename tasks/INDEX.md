@@ -11,7 +11,6 @@
 | MM-024 | MTG Game Module | Ready | MM-019, MM-020 | `feature/game-mtg` |
 | MM-025 | Lorcana Game Module | Ready | MM-019, MM-020 | `feature/game-lorcana` |
 | MM-026 | Riftbound Game Module | Ready | MM-019, MM-020 | `feature/game-riftbound` |
-| MM-032 | Hybrid P2P Transport | In Progress | MM-002, MM-003, MM-004 | `feature/hybrid-p2p-transport` |
 
 ## Status Legend
 
@@ -32,7 +31,6 @@ All active tasks are ready (dependencies complete):
 | MM-024 | MTG Game Module | `/backlog:launch MM-024` |
 | MM-025 | Lorcana Game Module | `/backlog:launch MM-025` |
 | MM-026 | Riftbound Game Module | `/backlog:launch MM-026` |
-| MM-032 | Hybrid P2P Transport | `/backlog:launch MM-032` |
 
 ## Dependency Graph
 
@@ -47,7 +45,7 @@ MM-019 (Complete, archived) ✓
 MM-002 (Complete, archived) ✓
 ├── MM-003 (Complete, archived) ✓
 ├── MM-004 (Complete, archived) ✓
-└── MM-032 (Ready - Hybrid P2P Transport)
+└── MM-032 (Complete, archived) ✓
 ```
 
 ## Cross-Repo Dependencies
@@ -86,3 +84,4 @@ Tasks in other repos that depend on this repo's tasks:
 | MM-029 | Cryptographic Deck Plugin (Mental Poker) | 2026-01-28 | archive/MM-029-crypto-deck-plugin/ |
 | MM-030 | War Game Crypto Integration | 2026-01-28 | archive/MM-030-war-crypto-integration/ |
 | MM-031 | Blockchain-Enabled Poker | 2026-01-28 | archive/MM-031-blockchain-poker/ |
+| MM-032 | Hybrid P2P Transport | 2026-01-28 | archive/MM-032-hybrid-p2p-transport/ |
