@@ -16,6 +16,8 @@ import {
   CryptoPokerPhase,
   BettingRoundState,
   PeekNotification,
+  DecryptRequest,
+  DecryptNotification,
   POKER_ZONES,
   PokerConfig,
   DEFAULT_POKER_CONFIG,
@@ -246,6 +248,9 @@ export function createCryptoInitialState(config: GameConfig): CryptoPokerState {
     escrowThreshold: Math.max(2, playerOrder.length - 1), // N-1 threshold
     disconnectedPlayers: [],
     peekNotifications: [],
+    // Cooperative decryption
+    decryptRequests: [],
+    decryptNotifications: [],
   };
 
   // Update positions
@@ -724,6 +729,221 @@ function parseCardId(cardId: string): PokerCard {
   }
 
   return { id: cardId, rank: rank as PokerCard['rank'], suit: suit as PokerCard['suit'] };
+}
+
+// =============================================================================
+// Cooperative Decryption Moves
+// =============================================================================
+
+/**
+ * Request cooperative decryption of cards.
+ * This initiates the approval process - other players must approve before cards can be decrypted.
+ */
+function requestDecrypt(
+  G: CryptoPokerState,
+  ctx: Ctx,
+  playerId: string,
+  zoneId: string,
+  cardIndices: number[]
+): CryptoPokerState | typeof INVALID_MOVE {
+  if (!['preflop', 'flop', 'turn', 'river'].includes(G.phase)) return INVALID_MOVE;
+
+  const player = G.players[playerId];
+  if (!player) return INVALID_MOVE;
+  if (player.folded) return INVALID_MOVE;
+
+  // Check if there's already a pending request for this zone
+  const existingRequest = G.decryptRequests.find(
+    r => r.zoneId === zoneId && r.requestingPlayer === playerId && r.status === 'pending'
+  );
+  if (existingRequest) return INVALID_MOVE;
+
+  // Create the decrypt request
+  const requestId = `decrypt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+  // Initialize approvals - requesting player auto-approves
+  const approvals: Record<string, boolean> = {};
+  for (const pid of G.playerOrder) {
+    approvals[pid] = pid === playerId; // Auto-approve for requesting player
+  }
+
+  const request: DecryptRequest = {
+    id: requestId,
+    requestingPlayer: playerId,
+    zoneId,
+    cardIndices,
+    timestamp: Date.now(),
+    status: 'pending',
+    approvals,
+    decryptionShares: {},
+  };
+
+  G.decryptRequests.push(request);
+
+  // Add notification for all players
+  const notification: DecryptNotification = {
+    type: 'request',
+    requestId,
+    playerId,
+    message: `Player ${playerId} requests to reveal their cards`,
+    timestamp: Date.now(),
+  };
+  G.decryptNotifications.push(notification);
+
+  console.log('[CryptoPoker] Decrypt request created:', requestId, 'for zone:', zoneId);
+
+  return G;
+}
+
+/**
+ * Approve a decrypt request and submit decryption share.
+ * Once all players approve, the cards are automatically decrypted.
+ */
+function approveDecrypt(
+  G: CryptoPokerState,
+  ctx: Ctx,
+  playerId: string,
+  requestId: string,
+  privateKey: string
+): CryptoPokerState | typeof INVALID_MOVE {
+  const player = G.players[playerId];
+  if (!player) return INVALID_MOVE;
+
+  // Find the request
+  const request = G.decryptRequests.find(r => r.id === requestId);
+  if (!request) {
+    console.error('[CryptoPoker] Decrypt request not found:', requestId);
+    return INVALID_MOVE;
+  }
+
+  if (request.status !== 'pending') {
+    console.error('[CryptoPoker] Request is not pending:', request.status);
+    return INVALID_MOVE;
+  }
+
+  // Check if already approved
+  if (request.approvals[playerId]) {
+    console.log('[CryptoPoker] Player', playerId, 'already approved request', requestId);
+    return INVALID_MOVE;
+  }
+
+  // Mark as approved
+  request.approvals[playerId] = true;
+
+  // Store the decryption share (in this demo, we store the private key)
+  // In a real implementation, this would be a partial decryption share
+  if (!request.decryptionShares[playerId]) {
+    request.decryptionShares[playerId] = [];
+  }
+  request.decryptionShares[playerId].push(privateKey);
+
+  // Add notification
+  const notification: DecryptNotification = {
+    type: 'approval',
+    requestId,
+    playerId,
+    message: `Player ${playerId} approved the decrypt request`,
+    timestamp: Date.now(),
+  };
+  G.decryptNotifications.push(notification);
+
+  console.log('[CryptoPoker] Player', playerId, 'approved decrypt request', requestId);
+
+  // Check if all players have approved
+  const allApproved = G.playerOrder.every(pid => request.approvals[pid]);
+
+  if (allApproved) {
+    console.log('[CryptoPoker] All players approved! Completing decryption...');
+
+    // Complete the decryption
+    request.status = 'completed';
+
+    // Perform the actual decryption using all submitted keys
+    const requestingPlayer = G.players[request.requestingPlayer];
+    const handZone = G.crypto.encryptedZones[request.zoneId];
+
+    if (handZone && requestingPlayer && !requestingPlayer.hasPeeked) {
+      // Collect all private keys
+      const allPrivateKeys: string[] = [];
+      for (const [pid, shares] of Object.entries(request.decryptionShares)) {
+        allPrivateKeys.push(...shares);
+      }
+      // Also add stored keys as fallback
+      if (G.crypto.privateKeys) {
+        for (const key of Object.values(G.crypto.privateKeys)) {
+          if (key && !allPrivateKeys.includes(key)) {
+            allPrivateKeys.push(key);
+          }
+        }
+      }
+
+      // Decrypt the cards
+      const peekedCards: PokerCard[] = [];
+      for (const encryptedCard of handZone) {
+        let decrypted = { ...encryptedCard };
+        for (const key of allPrivateKeys) {
+          if (decrypted.layers > 0) {
+            try {
+              decrypted = decrypt(decrypted, key);
+            } catch (err) {
+              console.error('[CryptoPoker] Decryption failed:', err);
+            }
+          }
+        }
+
+        if (decrypted.layers === 0) {
+          const cardId = lookupCardIdFromPoint(G.crypto.cardPointLookup, decrypted.ciphertext);
+          if (cardId) {
+            peekedCards.push(parseCardId(cardId));
+          } else {
+            peekedCards.push({ id: 'unknown', rank: '?' as PokerCard['rank'], suit: 'spades' as const });
+          }
+        } else {
+          peekedCards.push({ id: 'unknown', rank: '?' as PokerCard['rank'], suit: 'spades' as const });
+        }
+      }
+
+      requestingPlayer.peekedCards = peekedCards;
+      requestingPlayer.hasPeeked = true;
+
+      console.log('[CryptoPoker] Cooperative decryption complete for player', request.requestingPlayer);
+    }
+
+    // Add completion notification
+    const completeNotification: DecryptNotification = {
+      type: 'completed',
+      requestId,
+      playerId: request.requestingPlayer,
+      message: `Cards revealed for Player ${request.requestingPlayer}`,
+      timestamp: Date.now(),
+    };
+    G.decryptNotifications.push(completeNotification);
+
+    // Add peek notification for compatibility
+    G.peekNotifications.push({
+      playerId: request.requestingPlayer,
+      timestamp: Date.now(),
+    });
+  }
+
+  return G;
+}
+
+/**
+ * Dismiss a decrypt notification.
+ */
+function dismissNotification(
+  G: CryptoPokerState,
+  ctx: Ctx,
+  playerId: string,
+  notificationIndex: number
+): CryptoPokerState | typeof INVALID_MOVE {
+  if (notificationIndex < 0 || notificationIndex >= G.decryptNotifications.length) {
+    return INVALID_MOVE;
+  }
+
+  G.decryptNotifications.splice(notificationIndex, 1);
+  return G;
 }
 
 /**
@@ -1239,7 +1459,7 @@ export const CryptoPokerGame: Game<CryptoPokerState> = {
             shuffleEncryptedDeck(G, ctx, playerId, privateKey, events),
           client: false,
         },
-        // Peek
+        // Peek (auto-decrypt - uses stored keys, less secure but simpler)
         peekHoleCards: {
           move: ({ G, ctx }, playerId: string, privateKey: string) =>
             peekHoleCards(G, ctx, playerId, privateKey),
@@ -1248,6 +1468,22 @@ export const CryptoPokerGame: Game<CryptoPokerState> = {
         submitDecryptionShare: {
           move: ({ G, ctx }, playerId: string, privateKey: string, zoneId: string, cardIndex: number) =>
             submitDecryptionShare(G, ctx, playerId, privateKey, zoneId, cardIndex),
+          client: false,
+        },
+        // Cooperative decryption (requires approval from all players)
+        requestDecrypt: {
+          move: ({ G, ctx }, playerId: string, zoneId: string, cardIndices: number[]) =>
+            requestDecrypt(G, ctx, playerId, zoneId, cardIndices),
+          client: false,
+        },
+        approveDecrypt: {
+          move: ({ G, ctx }, playerId: string, requestId: string, privateKey: string) =>
+            approveDecrypt(G, ctx, playerId, requestId, privateKey),
+          client: false,
+        },
+        dismissNotification: {
+          move: ({ G, ctx }, playerId: string, notificationIndex: number) =>
+            dismissNotification(G, ctx, playerId, notificationIndex),
           client: false,
         },
         // Betting
@@ -1408,6 +1644,25 @@ export function validateCryptoMove(
       if (state.players[playerId]?.hasPeeked) {
         return { valid: false, error: 'Already peeked' };
       }
+      return { valid: true };
+
+    case 'requestDecrypt':
+      if (!['preflop', 'flop', 'turn', 'river'].includes(state.phase)) {
+        return { valid: false, error: 'Cannot request decryption now' };
+      }
+      if (state.players[playerId]?.hasPeeked) {
+        return { valid: false, error: 'Already revealed cards' };
+      }
+      if (state.players[playerId]?.folded) {
+        return { valid: false, error: 'Cannot request after folding' };
+      }
+      return { valid: true };
+
+    case 'approveDecrypt':
+      // Anyone can approve a pending decrypt request
+      return { valid: true };
+
+    case 'dismissNotification':
       return { valid: true };
 
     case 'releaseKey':

@@ -275,6 +275,12 @@ export interface CryptoPokerState extends Omit<BasePokerState, 'players'> {
   disconnectedPlayers: string[];
   /** Peek notifications for UI */
   peekNotifications: PeekNotification[];
+
+  // Cooperative decryption support
+  /** Pending decrypt requests requiring approval */
+  decryptRequests: DecryptRequest[];
+  /** Notifications for decrypt events */
+  decryptNotifications: DecryptNotification[];
 }
 
 /**
@@ -300,6 +306,40 @@ export interface PokerHandResult {
  */
 export interface PeekNotification {
   playerId: string;
+  timestamp: number;
+}
+
+/**
+ * Request for cooperative card decryption.
+ * Players must approve for decryption to proceed.
+ */
+export interface DecryptRequest {
+  /** Unique request ID */
+  id: string;
+  /** Player requesting decryption */
+  requestingPlayer: string;
+  /** Zone being decrypted (e.g., 'hand:0') */
+  zoneId: string;
+  /** Card indices to decrypt */
+  cardIndices: number[];
+  /** Timestamp of request */
+  timestamp: number;
+  /** Status of the request */
+  status: 'pending' | 'approved' | 'completed' | 'rejected';
+  /** Players who have approved */
+  approvals: Record<string, boolean>;
+  /** Decryption shares submitted by approving players */
+  decryptionShares: Record<string, string[]>;
+}
+
+/**
+ * Notification for decrypt request events
+ */
+export interface DecryptNotification {
+  type: 'request' | 'approval' | 'completed' | 'rejected';
+  requestId: string;
+  playerId: string;
+  message: string;
   timestamp: number;
 }
 
@@ -376,7 +416,11 @@ export type PokerMoveType =
   | 'submitDecryptionShare'
   | 'releaseKey'
   | 'showHand'
-  | 'acknowledgeResult';
+  | 'acknowledgeResult'
+  // Cooperative decryption moves
+  | 'requestDecrypt'
+  | 'approveDecrypt'
+  | 'dismissNotification';
 
 /**
  * Move validation result

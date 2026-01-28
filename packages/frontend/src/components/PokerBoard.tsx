@@ -7,7 +7,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import type { BoardProps } from 'boardgame.io/react';
-import type { PokerState, PokerCard, PokerPhase, CryptoPokerPhase, PokerHandResult } from '../game/modules/poker/types';
+import type { PokerState, PokerCard, PokerPhase, CryptoPokerPhase, PokerHandResult, DecryptRequest, DecryptNotification } from '../game/modules/poker/types';
 import type { CryptoPokerState, CryptoPokerPlayerState } from '../game/modules/poker/types';
 import { CryptoTransparencyPanel } from './CryptoTransparencyPanel';
 import type { CryptoPluginState } from '../crypto/plugin/crypto-plugin';
@@ -964,40 +964,214 @@ export const PokerBoard: React.FC<PokerBoardProps> = ({
         </div>
       )}
 
-      {/* Peek at Cards button - only for crypto games when player hasn't peeked */}
+      {/* Cooperative Decryption Notifications */}
+      {cryptoG.decryptRequests && cryptoG.decryptRequests.length > 0 && !isInCryptoSetup && (
+        <div style={{
+          marginBottom: '20px',
+          backgroundColor: '#1a2d4a',
+          borderRadius: '12px',
+          padding: '16px',
+          border: '2px solid #f59e0b',
+        }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            marginBottom: '12px',
+          }}>
+            <span style={{ fontSize: '20px' }}>🔓</span>
+            <h3 style={{ margin: 0, color: '#f59e0b' }}>Cooperative Card Reveal</h3>
+          </div>
+
+          {cryptoG.decryptRequests.filter(r => r.status === 'pending').map((request: DecryptRequest) => {
+            const isMyRequest = request.requestingPlayer === currentPlayerID;
+            const haveIApproved = request.approvals[currentPlayerID];
+            const approvalCount = Object.values(request.approvals).filter(Boolean).length;
+            const totalPlayers = cryptoG.playerOrder.length;
+
+            return (
+              <div key={request.id} style={{
+                backgroundColor: '#0f172a',
+                borderRadius: '8px',
+                padding: '12px',
+                marginBottom: '8px',
+              }}>
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: '8px',
+                }}>
+                  <span style={{ color: '#e2e8f0' }}>
+                    {isMyRequest
+                      ? '🙋 You requested to reveal your cards'
+                      : `🔔 Player ${request.requestingPlayer} wants to reveal their cards`
+                    }
+                  </span>
+                  <span style={{
+                    padding: '4px 8px',
+                    backgroundColor: approvalCount === totalPlayers ? '#166534' : '#374151',
+                    color: approvalCount === totalPlayers ? '#86efac' : '#9ca3af',
+                    borderRadius: '4px',
+                    fontSize: '12px',
+                  }}>
+                    {approvalCount}/{totalPlayers} approved
+                  </span>
+                </div>
+
+                {/* Approval status for each player */}
+                <div style={{
+                  display: 'flex',
+                  gap: '8px',
+                  flexWrap: 'wrap',
+                  marginBottom: '12px',
+                }}>
+                  {cryptoG.playerOrder.map((pid: string) => (
+                    <span key={pid} style={{
+                      padding: '4px 8px',
+                      borderRadius: '4px',
+                      fontSize: '11px',
+                      backgroundColor: request.approvals[pid] ? '#166534' : '#374151',
+                      color: request.approvals[pid] ? '#86efac' : '#9ca3af',
+                    }}>
+                      Player {pid}: {request.approvals[pid] ? '✓' : '⏳'}
+                    </span>
+                  ))}
+                </div>
+
+                {/* Approve button if not yet approved and not my request */}
+                {!haveIApproved && !isMyRequest && (
+                  <button
+                    onClick={() => {
+                      const keyPair = cryptoKeyPairRef.current;
+                      if (keyPair && moves.approveDecrypt) {
+                        console.log('[PokerBoard] Approving decrypt request:', request.id);
+                        moves.approveDecrypt(currentPlayerID, request.id, keyPair.privateKey);
+                      }
+                    }}
+                    style={{
+                      padding: '10px 20px',
+                      fontSize: '14px',
+                      cursor: 'pointer',
+                      backgroundColor: '#4CAF50',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '8px',
+                      width: '100%',
+                    }}
+                  >
+                    ✓ Approve & Share Decryption Key
+                  </button>
+                )}
+
+                {haveIApproved && !isMyRequest && (
+                  <div style={{
+                    textAlign: 'center',
+                    color: '#86efac',
+                    fontSize: '14px',
+                  }}>
+                    ✓ You approved this request
+                  </div>
+                )}
+
+                {isMyRequest && (
+                  <div style={{
+                    textAlign: 'center',
+                    color: '#fbbf24',
+                    fontSize: '14px',
+                  }}>
+                    ⏳ Waiting for other players to approve...
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Card Reveal buttons - only for crypto games when player hasn't peeked */}
       {cryptoG.crypto && !myCryptoPlayer?.hasPeeked && !myCryptoPlayer?.folded && !isInCryptoSetup && (
         cryptoG.crypto.encryptedZones?.[`hand:${currentPlayerID}`]?.length > 0
       ) && (
         <div style={{
           marginBottom: '20px',
           textAlign: 'center',
+          backgroundColor: '#16213e',
+          borderRadius: '12px',
+          padding: '20px',
+          border: '1px solid #3a3a5c',
         }}>
-          <button
-            onClick={() => {
-              const keyPair = cryptoKeyPairRef.current;
-              if (keyPair && moves.peekHoleCards) {
-                console.log('[PokerBoard] Peeking at hole cards');
-                moves.peekHoleCards(currentPlayerID, keyPair.privateKey);
-              } else {
-                console.error('[PokerBoard] Cannot peek: missing key pair or move');
-              }
-            }}
-            style={{
-              padding: '16px 32px',
-              fontSize: '18px',
-              cursor: 'pointer',
-              backgroundColor: '#8b5cf6',
-              color: 'white',
-              border: 'none',
-              borderRadius: '8px',
-              boxShadow: '0 4px 6px rgba(139, 92, 246, 0.3)',
-            }}
-          >
-            👁️ Peek at Your Cards
-          </button>
-          <p style={{ color: '#a0a0a0', fontSize: '12px', marginTop: '8px' }}>
-            Click to reveal your hole cards (only you can see them)
-          </p>
+          <h3 style={{ margin: '0 0 16px 0', color: '#e2e8f0' }}>Reveal Your Cards</h3>
+
+          {/* Check if there's already a pending request from this player */}
+          {!cryptoG.decryptRequests?.some((r: DecryptRequest) => r.requestingPlayer === currentPlayerID && r.status === 'pending') && (
+            <>
+              {/* Cooperative reveal button */}
+              <button
+                onClick={() => {
+                  const keyPair = cryptoKeyPairRef.current;
+                  if (keyPair && moves.requestDecrypt) {
+                    const zoneId = `hand:${currentPlayerID}`;
+                    const cardIndices = [0, 1]; // Both hole cards
+                    console.log('[PokerBoard] Requesting cooperative decrypt for', zoneId);
+                    moves.requestDecrypt(currentPlayerID, zoneId, cardIndices);
+                  }
+                }}
+                style={{
+                  padding: '16px 32px',
+                  fontSize: '18px',
+                  cursor: 'pointer',
+                  backgroundColor: '#8b5cf6',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  boxShadow: '0 4px 6px rgba(139, 92, 246, 0.3)',
+                  marginBottom: '12px',
+                }}
+              >
+                🤝 Request Cooperative Reveal
+              </button>
+              <p style={{ color: '#a0a0a0', fontSize: '12px', marginBottom: '16px' }}>
+                All players must approve to decrypt your cards (secure)
+              </p>
+
+              <div style={{
+                borderTop: '1px solid #3a3a5c',
+                paddingTop: '16px',
+                marginTop: '8px',
+              }}>
+                <button
+                  onClick={() => {
+                    const keyPair = cryptoKeyPairRef.current;
+                    if (keyPair && moves.peekHoleCards) {
+                      console.log('[PokerBoard] Instant peek at hole cards');
+                      moves.peekHoleCards(currentPlayerID, keyPair.privateKey);
+                    }
+                  }}
+                  style={{
+                    padding: '10px 20px',
+                    fontSize: '14px',
+                    cursor: 'pointer',
+                    backgroundColor: '#374151',
+                    color: '#9ca3af',
+                    border: '1px solid #4b5563',
+                    borderRadius: '8px',
+                  }}
+                >
+                  👁️ Instant Peek (Demo Mode)
+                </button>
+                <p style={{ color: '#6b7280', fontSize: '11px', marginTop: '8px' }}>
+                  Uses stored keys - less secure, for demo only
+                </p>
+              </div>
+            </>
+          )}
+
+          {cryptoG.decryptRequests?.some((r: DecryptRequest) => r.requestingPlayer === currentPlayerID && r.status === 'pending') && (
+            <div style={{ color: '#fbbf24' }}>
+              ⏳ Waiting for approval from other players...
+            </div>
+          )}
         </div>
       )}
 
