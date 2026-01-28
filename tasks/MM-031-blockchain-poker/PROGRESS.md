@@ -2,10 +2,29 @@
 
 ## Current Checkpoint
 
-**Last checkpoint:** 2026-01-27 - Wallet-derived keys integrated into PokerBoard
-**Next step:** Test P2P gameplay with wallet-derived keys
+**Last checkpoint:** 2026-01-27 - Demo implementation complete
+**Next step:** Manual testing to verify wallet-derived keys work in P2P gameplay
 **Build status:** ⚠️ Pre-existing TS errors (unrelated to new code)
 **Test status:** ✅ P2P gameplay working - crypto setup completes, betting works
+
+### Demo Status: READY FOR TESTING
+
+The demo proving P2P with secure encryption is code-complete:
+- ✅ Mock wallet provider with deterministic key derivation
+- ✅ Wallet address displayed in P2P lobby
+- ✅ Wallet-derived keys used for mental poker crypto
+- ✅ P2P connection via join code exchange
+- ✅ Mental poker protocol (key exchange → escrow → encrypt → shuffle)
+- ✅ P2P state sync working
+
+**To test:**
+1. Open http://localhost:3002/ in two browser tabs
+2. Select Poker → P2P Online in both
+3. See wallet addresses displayed (0x...)
+4. Exchange join codes to connect
+5. Watch console for "Using wallet-derived keys from wallet 0x..."
+6. Play a hand - crypto setup should complete automatically
+7. Betting should work with chips syncing across tabs
 
 ---
 
