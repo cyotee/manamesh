@@ -19,11 +19,15 @@ import {
 } from './cache';
 import type { StoredPackMetadata } from './types';
 
+// Use globalThis to share mock stores (safe for hoisting)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+(globalThis as any).__idbKeyvalMockStores = new Map<string, Map<string, unknown>>();
+
 // Mock idb-keyval
 vi.mock('idb-keyval', () => {
-  const stores = new Map<string, Map<string, unknown>>();
-
   const getStore = (dbName: string) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const stores = (globalThis as any).__idbKeyvalMockStores as Map<string, Map<string, unknown>>;
     if (!stores.has(dbName)) {
       stores.set(dbName, new Map());
     }
@@ -48,17 +52,19 @@ vi.mock('idb-keyval', () => {
       const dbName = store?.dbName || 'default';
       return Array.from(getStore(dbName).entries());
     }),
-    // Helper to clear all stores between tests
-    _clearAll: () => stores.clear(),
   };
 });
 
-import { _clearAll } from 'idb-keyval';
+// Helper to clear mock stores between tests
+function clearMockStores() {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (globalThis as any).__idbKeyvalMockStores?.clear();
+}
 
 describe('Asset Pack Cache', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    (_clearAll as () => void)();
+    clearMockStores();
   });
 
   afterEach(() => {

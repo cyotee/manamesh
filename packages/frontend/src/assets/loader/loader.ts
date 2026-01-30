@@ -55,12 +55,15 @@ const PLACEHOLDER_BLOB = new Blob(
 // ============================================================================
 
 /**
- * Load an asset pack from IPFS or HTTP source.
+ * Load an asset pack from IPFS, HTTP, or IPFS zip archive source.
  *
  * This loads the manifest and resolves all nested manifests into a flat
  * card list. Card images are NOT loaded at this point (lazy loading).
  *
- * @param source - IPFS CID or HTTP URL source
+ * For ipfs-zip sources, delegates to the zip loader which downloads
+ * the entire zip, extracts it, and caches all card images.
+ *
+ * @param source - IPFS CID, HTTP URL, or IPFS zip source
  * @param options - Load options
  * @returns Loaded asset pack with manifest and card list
  */
@@ -68,6 +71,12 @@ export async function loadPack(
   source: AssetPackSource,
   options: LoadOptions = {}
 ): Promise<LoadedAssetPack> {
+  // Dispatch to zip loader for zip sources
+  if (source.type === 'ipfs-zip') {
+    const { loadZipPack } = await import('./zip-loader');
+    return loadZipPack(source, options);
+  }
+
   const packId = sourceToPackId(source);
 
   // Check if already loaded

@@ -25,9 +25,19 @@ export interface HTTPSource {
 }
 
 /**
+ * Source for loading an asset pack from an IPFS zip archive.
+ * The CID points to a single zip file rather than a directory.
+ */
+export interface IPFSZipSource {
+  type: 'ipfs-zip';
+  /** IPFS CID of the zip archive */
+  cid: string;
+}
+
+/**
  * Combined source type for asset packs.
  */
-export type AssetPackSource = IPFSSource | HTTPSource;
+export type AssetPackSource = IPFSSource | HTTPSource | IPFSZipSource;
 
 /**
  * A loaded asset pack with its manifest and source info.
@@ -141,6 +151,8 @@ export function parseCardImageKey(
 export function sourceToPackId(source: AssetPackSource): string {
   if (source.type === 'ipfs') {
     return `ipfs:${source.cid}`;
+  } else if (source.type === 'ipfs-zip') {
+    return `ipfs-zip:${source.cid}`;
   } else {
     // Use base64 encoding of URL for HTTP sources
     // Remove trailing slash and hash to normalize

@@ -3,6 +3,7 @@
  *
  * Texas Hold'em game board with betting controls.
  * Uses wallet-derived keys for cryptographic fairness when available.
+ * Loads card images from IPFS asset packs with text fallback.
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -15,6 +16,9 @@ import { generateKeyPair } from '../crypto/mental-poker';
 import { createKeyShares } from '../crypto/shamirs';
 import type { CryptoKeyPair } from '../crypto/mental-poker/types';
 import { useGameKeys } from '../blockchain/wallet';
+import { useAssetPack } from '../hooks/useAssetPack';
+import { useCardImage } from '../hooks/useCardImage';
+import { STANDARD_CARDS_SOURCE, CARD_BACK_ID } from '../assets/packs/standard-cards';
 
 interface PokerBoardProps extends BoardProps<PokerState> {
   /**
@@ -39,15 +43,44 @@ const SUIT_COLORS: Record<string, string> = {
   spades: '#2c3e50',
 };
 
+/**
+ * CardDisplay component that renders card images from IPFS asset pack.
+ * Falls back to text rendering if images are not yet loaded.
+ */
 const CardDisplay: React.FC<{
   card: PokerCard;
   faceDown?: boolean;
   small?: boolean;
-}> = ({ card, faceDown, small }) => {
+  packId: string | null;
+}> = ({ card, faceDown, small, packId }) => {
   const width = small ? 50 : 70;
   const height = small ? 70 : 100;
 
+  // Load card image from asset pack
+  // For face-down cards, load the shared back image
+  // For face-up cards, load the card's front image using its ID (e.g., 'clubs-A')
+  const cardId = faceDown ? CARD_BACK_ID : card?.id ?? null;
+  const { url, isLoading } = useCardImage(packId, cardId, 'front');
+
+  // Face down card
   if (faceDown) {
+    if (url) {
+      return (
+        <img
+          src={url}
+          alt="Card back"
+          style={{
+            width,
+            height,
+            borderRadius: '8px',
+            margin: '4px',
+            objectFit: 'cover',
+          }}
+        />
+      );
+    }
+
+    // Fallback: pattern background for face-down cards
     return (
       <div style={{
         width,
@@ -66,6 +99,25 @@ const CardDisplay: React.FC<{
     );
   }
 
+  // Face up card with image
+  if (url) {
+    return (
+      <img
+        src={url}
+        alt={`${card.rank} of ${card.suit}`}
+        style={{
+          width,
+          height,
+          borderRadius: '8px',
+          margin: '4px',
+          objectFit: 'cover',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+        }}
+      />
+    );
+  }
+
+  // Fallback: text-based card rendering (loading or no image available)
   return (
     <div style={{
       width,
@@ -79,7 +131,19 @@ const CardDisplay: React.FC<{
       alignItems: 'center',
       justifyContent: 'center',
       boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+      position: 'relative',
     }}>
+      {isLoading && (
+        <div style={{
+          position: 'absolute',
+          top: 2,
+          right: 2,
+          width: 8,
+          height: 8,
+          borderRadius: '50%',
+          backgroundColor: '#4a9eff',
+        }} />
+      )}
       <span style={{
         fontSize: small ? '18px' : '24px',
         fontWeight: 'bold',
@@ -108,7 +172,8 @@ const PlayerPanel: React.FC<{
   showCards: boolean;
   encryptedCardCount?: number;
   peekedCards?: PokerCard[];
-}> = ({ playerId, player, isDealer, isSmallBlind, isBigBlind, isActive, isCurrentUser, showCards, encryptedCardCount = 0, peekedCards }) => {
+  packId: string | null;
+}> = ({ playerId, player, isDealer, isSmallBlind, isBigBlind, isActive, isCurrentUser, showCards, encryptedCardCount = 0, peekedCards, packId }) => {
   return (
     <div style={{
       padding: '16px',
@@ -200,22 +265,22 @@ const PlayerPanel: React.FC<{
         {/* Show peeked cards if available (decrypted hole cards) */}
         {peekedCards && peekedCards.length > 0 ? (
           peekedCards.map(card => (
-            <CardDisplay key={card.id} card={card} small />
+            <CardDisplay key={card.id} card={card} small packId={packId} />
           ))
         ) : player.hand.length > 0 ? (
           showCards ? (
             player.hand.map(card => (
-              <CardDisplay key={card.id} card={card} small />
+              <CardDisplay key={card.id} card={card} small packId={packId} />
             ))
           ) : (
             player.hand.map((_, i) => (
-              <CardDisplay key={i} card={{} as PokerCard} faceDown small />
+              <CardDisplay key={i} card={{} as PokerCard} faceDown small packId={packId} />
             ))
           )
         ) : encryptedCardCount > 0 ? (
           /* Show encrypted cards as face-down */
           Array.from({ length: encryptedCardCount }).map((_, i) => (
-            <CardDisplay key={i} card={{} as PokerCard} faceDown small />
+            <CardDisplay key={i} card={{} as PokerCard} faceDown small packId={packId} />
           ))
         ) : (
           <span style={{ color: '#6a6a8a', fontSize: '12px' }}>No cards</span>
@@ -250,12 +315,16 @@ export const PokerBoard: React.FC<PokerBoardProps> = ({
   playerID,
   onNewHand,
 }) => {
+  // Load card asset pack from IPFS
+  const { packId, isLoading: packLoading, progress: packProgress, error: packError } = useAssetPack(STANDARD_CARDS_SOURCE);
+
   // Debug: Expose full state to window
   useEffect(() => {
     (window as any).__POKER_G__ = G;
     (window as any).__POKER_CTX__ = ctx;
     console.log('[PokerBoard] G.phase:', G.phase, 'ctx.phase:', ctx.phase);
-  }, [G, ctx]);
+    console.log('[PokerBoard] Asset pack:', packId, 'loading:', packLoading, 'progress:', packProgress);
+  }, [G, ctx, packId, packLoading, packProgress]);
 
   const [betAmount, setBetAmount] = useState<number>(G.bigBlindAmount);
   const currentPlayerID = playerID || '0';
@@ -899,7 +968,7 @@ export const PokerBoard: React.FC<PokerBoardProps> = ({
           }}>
             {G.community.length > 0 ? (
               G.community.map(card => (
-                <CardDisplay key={card.id} card={card} />
+                <CardDisplay key={card.id} card={card} packId={packId} />
               ))
             ) : (
               <span style={{ color: '#6a6a8a' }}>Community cards will appear here</span>
@@ -937,6 +1006,7 @@ export const PokerBoard: React.FC<PokerBoardProps> = ({
               showCards={pid === currentPlayerID || G.phase === 'showdown'}
               encryptedCardCount={encryptedCardCount}
               peekedCards={pid === currentPlayerID ? peekedCards : undefined}
+              packId={packId}
             />
           );
         })}

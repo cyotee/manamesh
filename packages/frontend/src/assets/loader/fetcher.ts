@@ -36,6 +36,7 @@ export async function fetchJson(
 
 /**
  * Fetch a file as Blob from an asset pack source.
+ * Note: ipfs-zip sources should use the zip-loader, not this fetcher.
  */
 export async function fetchBlob(
   source: AssetPackSource,
@@ -44,8 +45,11 @@ export async function fetchBlob(
 ): Promise<Blob> {
   if (source.type === 'ipfs') {
     return fetchFromIPFS(source, path, options);
-  } else {
+  } else if (source.type === 'http') {
     return fetchFromHTTP(source, path, options);
+  } else {
+    // ipfs-zip sources should not reach here - they go through zip-loader
+    throw new Error(`Unsupported source type for fetchBlob: ${(source as { type: string }).type}. Use loadZipPack for ipfs-zip sources.`);
   }
 }
 

@@ -8,6 +8,7 @@
 export type {
   IPFSSource,
   HTTPSource,
+  IPFSZipSource,
   AssetPackSource,
   LoadedAssetPack,
   CacheStatus,
@@ -39,3 +40,19 @@ export {
 
 // Fetcher utilities
 export { fetchText, fetchJson, fetchBlob, isSourceReachable } from './fetcher';
+
+// Zip loader
+export {
+  loadZipPack,
+  getZipLoadedPack,
+  unloadZipPack,
+  getAllZipLoadedPacks,
+} from './zip-loader';
+
+// Zip extractor utilities
+export {
+  extractZip,
+  decodeTextEntry,
+  entryToBlob,
+  inferMimeType,
+} from './zip-extractor';

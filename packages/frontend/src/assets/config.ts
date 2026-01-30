@@ -7,10 +7,14 @@
 const CONFIG_STORAGE_KEY = 'manamesh-ipfs-config';
 
 // Default gateway URLs (used as fallback if user config is empty)
+// Ordered by reliability for large files
+// Note: cloudflare-ipfs.com removed due to CORS issues
 export const DEFAULT_GATEWAYS = [
-  'https://ipfs.io/ipfs/',
-  'https://dweb.link/ipfs/',
-  'https://cloudflare-ipfs.com/ipfs/',
+  'https://w3s.link/ipfs/',           // web3.storage - good for large files
+  'https://nftstorage.link/ipfs/',    // nft.storage - reliable
+  'https://gateway.pinata.cloud/ipfs/', // Pinata - good availability
+  'https://ipfs.io/ipfs/',            // Protocol Labs - can be slow
+  'https://dweb.link/ipfs/',          // Protocol Labs alt
 ] as const;
 
 // Configuration interface
@@ -36,10 +40,10 @@ const DEFAULT_CONFIG: IPFSConfig = {
   gateways: [],
   useCustomGatewaysFirst: true,
   includeDefaultGateways: true,
-  gatewayTimeout: 30000,
+  gatewayTimeout: 120000, // 2 minutes - needed for large files (13MB+)
   heliaInitTimeout: 10000,
   heliaFetchTimeout: 30000,
-  preferGateway: false,
+  preferGateway: true, // Prefer gateway by default (Helia has issues with some content types)
 };
 
 // In-memory config cache

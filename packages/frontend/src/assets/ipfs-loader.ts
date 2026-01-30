@@ -35,7 +35,7 @@ export type LoadProgress = {
 
 // Singleton helia instance
 let heliaInstance: Helia | null = null;
-let heliaInitPromise: Promise<Helia> | null = null;
+let heliaInitPromise: Promise<Helia | null> | null = null;
 let heliaFailed = false;
 
 /**
@@ -99,7 +99,9 @@ async function fetchFromHelia(cidString: string, timeout: number): Promise<Blob 
   });
 
   try {
-    const fs = unixfs(helia);
+    // Type assertion needed due to helia version type incompatibility
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const fs = unixfs(helia as any);
     const cid = CID.parse(cidString);
 
     const chunks: Uint8Array[] = [];
@@ -107,7 +109,8 @@ async function fetchFromHelia(cidString: string, timeout: number): Promise<Blob 
       for await (const chunk of fs.cat(cid)) {
         chunks.push(chunk);
       }
-      return new Blob(chunks);
+      // Convert Uint8Array chunks to regular ArrayBuffer views for Blob constructor
+      return new Blob(chunks.map(c => new Uint8Array(c)) as BlobPart[]);
     })();
 
     const result = await Promise.race([fetchPromise, timeoutPromise]);
@@ -135,20 +138,38 @@ async function fetchFromGateway(
 ): Promise<{ blob: Blob; gateway: string } | null> {
   const gateways = getEffectiveGateways();
 
-  for (const gateway of gateways) {
+  // Filter out localhost gateways which may be offline
+  const filteredGateways = gateways.filter(gw => !gw.includes('localhost') && !gw.includes('127.0.0.1'));
+
+  console.log('[IPFS] All configured gateways:', gateways);
+  console.log('[IPFS] Using gateways (excluding localhost):', filteredGateways);
+
+  const gatewaysToUse = filteredGateways.length > 0 ? filteredGateways : gateways;
+
+  for (const gateway of gatewaysToUse) {
     // Create fresh AbortController for each gateway attempt
     // This prevents a timeout on one gateway from blocking subsequent attempts
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
 
     try {
-      const response = await fetch(`${gateway}${cidString}`, {
+      const url = `${gateway}${cidString}`;
+      console.log('[IPFS] Fetching from gateway:', url, 'timeout:', timeout);
+      const response = await fetch(url, {
         signal: controller.signal,
+        headers: {
+          'Accept': 'application/octet-stream, application/zip, */*',
+        },
+        // Follow redirects (default, but explicit)
+        redirect: 'follow',
       });
+
+      console.log('[IPFS] Gateway response:', gateway, response.status, response.statusText);
 
       if (response.ok) {
         clearTimeout(timeoutId);
         const blob = await response.blob();
+        console.log('[IPFS] Successfully loaded from gateway:', gateway, 'size:', blob.size);
         return { blob, gateway };
       }
       // Response not ok, clear timeout and try next gateway
@@ -156,10 +177,12 @@ async function fetchFromGateway(
     } catch (error) {
       // Clear timeout and try next gateway
       clearTimeout(timeoutId);
+      console.warn('[IPFS] Gateway fetch failed:', gateway, error);
       continue;
     }
   }
 
+  console.error('[IPFS] All gateways failed for CID:', cidString);
   return null;
 }
 
@@ -172,6 +195,9 @@ export async function loadAsset(
   options: LoadOptions = {}
 ): Promise<LoadResult> {
   const config = getConfig();
+  console.log('[loadAsset] Starting load for CID:', cid);
+  console.log('[loadAsset] Config:', JSON.stringify(config));
+  console.log('[loadAsset] Options:', JSON.stringify(options));
   const {
     useCache = true,
     preferGateway = config.preferGateway,
@@ -191,8 +217,11 @@ export async function loadAsset(
   let blob: Blob | null = null;
   let source: 'helia' | 'gateway' = 'gateway';
 
+  console.log('[loadAsset] preferGateway:', preferGateway, 'gatewayTimeout:', gatewayTimeout, 'heliaTimeout:', heliaTimeout);
+
   if (preferGateway) {
     // Try gateway first
+    console.log('[loadAsset] Taking GATEWAY-FIRST path');
     const gatewayResult = await fetchFromGateway(cid, gatewayTimeout);
     if (gatewayResult) {
       blob = gatewayResult.blob;
@@ -204,6 +233,7 @@ export async function loadAsset(
     }
   } else {
     // Try helia first
+    console.log('[loadAsset] Taking HELIA-FIRST path');
     blob = await fetchFromHelia(cid, heliaTimeout);
     if (blob) {
       source = 'helia';
