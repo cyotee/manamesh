@@ -39,3 +39,7 @@ coverage/
 
 # Claude
 .claude/
+
+# Foundry
+contracts/out/
+contracts/cache/
