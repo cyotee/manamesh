@@ -6,6 +6,9 @@
         "packages/*",
         "vendor/*"
     ],
+    "resolutions": {
+        "@tanstack/query-core": "^5.50.0"
+    },
     "scripts": {
         "dev:frontend": "yarn workspace @manamesh/frontend dev",
         "dev:backend": "yarn workspace @manamesh/backend dev",

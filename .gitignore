@@ -12,6 +12,9 @@ node_modules/
 dist/
 build/
 
+# Tool/test artifacts
+**/.vite/
+
 # IDE
 .idea/
 .vscode/
