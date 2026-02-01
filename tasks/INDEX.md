@@ -1,16 +1,20 @@
 # Task Index: ManaMesh
 
 **Repo:** MM
-**Last Updated:** 2026-01-28
+**Last Updated:** 2026-01-31
 
 ## Active Tasks
 
 | ID | Title | Status | Dependencies | Worktree |
 |----|-------|--------|--------------|----------|
-| MM-023 | One Piece TCG Game Module | Ready | MM-019, MM-020 | `feature/game-onepiece` |
+| MM-023 | One Piece TCG Game Module | Ready | MM-019, MM-020, MM-029 | `feature/game-onepiece` |
 | MM-024 | MTG Game Module | Ready | MM-019, MM-020 | `feature/game-mtg` |
 | MM-025 | Lorcana Game Module | Ready | MM-019, MM-020 | `feature/game-lorcana` |
 | MM-026 | Riftbound Game Module | Ready | MM-019, MM-020 | `feature/game-riftbound` |
+| MM-033 | One Piece Card Data Sources Research | Ready | - | - |
+| MM-034 | Ethereum Wallet Integration | Ready | MM-029 | - |
+| MM-035 | Bet Settlement & Escrow Vault | Ready | MM-034, MM-036 | - |
+| MM-036 | Foundry Setup | Complete | - | - |
 
 ## Status Legend
 
@@ -27,20 +31,31 @@ All active tasks are ready (dependencies complete):
 
 | ID | Title | Launch Command |
 |----|-------|----------------|
-| MM-023 | One Piece TCG Game Module | `/backlog:launch MM-023` |
+| MM-023 | One Piece TCG Game Module (Rules-Agnostic + Crypto) | `/backlog:launch MM-023` |
 | MM-024 | MTG Game Module | `/backlog:launch MM-024` |
 | MM-025 | Lorcana Game Module | `/backlog:launch MM-025` |
 | MM-026 | Riftbound Game Module | `/backlog:launch MM-026` |
+| MM-033 | One Piece Card Data Sources Research | `/backlog:launch MM-033` |
+| MM-034 | Ethereum Wallet Integration | `/backlog:launch MM-034` |
+| MM-035 | Bet Settlement & Escrow Vault | `/backlog:launch MM-035` |
+| MM-036 | Foundry Setup | `/backlog:launch MM-036` |
 
 ## Dependency Graph
 
 ```
 MM-019 (Complete, archived) ✓
 └── MM-020 (Complete, archived) ✓
-    ├── MM-023 (Ready - One Piece TCG)
     ├── MM-024 (Ready - MTG)
     ├── MM-025 (Ready - Lorcana)
     └── MM-026 (Ready - Riftbound)
+
+MM-029 (Complete, archived) ✓
+├── MM-023 (Ready - One Piece TCG, also depends on MM-019, MM-020)
+└── MM-034 (Ready - Ethereum Wallet Integration)
+    └── MM-035 (Ready - Bet Settlement, also depends on MM-036)
+
+MM-036 (Ready - Foundry Setup, no dependencies)
+└── MM-035 (depends on MM-034 + MM-036)
 
 MM-002 (Complete, archived) ✓
 ├── MM-003 (Complete, archived) ✓
