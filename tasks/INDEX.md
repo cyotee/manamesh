@@ -11,7 +11,7 @@
 | MM-024 | MTG Game Module | Ready | MM-019, MM-020 | `feature/game-mtg` |
 | MM-025 | Lorcana Game Module | Ready | MM-019, MM-020 | `feature/game-lorcana` |
 | MM-026 | Riftbound Game Module | Ready | MM-019, MM-020 | `feature/game-riftbound` |
-| MM-033 | One Piece Card Data Sources Research | Ready | - | - |
+| MM-033 | One Piece Card Data Sources Research | In Progress | - | `feature/onepiece-card-sources` |
 | MM-034 | Ethereum Wallet Integration | Ready | MM-029 | - |
 | MM-035 | Bet Settlement & Escrow Vault | Ready | MM-034, MM-036 | - |
 | MM-036 | Foundry Setup | Complete | - | - |
