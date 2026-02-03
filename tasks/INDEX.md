@@ -1,7 +1,7 @@
 # Task Index: ManaMesh
 
 **Repo:** MM
-**Last Updated:** 2026-01-31
+**Last Updated:** 2026-02-01
 
 ## Active Tasks
 
@@ -13,7 +13,7 @@
 | MM-026 | Riftbound Game Module | Ready | MM-019, MM-020 | `feature/game-riftbound` |
 | MM-033 | One Piece Card Data Sources Research | Complete | - | - |
 | MM-034 | Ethereum Wallet Integration | Complete | MM-029 | - |
-| MM-035 | Bet Settlement & Escrow Vault | Ready | MM-034, MM-036 | - |
+| MM-035 | Bet Settlement & Escrow Vault | In Review | MM-034, MM-036 | - |
 | MM-036 | Foundry Setup | Complete | - | - |
 
 ## Status Legend

@@ -1,0 +1,17 @@
+{
+  "../vendor/boardgame.io": {
+    "rev": "4f3c90df0d891f2e17f2bfafbed1bd4f4b804256"
+  },
+  "../vendor/boardgameIO-p2p": {
+    "rev": "665a1e786d36f84e46a0fcaf9451d5b0a6ca48dc"
+  },
+  "lib/forge-std": {
+    "rev": "4f227ab1b9a9a62f587580145951c7ace5e42569"
+  },
+  "lib/openzeppelin-contracts": {
+    "tag": {
+      "name": "v5.5.0",
+      "rev": "fcbae5394ae8ad52d8e580a3477db99814b9d565"
+    }
+  }
+}

@@ -5,14 +5,15 @@
  * Works client-side without blockchain access.
  */
 
-import { recoverTypedDataAddress, hashTypedData } from 'viem';
-import { MANAMESH_DOMAIN } from './domain';
+import { recoverTypedDataAddress, hashTypedData } from "viem";
+import { MANAMESH_DOMAIN } from "./domain";
+import type { TypedDataDomain } from "viem";
 import {
   getTypesForAction,
   type ActionTypeName,
   type ActionData,
-} from './types';
-import type { SignedAction } from './sign';
+} from "./types";
+import type { SignedAction } from "./sign";
 
 /**
  * Verification result
@@ -42,7 +43,8 @@ export interface VerificationResult {
  * ```
  */
 export async function verifySignedAction<T extends ActionData>(
-  signedAction: SignedAction<T>
+  signedAction: SignedAction<T>,
+  opts?: { domain?: TypedDataDomain },
 ): Promise<VerificationResult> {
   const { actionType, data, signature, signer } = signedAction;
 
@@ -50,7 +52,7 @@ export async function verifySignedAction<T extends ActionData>(
     const types = getTypesForAction(actionType);
 
     const recoveredAddress = await recoverTypedDataAddress({
-      domain: MANAMESH_DOMAIN,
+      domain: opts?.domain ?? MANAMESH_DOMAIN,
       types,
       primaryType: actionType,
       message: data as Record<string, unknown>,
@@ -63,7 +65,7 @@ export async function verifySignedAction<T extends ActionData>(
       isValid,
       recoveredAddress,
       expectedAddress: signer,
-      error: isValid ? undefined : 'Recovered address does not match signer',
+      error: isValid ? undefined : "Recovered address does not match signer",
     };
   } catch (err) {
     return {
@@ -84,26 +86,28 @@ export async function verifyTypedSignature(
   actionType: ActionTypeName,
   data: ActionData,
   signature: `0x${string}`,
-  expectedAddress: `0x${string}`
+  expectedAddress: `0x${string}`,
+  opts?: { domain?: TypedDataDomain },
 ): Promise<VerificationResult> {
   try {
     const types = getTypesForAction(actionType);
 
     const recoveredAddress = await recoverTypedDataAddress({
-      domain: MANAMESH_DOMAIN,
+      domain: opts?.domain ?? MANAMESH_DOMAIN,
       types,
       primaryType: actionType,
       message: data as Record<string, unknown>,
       signature,
     });
 
-    const isValid = recoveredAddress.toLowerCase() === expectedAddress.toLowerCase();
+    const isValid =
+      recoveredAddress.toLowerCase() === expectedAddress.toLowerCase();
 
     return {
       isValid,
       recoveredAddress,
       expectedAddress,
-      error: isValid ? undefined : 'Recovered address does not match expected',
+      error: isValid ? undefined : "Recovered address does not match expected",
     };
   } catch (err) {
     return {
@@ -120,12 +124,13 @@ export async function verifyTypedSignature(
  */
 export function hashTypedAction(
   actionType: ActionTypeName,
-  data: ActionData
+  data: ActionData,
+  opts?: { domain?: TypedDataDomain },
 ): `0x${string}` {
   const types = getTypesForAction(actionType);
 
   return hashTypedData({
-    domain: MANAMESH_DOMAIN,
+    domain: opts?.domain ?? MANAMESH_DOMAIN,
     types,
     primaryType: actionType,
     message: data as Record<string, unknown>,
@@ -137,7 +142,7 @@ export function hashTypedAction(
  * Returns an array of results in the same order as inputs.
  */
 export async function verifySignedActions(
-  signedActions: SignedAction[]
+  signedActions: SignedAction[],
 ): Promise<VerificationResult[]> {
   return Promise.all(signedActions.map(verifySignedAction));
 }
@@ -147,7 +152,7 @@ export async function verifySignedActions(
  * Useful for quick validation before processing.
  */
 export async function areAllActionsValid(
-  signedActions: SignedAction[]
+  signedActions: SignedAction[],
 ): Promise<boolean> {
   const results = await verifySignedActions(signedActions);
   return results.every((r) => r.isValid);
@@ -158,7 +163,7 @@ export async function areAllActionsValid(
  * Returns only the actions with valid signatures.
  */
 export async function filterValidActions<T extends SignedAction>(
-  signedActions: T[]
+  signedActions: T[],
 ): Promise<T[]> {
   const results = await verifySignedActions(signedActions);
   return signedActions.filter((_, i) => results[i].isValid);

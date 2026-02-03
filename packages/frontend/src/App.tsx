@@ -12,6 +12,7 @@ import { GameBoard } from "./components/GameBoard";
 import { GameSelector } from "./components/GameSelector";
 import { PokerBoard } from "./components/PokerBoard";
 import { WarBoard } from "./components/WarBoard";
+import { BattleshipBoard } from "./components/BattleshipBoard";
 import { P2PLobby, type P2PRole } from "./components/P2PLobby";
 import { startP2P, P2PMultiplayer, type JoinCodeConnection } from "./p2p";
 import { GAMES, getGameById, type GameInfo } from "./game/registry";
@@ -19,6 +20,59 @@ import { getBlockchainService, WalletContextProvider } from "./blockchain";
 import { WalletProvider } from "./wallet";
 import type { PokerHandResult } from "./game/modules/poker/types";
 import { createCryptoInitialState } from "./game/modules/poker/crypto";
+
+class AppErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { error: Error | null }
+> {
+  state = { error: null as Error | null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  componentDidCatch(error: Error) {
+    console.error("[ManaMesh] Uncaught render error", error);
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <div
+          style={{
+            padding: 24,
+            maxWidth: 900,
+            margin: "0 auto",
+            fontFamily:
+              "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
+            color: "#e4e4e4",
+          }}
+        >
+          <h1 style={{ fontSize: 18, margin: "0 0 12px" }}>
+            ManaMesh failed to render
+          </h1>
+          <div style={{ opacity: 0.9, marginBottom: 12 }}>
+            Open DevTools Console for full details.
+          </div>
+          <pre
+            style={{
+              whiteSpace: "pre-wrap",
+              background: "rgba(0,0,0,0.35)",
+              border: "1px solid #3a3a5c",
+              borderRadius: 8,
+              padding: 12,
+              overflow: "auto",
+            }}
+          >
+            {String(this.state.error?.stack || this.state.error?.message)}
+          </pre>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
 
 type GameMode = "gameSelect" | "modeSelect" | "local" | "online" | "p2p-game";
 
@@ -137,8 +191,18 @@ const ModeSelect: React.FC<ModeSelectProps> = ({
 function getBoardComponent(
   gameId: string,
   onNewHand?: (handResult: PokerHandResult) => void,
+  p2pConnection?: JoinCodeConnection,
 ) {
   switch (gameId) {
+    case "battleship":
+      // Wrap to inject p2p connection when in P2P mode
+      if (p2pConnection) {
+        const WrappedBattleshipBoard: React.FC<any> = (props) => (
+          <BattleshipBoard {...props} p2pConnection={p2pConnection} />
+        );
+        return WrappedBattleshipBoard;
+      }
+      return BattleshipBoard;
     case "poker":
       // Wrap PokerBoard to inject onNewHand callback
       if (onNewHand) {
@@ -605,6 +669,7 @@ const P2PGame: React.FC<P2PGameProps> = ({
       board: getBoardComponent(
         game.id,
         role === "host" ? handleNewHand : undefined,
+        connection,
       ),
       multiplayer: P2PMultiplayer({
         connection,
@@ -828,16 +893,23 @@ const AppContent: React.FC = () => {
  * demos/tests working without a real extension.
  */
 const App: React.FC = () => {
+  // Helps diagnose "blank page" issues in dev.
+  if (import.meta.env.DEV) {
+    console.log("[ManaMesh] <App /> render");
+  }
+
   return (
-    <WalletProvider>
-      {import.meta.env.DEV ? (
-        <WalletContextProvider>
+    <AppErrorBoundary>
+      <WalletProvider>
+        {import.meta.env.DEV ? (
+          <WalletContextProvider>
+            <AppContent />
+          </WalletContextProvider>
+        ) : (
           <AppContent />
-        </WalletContextProvider>
-      ) : (
-        <AppContent />
-      )}
-    </WalletProvider>
+        )}
+      </WalletProvider>
+    </AppErrorBoundary>
   );
 };
 

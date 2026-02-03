@@ -43,6 +43,9 @@ coverage/
 # Claude
 .claude/
 
+# Local Claude settings
+.claude/settings.local.json
+
 # Foundry
 contracts/out/
 contracts/cache/

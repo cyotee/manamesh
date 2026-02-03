@@ -5,7 +5,7 @@
  * Domain is chain-agnostic to allow cross-chain verification.
  */
 
-import type { TypedDataDomain } from 'viem';
+import type { TypedDataDomain } from "viem";
 
 /**
  * ManaMesh EIP-712 Domain
@@ -14,8 +14,8 @@ import type { TypedDataDomain } from 'viem';
  * This is appropriate for game actions which are P2P and not submitted on-chain.
  */
 export const MANAMESH_DOMAIN: TypedDataDomain = {
-  name: 'ManaMesh',
-  version: '1',
+  name: "ManaMesh",
+  version: "1",
   // chainId is omitted - signatures are chain-agnostic
   // verifyingContract is omitted - no on-chain contract
 };
@@ -24,9 +24,21 @@ export const MANAMESH_DOMAIN: TypedDataDomain = {
  * Create a domain with a specific chain ID (for chain-specific actions)
  */
 export function createChainSpecificDomain(chainId: number): TypedDataDomain {
+  return { ...MANAMESH_DOMAIN, chainId: BigInt(chainId) };
+}
+
+/**
+ * Create an on-chain-verifiable domain (must match OZ EIP712 in GameVault).
+ */
+export function createGameVaultDomain(
+  chainId: number,
+  verifyingContract: `0x${string}`,
+): TypedDataDomain {
   return {
-    ...MANAMESH_DOMAIN,
+    name: "ManaMesh",
+    version: "1",
     chainId: BigInt(chainId),
+    verifyingContract,
   };
 }
 

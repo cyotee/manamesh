@@ -1,7 +1,7 @@
 # Task MM-035: Bet Settlement & Escrow Vault
 
 **Repo:** ManaMesh
-**Status:** Ready
+**Status:** Complete
 **Created:** 2026-01-31
 **Dependencies:** MM-034
 **Worktree:** `feature/bet-settlement-escrow`

@@ -10,9 +10,19 @@
  * - Host processes actions and broadcasts state updates to guest
  */
 
-import type { Game, State, ChatMessage, FilteredMetadata, LogEntry, Ctx } from 'boardgame.io';
-import { INVALID_MOVE } from 'boardgame.io/core';
-import type { JoinCodeConnection, ConnectionState } from './discovery/join-code';
+import type {
+  Game,
+  State,
+  ChatMessage,
+  FilteredMetadata,
+  LogEntry,
+  Ctx,
+} from "boardgame.io";
+import { INVALID_MOVE } from "boardgame.io/core";
+import type {
+  JoinCodeConnection,
+  ConnectionState,
+} from "./discovery/join-code";
 
 /**
  * Simple in-memory storage for browser-side game state
@@ -26,24 +36,30 @@ class BrowserStorage {
   private metadata: any = null;
   private log: LogEntry[] = [];
 
-  async createMatch(matchID: string, opts: {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    initialState: State<any>;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    metadata: any;
-  }): Promise<void> {
+  async createMatch(
+    matchID: string,
+    opts: {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      initialState: State<any>;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      metadata: any;
+    },
+  ): Promise<void> {
     this.state = opts.initialState;
     this.initialState = opts.initialState;
     this.metadata = opts.metadata;
     this.log = [];
   }
 
-  async fetch(matchID: string, opts: {
-    state?: boolean;
-    metadata?: boolean;
-    log?: boolean;
-    initialState?: boolean;
-  }): Promise<{
+  async fetch(
+    matchID: string,
+    opts: {
+      state?: boolean;
+      metadata?: boolean;
+      log?: boolean;
+      initialState?: boolean;
+    },
+  ): Promise<{
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     state?: State<any>;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -71,7 +87,11 @@ class BrowserStorage {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  async setState(matchID: string, state: State<any>, deltalog?: LogEntry[]): Promise<void> {
+  async setState(
+    matchID: string,
+    state: State<any>,
+    deltalog?: LogEntry[],
+  ): Promise<void> {
     this.state = state;
     if (deltalog) {
       this.log = [...this.log, ...deltalog];
@@ -81,14 +101,14 @@ class BrowserStorage {
 
 // Message types sent over the P2P data channel
 export type P2PMessageType =
-  | 'action'      // Guest -> Host: player action
-  | 'sync-req'    // Guest -> Host: request state sync
-  | 'chat'        // Both: chat message
-  | 'update'      // Host -> Guest: state update
-  | 'sync'        // Host -> Guest: full state sync response
-  | 'matchData'   // Host -> Guest: player metadata
-  | 'patch'       // Host -> Guest: incremental state patch
-  | 'error';      // Both: error message
+  | "action" // Guest -> Host: player action
+  | "sync-req" // Guest -> Host: request state sync
+  | "chat" // Both: chat message
+  | "update" // Host -> Guest: state update
+  | "sync" // Host -> Guest: full state sync response
+  | "matchData" // Host -> Guest: player metadata
+  | "patch" // Host -> Guest: incremental state patch
+  | "error"; // Both: error message
 
 export interface P2PMessage {
   type: P2PMessageType;
@@ -96,7 +116,7 @@ export interface P2PMessage {
   args: any[];
 }
 
-export type P2PRole = 'host' | 'guest';
+export type P2PRole = "host" | "guest";
 
 export interface P2PTransportOpts {
   game: Game;
@@ -110,7 +130,7 @@ export interface P2PTransportOpts {
 
 interface TransportDataCallback {
   (data: {
-    type: 'update' | 'sync' | 'matchData' | 'chat' | 'patch';
+    type: "update" | "sync" | "matchData" | "chat" | "patch";
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     args: any[];
   }): void;
@@ -152,7 +172,7 @@ function initializeGameState(game: Game, numPlayers: number): State<any> {
     playOrder: Array.from({ length: numPlayers }, (_, i) => String(i)),
     playOrderPos: 0,
     activePlayers: null,
-    currentPlayer: '0',
+    currentPlayer: "0",
     numMoves: 0,
     turn: 1,
     phase: startingPhase || null,
@@ -177,7 +197,11 @@ function initializeGameState(game: Game, numPlayers: number): State<any> {
  * Checks both top-level moves and phase-specific moves
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function findMove(game: Game, moveType: string, phase: string | null): ((args: any, ...moveArgs: any[]) => any) | null {
+function findMove(
+  game: Game,
+  moveType: string,
+  phase: string | null,
+): ((args: any, ...moveArgs: any[]) => any) | null {
   // Check top-level moves first
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let moveDef = (game.moves as any)?.[moveType];
@@ -194,10 +218,10 @@ function findMove(game: Game, moveType: string, phase: string | null): ((args: a
   }
 
   // Handle both direct function and { move: fn } formats
-  if (typeof moveDef === 'function') {
+  if (typeof moveDef === "function") {
     return moveDef;
   }
-  if (typeof moveDef === 'object' && typeof moveDef.move === 'function') {
+  if (typeof moveDef === "object" && typeof moveDef.move === "function") {
     return moveDef.move;
   }
 
@@ -209,10 +233,14 @@ function findMove(game: Game, moveType: string, phase: string | null): ((args: a
  * This is a simplified game reducer
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function applyAction(game: Game, state: State<any>, action: any): State<any> | typeof INVALID_MOVE {
+function applyAction(
+  game: Game,
+  state: State<any>,
+  action: any,
+): State<any> | typeof INVALID_MOVE {
   const { type, playerID, payload } = action;
 
-  if (type !== 'MAKE_MOVE') {
+  if (type !== "MAKE_MOVE") {
     // We only handle MAKE_MOVE actions for now
     return INVALID_MOVE;
   }
@@ -221,7 +249,12 @@ function applyAction(game: Game, state: State<any>, action: any): State<any> | t
   const move = findMove(game, moveType, state.ctx.phase);
 
   if (!move) {
-    console.log('[applyAction] Move not found:', moveType, 'phase:', state.ctx.phase);
+    console.log(
+      "[applyAction] Move not found:",
+      moveType,
+      "phase:",
+      state.ctx.phase,
+    );
     return INVALID_MOVE;
   }
 
@@ -237,11 +270,11 @@ function applyAction(game: Game, state: State<any>, action: any): State<any> | t
   // Create events object for moves to use
   const events = {
     endPhase: () => {
-      console.log('[applyAction] endPhase called');
+      console.log("[applyAction] endPhase called");
       phaseEnded = true;
     },
     endTurn: () => {
-      console.log('[applyAction] endTurn called');
+      console.log("[applyAction] endTurn called");
       turnEnded = true;
     },
   };
@@ -265,10 +298,16 @@ function applyAction(game: Game, state: State<any>, action: any): State<any> | t
     const currentPhase = ctx.phase;
     const phaseConfig = game.phases[currentPhase];
     if (phaseConfig?.next) {
-      const nextPhase = typeof phaseConfig.next === 'function'
-        ? phaseConfig.next({ G, ctx })
-        : phaseConfig.next;
-      console.log('[applyAction] Transitioning from phase', currentPhase, 'to', nextPhase);
+      const nextPhase =
+        typeof phaseConfig.next === "function"
+          ? phaseConfig.next({ G, ctx })
+          : phaseConfig.next;
+      console.log(
+        "[applyAction] Transitioning from phase",
+        currentPhase,
+        "to",
+        nextPhase,
+      );
       ctx = { ...ctx, phase: nextPhase };
     }
   }
@@ -279,10 +318,14 @@ function applyAction(game: Game, state: State<any>, action: any): State<any> | t
     if (phaseConfig?.endIf) {
       const shouldEnd = phaseConfig.endIf({ G, ctx });
       if (shouldEnd && phaseConfig.next) {
-        const nextPhase = typeof phaseConfig.next === 'function'
-          ? phaseConfig.next({ G, ctx })
-          : phaseConfig.next;
-        console.log('[applyAction] Phase endIf triggered, transitioning to', nextPhase);
+        const nextPhase =
+          typeof phaseConfig.next === "function"
+            ? phaseConfig.next({ G, ctx })
+            : phaseConfig.next;
+        console.log(
+          "[applyAction] Phase endIf triggered, transitioning to",
+          nextPhase,
+        );
         ctx = { ...ctx, phase: nextPhase };
       }
     }
@@ -290,7 +333,8 @@ function applyAction(game: Game, state: State<any>, action: any): State<any> | t
 
   // Check for end turn
   const numMoves = ctx.numMoves + 1;
-  const shouldEndTurn = turnEnded || (game.turn?.maxMoves && numMoves >= game.turn.maxMoves);
+  const shouldEndTurn =
+    turnEnded || (game.turn?.maxMoves && numMoves >= game.turn.maxMoves);
 
   let newCtx = { ...ctx, numMoves };
 
@@ -348,7 +392,7 @@ class P2PMaster {
     await this.db.createMatch(this.matchID, {
       initialState,
       metadata: {
-        gameName: this.game.name || 'unknown',
+        gameName: this.game.name || "unknown",
         players: this.createInitialPlayers(),
         createdAt: Date.now(),
         updatedAt: Date.now(),
@@ -356,7 +400,7 @@ class P2PMaster {
     });
 
     this._isInitialized = true;
-    console.log('[P2PMaster] Game initialized with state:', initialState);
+    console.log("[P2PMaster] Game initialized with state:", initialState);
   }
 
   async waitForInit(): Promise<void> {
@@ -367,7 +411,10 @@ class P2PMaster {
     return this._isInitialized;
   }
 
-  private createInitialPlayers(): Record<number, { id: number; name?: string }> {
+  private createInitialPlayers(): Record<
+    number,
+    { id: number; name?: string }
+  > {
     const players: Record<number, { id: number; name?: string }> = {};
     for (let i = 0; i < this.numPlayers; i++) {
       players[i] = { id: i };
@@ -390,31 +437,38 @@ class P2PMaster {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  async onUpdate(action: any, stateID: number, matchID: string, playerID: string): Promise<void | { error: string }> {
+  async onUpdate(
+    action: any,
+    stateID: number,
+    matchID: string,
+    playerID: string,
+  ): Promise<void | { error: string }> {
     // Wait for initialization to complete
     await this.initialized;
 
     if (matchID !== this.matchID) {
-      return { error: 'Match ID mismatch' };
+      return { error: "Match ID mismatch" };
     }
 
     const { state } = await this.db.fetch(matchID, { state: true });
 
     if (!state) {
-      return { error: 'Match not found' };
+      return { error: "Match not found" };
     }
 
     // Check state ID matches (prevents stale updates)
     if (state._stateID !== stateID) {
-      console.log(`[P2PMaster] Stale state: expected ${state._stateID}, got ${stateID}`);
-      return { error: 'Stale state' };
+      console.log(
+        `[P2PMaster] Stale state: expected ${state._stateID}, got ${stateID}`,
+      );
+      return { error: "Stale state" };
     }
 
     // Apply the action
     const newState = applyAction(this.game, state, action);
 
     if (newState === INVALID_MOVE) {
-      return { error: 'Invalid move' };
+      return { error: "Invalid move" };
     }
 
     // Save the new state
@@ -422,48 +476,70 @@ class P2PMaster {
 
     // Broadcast the update to all clients
     this.notifyAll({
-      type: 'update',
+      type: "update",
       args: [matchID, newState, []],
     });
   }
 
-  async onSync(matchID: string, playerID: string | null, credentials?: string, numPlayers = 2): Promise<void | { error: string }> {
+  async onSync(
+    matchID: string,
+    playerID: string | null,
+    credentials?: string,
+    numPlayers = 2,
+  ): Promise<void | { error: string }> {
     // Wait for initialization to complete
     await this.initialized;
 
     if (matchID !== this.matchID) {
-      return { error: 'Match ID mismatch' };
+      return { error: "Match ID mismatch" };
     }
 
-    const { state, initialState, metadata, log } = await this.db.fetch(matchID, { state: true, initialState: true, metadata: true, log: true });
-    console.log('[P2PMaster] onSync - state:', state ? 'present' : 'null', 'initialState:', initialState ? 'present' : 'null', 'for player:', playerID);
+    const { state, initialState, metadata, log } = await this.db.fetch(
+      matchID,
+      { state: true, initialState: true, metadata: true, log: true },
+    );
+    console.log(
+      "[P2PMaster] onSync - state:",
+      state ? "present" : "null",
+      "initialState:",
+      initialState ? "present" : "null",
+      "for player:",
+      playerID,
+    );
 
     if (!state) {
-      return { error: 'Match not found' };
+      return { error: "Match not found" };
     }
 
     const filteredMetadata = this.filterMetadata(metadata);
 
     // Send sync response to the requesting player
     // Include initialState as required by boardgame.io's SyncInfo interface
-    const callback = this.subscribers.get(playerID || 'spectator');
+    const callback = this.subscribers.get(playerID || "spectator");
     if (callback) {
       callback({
-        type: 'sync',
-        args: [matchID, {
-          state,
-          initialState: initialState || state,
-          filteredMetadata,
-          log: log || [],
-        }],
+        type: "sync",
+        args: [
+          matchID,
+          {
+            state,
+            initialState: initialState || state,
+            filteredMetadata,
+            log: log || [],
+          },
+        ],
       });
     }
   }
 
-  async onChatMessage(matchID: string, chatMessage: ChatMessage, credentials?: string): Promise<void> {
+  async onChatMessage(
+    matchID: string,
+    chatMessage: ChatMessage,
+    credentials?: string,
+  ): Promise<void> {
     // Broadcast chat to all subscribers
     this.notifyAll({
-      type: 'chat',
+      type: "chat",
       args: [matchID, chatMessage],
     });
   }
@@ -475,11 +551,13 @@ class P2PMaster {
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return Object.entries(metadata.players).map(([id, player]: [string, any]) => ({
-      id: parseInt(id, 10),
-      name: player?.name,
-      isConnected: this.subscribers.has(id),
-    }));
+    return Object.entries(metadata.players).map(
+      ([id, player]: [string, any]) => ({
+        id: parseInt(id, 10),
+        name: player?.name,
+        isConnected: this.subscribers.has(id),
+      }),
+    );
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -519,12 +597,14 @@ export class P2PTransport {
   private game: Game;
   private transportDataCallback: TransportDataCallback | null = null;
 
-  constructor(opts: P2PTransportOpts & { transportDataCallback?: TransportDataCallback }) {
+  constructor(
+    opts: P2PTransportOpts & { transportDataCallback?: TransportDataCallback },
+  ) {
     this.connection = opts.connection;
     this.role = opts.role;
-    this.gameName = opts.game.name || 'unknown';
+    this.gameName = opts.game.name || "unknown";
     this.playerID = opts.playerID || null;
-    this.matchID = opts.matchID || 'default';
+    this.matchID = opts.matchID || "default";
     this.credentials = opts.credentials;
     this.numPlayers = opts.numPlayers || 2;
     this.game = opts.game;
@@ -543,17 +623,29 @@ export class P2PTransport {
   private setConnectionStatus(connected: boolean): void {
     if (this._isConnected !== connected) {
       this._isConnected = connected;
-      this.connectionStatusCallbacks.forEach(fn => fn());
+      this.connectionStatusCallbacks.forEach((fn) => fn());
     }
   }
 
   private notifyClient(data: P2PMessage): void {
-    console.log('[P2PTransport] notifyClient called with type:', data.type, 'callback:', this.transportDataCallback ? 'present' : 'null');
+    console.log(
+      "[P2PTransport] notifyClient called with type:",
+      data.type,
+      "callback:",
+      this.transportDataCallback ? "present" : "null",
+    );
     if (this.transportDataCallback) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      this.transportDataCallback(data as { type: 'update' | 'sync' | 'matchData' | 'chat' | 'patch'; args: any[] });
+      this.transportDataCallback(
+        data as {
+          type: "update" | "sync" | "matchData" | "chat" | "patch";
+          args: any[];
+        },
+      );
     } else {
-      console.warn('[P2PTransport] transportDataCallback is null, cannot notify client');
+      console.warn(
+        "[P2PTransport] transportDataCallback is null, cannot notify client",
+      );
     }
   }
 
@@ -561,11 +653,15 @@ export class P2PTransport {
     // Set up message handler for the P2P connection
     this.setupMessageHandler();
 
-    if (this.role === 'host') {
+    // Reflect current connection state immediately.
+    // Host initialization is async; connectivity should not depend on it.
+    this.setConnectionStatus(this.connection.isConnected());
+
+    if (this.role === "host") {
       // connectAsHost is async, but connect() is called synchronously by boardgame.io
       // The async initialization will complete and trigger a sync
-      this.connectAsHost().catch(err => {
-        console.error('[P2PTransport] Failed to connect as host:', err);
+      this.connectAsHost().catch((err) => {
+        console.error("[P2PTransport] Failed to connect as host:", err);
       });
     } else {
       this.connectAsGuest();
@@ -577,7 +673,7 @@ export class P2PTransport {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const events = (this.connection as any).events;
     if (!events) {
-      console.error('[P2PTransport] Cannot access connection events');
+      console.error("[P2PTransport] Cannot access connection events");
       return;
     }
 
@@ -587,7 +683,7 @@ export class P2PTransport {
         const message: P2PMessage = JSON.parse(data);
         this.handleMessage(message);
       } catch (e) {
-        console.error('[P2PTransport] Failed to parse message:', e);
+        console.error("[P2PTransport] Failed to parse message:", e);
       }
       originalOnMessage?.(data);
     };
@@ -601,16 +697,16 @@ export class P2PTransport {
   }
 
   private handleConnectionStateChange(state: ConnectionState): void {
-    console.log('[P2PTransport] Connection state:', state);
+    console.log("[P2PTransport] Connection state:", state);
 
     switch (state) {
-      case 'connected':
+      case "connected":
         this.setConnectionStatus(true);
         this.reconnectAttempts = 0;
         this.flushMessageBuffer();
         break;
-      case 'disconnected':
-      case 'failed':
+      case "disconnected":
+      case "failed":
         this.setConnectionStatus(false);
         this.attemptReconnect();
         break;
@@ -618,29 +714,29 @@ export class P2PTransport {
   }
 
   private async connectAsHost(): Promise<void> {
-    console.log('[P2PTransport] Connecting as host');
+    console.log("[P2PTransport] Connecting as host");
 
     // Create the master for the host
     this.master = new P2PMaster(this.game, this.matchID, this.numPlayers);
 
     // Wait for the master to initialize the game state
     await this.master.waitForInit();
-    console.log('[P2PTransport] Master initialized');
+    console.log("[P2PTransport] Master initialized");
 
     // Subscribe the host's local client
-    this.master.subscribe(this.playerID || '0', (data) => {
-      console.log('[P2PTransport] Host received data:', data.type);
+    this.master.subscribe(this.playerID || "0", (data) => {
+      console.log("[P2PTransport] Host received data:", data.type);
       this.notifyClient(data);
     });
 
     // Subscribe guest player '1' proactively and send them state updates
     // This ensures the guest receives updates even if their sync-req was missed
-    this.master.subscribe('1', (data) => {
-      console.log('[P2PTransport] Sending to guest:', data.type);
+    this.master.subscribe("1", (data) => {
+      console.log("[P2PTransport] Sending to guest:", data.type);
       this.sendToGuest(data);
     });
     // Also subscribe 'remote' key for broadcasts
-    this.master.subscribe('remote', (data) => {
+    this.master.subscribe("remote", (data) => {
       this.sendToGuest(data);
     });
 
@@ -653,24 +749,27 @@ export class P2PTransport {
     // This handles the case where guest's sync-req was received before our handler was ready
     setTimeout(() => {
       if (this.master && this.connection.isConnected()) {
-        console.log('[P2PTransport] Proactively syncing guest');
-        this.master.onSync(this.matchID, '1', undefined, this.numPlayers);
+        console.log("[P2PTransport] Proactively syncing guest");
+        this.master.onSync(this.matchID, "1", undefined, this.numPlayers);
       }
     }, 100);
   }
 
   private connectAsGuest(): void {
-    console.log('[P2PTransport] Connecting as guest');
+    console.log("[P2PTransport] Connecting as guest");
 
     if (this.connection.isConnected()) {
       this.setConnectionStatus(true);
       // Request sync from host
-      this.sendToHost({ type: 'sync-req', args: [this.matchID, this.playerID, this.credentials, this.numPlayers] });
+      this.sendToHost({
+        type: "sync-req",
+        args: [this.matchID, this.playerID, this.credentials, this.numPlayers],
+      });
     }
   }
 
   private handleMessage(message: P2PMessage): void {
-    if (this.role === 'host') {
+    if (this.role === "host") {
       this.handleHostMessage(message);
     } else {
       this.handleGuestMessage(message);
@@ -681,26 +780,43 @@ export class P2PTransport {
     if (!this.master) return;
 
     switch (message.type) {
-      case 'action':
-        const [action, stateID, matchID, playerID] = message.args;
-        this.master.onUpdate(action, stateID, matchID, playerID).then(result => {
-          if (result?.error) {
-            this.sendToGuest({ type: 'error', args: [result.error] });
-          }
-        });
+      case "action":
+        let [action, stateID, matchID, playerID] = message.args;
+
+        // If the action doesn't include a playerID, stitch it in from the
+        // transport-level playerID provided alongside the message.
+        if (
+          action &&
+          (action.playerID === undefined || action.playerID === null)
+        ) {
+          action = { ...action, playerID };
+        }
+        this.master
+          .onUpdate(action, stateID, matchID, playerID)
+          .then((result) => {
+            if (result?.error) {
+              this.sendToGuest({ type: "error", args: [result.error] });
+            }
+          });
         break;
 
-      case 'sync-req':
-        const [syncMatchID, syncPlayerID, syncCredentials, syncNumPlayers] = message.args;
+      case "sync-req":
+        const [syncMatchID, syncPlayerID, syncCredentials, syncNumPlayers] =
+          message.args;
         if (!this.master) return;
 
         // Guest is already subscribed in connectAsHost, just handle the sync request
-        const guestId = syncPlayerID || '1';
-        console.log('[P2PTransport] Received sync-req from guest:', guestId);
-        this.master.onSync(syncMatchID, guestId, syncCredentials, syncNumPlayers);
+        const guestId = syncPlayerID || "1";
+        console.log("[P2PTransport] Received sync-req from guest:", guestId);
+        this.master.onSync(
+          syncMatchID,
+          guestId,
+          syncCredentials,
+          syncNumPlayers,
+        );
         break;
 
-      case 'chat':
+      case "chat":
         const [chatMatchID, chatMessage] = message.args;
         this.master.onChatMessage(chatMatchID, chatMessage, this.credentials);
         break;
@@ -710,16 +826,16 @@ export class P2PTransport {
   private handleGuestMessage(message: P2PMessage): void {
     // Guest receives state updates and syncs from host
     switch (message.type) {
-      case 'update':
-      case 'sync':
-      case 'matchData':
-      case 'chat':
-      case 'patch':
+      case "update":
+      case "sync":
+      case "matchData":
+      case "chat":
+      case "patch":
         this.notifyClient(message);
         break;
 
-      case 'error':
-        console.error('[P2PTransport] Host error:', message.args[0]);
+      case "error":
+        console.error("[P2PTransport] Host error:", message.args[0]);
         break;
     }
   }
@@ -734,7 +850,7 @@ export class P2PTransport {
 
   private send(message: P2PMessage): void {
     if (!this.connection.isConnected()) {
-      console.log('[P2PTransport] Buffering message while disconnected');
+      console.log("[P2PTransport] Buffering message while disconnected");
       this.messageBuffer.push(message);
       return;
     }
@@ -742,7 +858,7 @@ export class P2PTransport {
     try {
       this.connection.send(JSON.stringify(message));
     } catch (e) {
-      console.error('[P2PTransport] Failed to send message:', e);
+      console.error("[P2PTransport] Failed to send message:", e);
       this.messageBuffer.push(message);
     }
   }
@@ -750,7 +866,9 @@ export class P2PTransport {
   private flushMessageBuffer(): void {
     if (this.messageBuffer.length === 0) return;
 
-    console.log(`[P2PTransport] Flushing ${this.messageBuffer.length} buffered messages`);
+    console.log(
+      `[P2PTransport] Flushing ${this.messageBuffer.length} buffered messages`,
+    );
     const messages = [...this.messageBuffer];
     this.messageBuffer = [];
 
@@ -774,27 +892,41 @@ export class P2PTransport {
    */
   private attemptReconnect(): void {
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-      console.error('[P2PTransport] Max reconnect attempts reached - connection lost');
-      console.log('[P2PTransport] User should re-exchange join codes to reconnect');
+      console.error(
+        "[P2PTransport] Max reconnect attempts reached - connection lost",
+      );
+      console.log(
+        "[P2PTransport] User should re-exchange join codes to reconnect",
+      );
       return;
     }
 
     this.reconnectAttempts++;
     const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
 
-    console.log(`[P2PTransport] Waiting for connection recovery (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts}) in ${delay}ms`);
+    console.log(
+      `[P2PTransport] Waiting for connection recovery (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts}) in ${delay}ms`,
+    );
 
     this.reconnectTimeout = setTimeout(() => {
       // Check if WebRTC connection has recovered on its own
       if (this.connection.isConnected()) {
-        console.log('[P2PTransport] Connection recovered');
+        console.log("[P2PTransport] Connection recovered");
         this.setConnectionStatus(true);
         this.reconnectAttempts = 0;
         this.flushMessageBuffer();
 
         // Guest should re-sync to get latest state after reconnect
-        if (this.role === 'guest') {
-          this.sendToHost({ type: 'sync-req', args: [this.matchID, this.playerID, this.credentials, this.numPlayers] });
+        if (this.role === "guest") {
+          this.sendToHost({
+            type: "sync-req",
+            args: [
+              this.matchID,
+              this.playerID,
+              this.credentials,
+              this.numPlayers,
+            ],
+          });
         }
       } else {
         // Still disconnected, try again
@@ -804,7 +936,7 @@ export class P2PTransport {
   }
 
   disconnect(): void {
-    console.log('[P2PTransport] Disconnecting');
+    console.log("[P2PTransport] Disconnecting");
 
     if (this.reconnectTimeout) {
       clearTimeout(this.reconnectTimeout);
@@ -812,10 +944,10 @@ export class P2PTransport {
     }
 
     if (this.master) {
-      this.master.unsubscribe(this.playerID || '0');
+      this.master.unsubscribe(this.playerID || "0");
       // Unsubscribe any remote players (guest playerID and 'remote' key)
-      this.master.unsubscribe('1');
-      this.master.unsubscribe('remote');
+      this.master.unsubscribe("1");
+      this.master.unsubscribe("remote");
       this.master = null;
     }
 
@@ -825,20 +957,32 @@ export class P2PTransport {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   sendAction(state: State<any>, action: any): void {
-    console.log('[P2PTransport] sendAction called:', action.type, 'state:', state ? `stateID=${state._stateID}` : 'null');
-    if (this.role === 'host' && this.master) {
+    // Ensure actions carry a playerID. Some clients/versions omit it.
+    if (action && (action.playerID === undefined || action.playerID === null)) {
+      action = { ...action, playerID: this.playerID };
+    }
+
+    console.log(
+      "[P2PTransport] sendAction called:",
+      action.type,
+      "state:",
+      state ? `stateID=${state._stateID}` : "null",
+    );
+    if (this.role === "host" && this.master) {
       // Host processes action locally
-      this.master.onUpdate(action, state._stateID, this.matchID, this.playerID || '0').then(result => {
-        if (result?.error) {
-          console.error('[P2PTransport] Action failed:', result.error);
-        } else {
-          console.log('[P2PTransport] Action processed successfully');
-        }
-      });
+      this.master
+        .onUpdate(action, state._stateID, this.matchID, this.playerID || "0")
+        .then((result) => {
+          if (result?.error) {
+            console.error("[P2PTransport] Action failed:", result.error);
+          } else {
+            console.log("[P2PTransport] Action processed successfully");
+          }
+        });
     } else {
       // Guest sends action to host
       this.sendToHost({
-        type: 'action',
+        type: "action",
         args: [action, state._stateID, this.matchID, this.playerID],
       });
     }
@@ -846,11 +990,11 @@ export class P2PTransport {
 
   sendChatMessage(matchID: string, chatMessage: ChatMessage): void {
     const message: P2PMessage = {
-      type: 'chat',
+      type: "chat",
       args: [matchID, chatMessage],
     };
 
-    if (this.role === 'host' && this.master) {
+    if (this.role === "host" && this.master) {
       this.master.onChatMessage(matchID, chatMessage, this.credentials);
     } else {
       this.sendToHost(message);
@@ -858,14 +1002,21 @@ export class P2PTransport {
   }
 
   requestSync(): void {
-    console.log('[P2PTransport] requestSync called, role:', this.role, 'master:', this.master ? 'present' : 'null');
-    if (this.role === 'host' && this.master) {
-      this.master.onSync(this.matchID, this.playerID, this.credentials, this.numPlayers).then(() => {
-        console.log('[P2PTransport] Host sync complete');
-      });
+    console.log(
+      "[P2PTransport] requestSync called, role:",
+      this.role,
+      "master:",
+      this.master ? "present" : "null",
+    );
+    if (this.role === "host" && this.master) {
+      this.master
+        .onSync(this.matchID, this.playerID, this.credentials, this.numPlayers)
+        .then(() => {
+          console.log("[P2PTransport] Host sync complete");
+        });
     } else {
       this.sendToHost({
-        type: 'sync-req',
+        type: "sync-req",
         args: [this.matchID, this.playerID, this.credentials, this.numPlayers],
       });
     }
@@ -888,9 +1039,12 @@ export class P2PTransport {
  * Factory function to create a P2P multiplayer configuration
  * This is the function you pass to boardgame.io Client's multiplayer option
  */
-export function P2PMultiplayer(opts: Omit<P2PTransportOpts, 'game'>) {
+export function P2PMultiplayer(opts: Omit<P2PTransportOpts, "game">) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return (transportOpts: { game: Game; transportDataCallback: TransportDataCallback }) => {
+  return (transportOpts: {
+    game: Game;
+    transportDataCallback: TransportDataCallback;
+  }) => {
     return new P2PTransport({
       ...opts,
       game: transportOpts.game,

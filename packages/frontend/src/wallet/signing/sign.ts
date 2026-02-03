@@ -5,10 +5,11 @@
  * Supports both wagmi hooks and standalone signing.
  */
 
-import { useSignTypedData, useAccount } from "wagmi";
+import { useSignTypedData, useAccount, useChainId } from "wagmi";
 import { useCallback, useState } from "react";
-import { toHex, hexToBytes, keccak256 } from "viem";
-import { MANAMESH_DOMAIN, createChainSpecificDomain } from "./domain";
+import { toHex, hexToBytes, keccak256, encodeAbiParameters } from "viem";
+import type { TypedDataDomain } from "viem";
+import { MANAMESH_DOMAIN, createGameVaultDomain } from "./domain";
 import { walletDebug } from "../debug";
 import {
   getTypesForAction,
@@ -19,6 +20,11 @@ import {
   type RevealCardData,
   type SubmitResultData,
   type GameActionData,
+  type BetData,
+  type HandResultData,
+  type FoldAuthData,
+  type AbandonmentData,
+  BetAction,
 } from "./types";
 
 /**
@@ -45,6 +51,7 @@ export interface UseSignActionReturn {
   signAction: <T extends ActionData>(
     actionType: ActionTypeName,
     data: T,
+    opts?: { domain?: TypedDataDomain },
   ) => Promise<SignedAction<T>>;
   /** Whether signing is in progress */
   isSigning: boolean;
@@ -81,6 +88,7 @@ export function useSignAction(): UseSignActionReturn {
     async <T extends ActionData>(
       actionType: ActionTypeName,
       data: T,
+      opts?: { domain?: TypedDataDomain },
     ): Promise<SignedAction<T>> => {
       if (!address) {
         throw new Error("Wallet not connected");
@@ -93,7 +101,7 @@ export function useSignAction(): UseSignActionReturn {
         const types = getTypesForAction(actionType);
 
         const signature = await signTypedDataAsync({
-          domain: MANAMESH_DOMAIN,
+          domain: opts?.domain ?? MANAMESH_DOMAIN,
           types,
           primaryType: actionType,
           message: data as Record<string, unknown>,
@@ -126,6 +134,28 @@ export function useSignAction(): UseSignActionReturn {
     isSigning,
     error,
   };
+}
+
+/**
+ * Hook to sign actions intended for on-chain verification by GameVault.
+ * Domain includes chainId + verifyingContract.
+ */
+export function useSignGameVaultAction(vaultAddress: `0x${string}`) {
+  const chainId = useChainId();
+  const { signAction, isSigning, error } = useSignAction();
+
+  const signVaultAction = useCallback(
+    async <T extends ActionData>(
+      actionType: ActionTypeName,
+      data: T,
+    ): Promise<SignedAction<T>> => {
+      const domain = createGameVaultDomain(chainId, vaultAddress);
+      return signAction(actionType, data, { domain });
+    },
+    [chainId, vaultAddress, signAction],
+  );
+
+  return { signVaultAction, isSigning, error };
 }
 
 // ============ Convenience hooks for specific action types ============
@@ -194,6 +224,72 @@ export function useSignSubmitResult() {
   );
 
   return { signSubmitResult, isSigning, error };
+}
+
+// ============ Settlement Signing Hooks ============
+
+/**
+ * Hook to sign Bet actions (for off-chain betting)
+ */
+export function useSignBet() {
+  const { signAction, isSigning, error } = useSignAction();
+
+  const signBet = useCallback(
+    async (data: BetData): Promise<SignedAction<BetData>> => {
+      return signAction("Bet", data);
+    },
+    [signAction],
+  );
+
+  return { signBet, isSigning, error };
+}
+
+/**
+ * Hook to sign HandResult actions (for settlement)
+ */
+export function useSignHandResult() {
+  const { signAction, isSigning, error } = useSignAction();
+
+  const signHandResult = useCallback(
+    async (data: HandResultData): Promise<SignedAction<HandResultData>> => {
+      return signAction("HandResult", data);
+    },
+    [signAction],
+  );
+
+  return { signHandResult, isSigning, error };
+}
+
+/**
+ * Hook to sign FoldAuth actions (for authorizing settlement without folded player)
+ */
+export function useSignFoldAuth() {
+  const { signAction, isSigning, error } = useSignAction();
+
+  const signFoldAuth = useCallback(
+    async (data: FoldAuthData): Promise<SignedAction<FoldAuthData>> => {
+      return signAction("FoldAuth", data);
+    },
+    [signAction],
+  );
+
+  return { signFoldAuth, isSigning, error };
+}
+
+/**
+ * Hook to sign Abandonment claims
+ */
+export function useSignAbandonment() {
+  const { signAction, isSigning, error } = useSignAction();
+
+  const signAbandonment = useCallback(
+    async (data: AbandonmentData): Promise<SignedAction<AbandonmentData>> => {
+      return signAction("Abandonment", data);
+    },
+    [signAction],
+  );
+
+  return { signAbandonment, isSigning, error };
 }
 
 // ============ Utility functions ============
@@ -280,4 +376,120 @@ export function createSubmitResultData(
       : `0x${payouts}`) as `0x${string}`,
     timestamp: BigInt(Date.now()),
   };
+}
+
+// ============ Settlement Data Creation Functions ============
+
+/**
+ * Create a Bet with proper chain linking
+ */
+export function createBetData(
+  handId: string,
+  betIndex: number,
+  action: BetAction,
+  amount: bigint,
+  previousBetHash: string = "0x0000000000000000000000000000000000000000000000000000000000000000",
+): BetData {
+  return {
+    handId: (handId.startsWith("0x") ? handId : `0x${handId}`) as `0x${string}`,
+    betIndex: BigInt(betIndex),
+    action,
+    amount,
+    previousBetHash: (previousBetHash.startsWith("0x")
+      ? previousBetHash
+      : `0x${previousBetHash}`) as `0x${string}`,
+  };
+}
+
+/**
+ * Create a HandResult for settlement
+ */
+export function createHandResultData(
+  gameId: string,
+  handId: string,
+  winner: string,
+  potAmount: bigint,
+  finalBetHash: string,
+): HandResultData {
+  return {
+    gameId: (gameId.startsWith("0x") ? gameId : `0x${gameId}`) as `0x${string}`,
+    handId: (handId.startsWith("0x") ? handId : `0x${handId}`) as `0x${string}`,
+    winner: winner as `0x${string}`,
+    potAmount,
+    finalBetHash: (finalBetHash.startsWith("0x")
+      ? finalBetHash
+      : `0x${finalBetHash}`) as `0x${string}`,
+  };
+}
+
+/**
+ * Create a FoldAuth to authorize settlement without folded player
+ */
+export function createFoldAuthData(
+  handId: string,
+  foldingPlayer: string,
+  authorizedSettlers: string[],
+): FoldAuthData {
+  return {
+    handId: (handId.startsWith("0x") ? handId : `0x${handId}`) as `0x${string}`,
+    foldingPlayer: foldingPlayer as `0x${string}`,
+    authorizedSettlers: authorizedSettlers as `0x${string}`[],
+  };
+}
+
+/**
+ * Create an Abandonment claim
+ */
+export function createAbandonmentData(
+  gameId: string,
+  handId: string,
+  abandonedPlayer: string,
+  abandonedAt: number,
+  splitRecipients: string[],
+  splitAmounts: bigint[],
+): AbandonmentData {
+  return {
+    gameId: (gameId.startsWith("0x") ? gameId : `0x${gameId}`) as `0x${string}`,
+    handId: (handId.startsWith("0x") ? handId : `0x${handId}`) as `0x${string}`,
+    abandonedPlayer: abandonedPlayer as `0x${string}`,
+    abandonedAt: BigInt(abandonedAt),
+    splitRecipients: splitRecipients as `0x${string}`[],
+    splitAmounts,
+  };
+}
+
+/**
+ * Compute the hash of a bet (for chain linking)
+ * This matches the Solidity SignatureVerifier.hashBet() function
+ */
+export function hashBet(bet: BetData): `0x${string}` {
+  // Matches contracts/src/libraries/SignatureVerifier.sol:hashBet
+  const BET_TYPEHASH = keccak256(
+    toHex(
+      new TextEncoder().encode(
+        "Bet(bytes32 handId,uint256 betIndex,uint8 action,uint256 amount,bytes32 previousBetHash)",
+      ),
+    ),
+  );
+
+  const encoded = encodeAbiParameters(
+    [
+      { type: "bytes32" },
+      { type: "bytes32" },
+      { type: "uint256" },
+      { type: "uint8" },
+      { type: "uint256" },
+      { type: "bytes32" },
+    ],
+    [
+      BET_TYPEHASH,
+      bet.handId,
+      bet.betIndex,
+      bet.action,
+      bet.amount,
+      bet.previousBetHash,
+    ],
+  );
+
+  return keccak256(encoded);
 }

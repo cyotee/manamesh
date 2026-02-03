@@ -32,6 +32,7 @@ Here is a compiled list of the projects I referenced earlier that use some form 
   Format specification: https://minecraft.wiki/w/Resource_pack#Contents
 
 ### Additional Related Projects (Worth Checking for Pack Ideas)
+
 These weren't in my original list but are similar open-source card game platforms with asset/pack systems:
 
 - **XMage** (Magic: The Gathering simulator)  

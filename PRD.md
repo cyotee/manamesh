@@ -2,7 +2,7 @@
 project: ManaMesh
 version: 1.0
 created: 2026-01-20
-last_updated: 2026-01-21
+last_updated: 2026-01-31
 ---
 
 # ManaMesh - Product Requirements Document
@@ -312,6 +312,32 @@ interface LorcanaCard extends CoreCard {
   lore?: number;
   abilities: string[];
 }
+
+// One Piece TCG card types
+type OnePieceCardType = 'character' | 'leader' | 'event' | 'stage' | 'don';
+
+interface OnePieceCard extends CoreCard {
+  cardType: OnePieceCardType;
+  cost?: number;             // Play cost (not applicable to DON!!)
+  power?: number;            // Base power (Characters, Leaders)
+  counter?: number;          // Counter value when used in combat
+  color: OnePieceColor[];    // Card color(s) - can be multi-color
+  attributes?: string[];     // Character attributes (Slash, Strike, etc.)
+  trigger?: string;          // Trigger effect text (Life cards)
+  effectText?: string;       // Card effect text
+  set: string;               // Set code (OP01, OP02, etc.)
+  cardNumber: string;        // Collector number within set
+  rarity: 'C' | 'UC' | 'R' | 'SR' | 'SEC' | 'L' | 'SP';
+  life?: number;             // Starting life (Leaders only)
+}
+
+type OnePieceColor = 'red' | 'green' | 'blue' | 'purple' | 'black' | 'yellow';
+
+// DON!! cards have minimal schema
+interface OnePieceDonCard extends CoreCard {
+  cardType: 'don';
+  // DON!! cards have no other properties - they're power boosters
+}
 ```
 
 #### Zone System
@@ -342,6 +368,17 @@ const pokerZones: ZoneDefinition[] = [
   { id: 'discard', shared: true, visibility: 'public', ordered: false },
 ];
 
+// Example zones - One Piece TCG
+const onePieceZones: ZoneDefinition[] = [
+  { id: 'mainDeck', shared: false, visibility: 'hidden', ordered: true, features: ['peek', 'shuffle', 'search'] },
+  { id: 'lifeDeck', shared: false, visibility: 'mixed', ordered: true },  // Mixed: cards can be face-up, face-down, or owner-known
+  { id: 'donDeck', shared: false, visibility: 'public', ordered: false }, // DON!! supply - unordered, public count
+  { id: 'trash', shared: false, visibility: 'public', ordered: true, features: ['search'] },
+  { id: 'hand', shared: false, visibility: 'owner-only', ordered: false },
+  { id: 'playArea', shared: false, visibility: 'public', ordered: false, features: ['slots'] },  // Flexible slot positioning
+  { id: 'donArea', shared: false, visibility: 'public', ordered: false },  // Active DON!! cards
+];
+
 const mtgZones: ZoneDefinition[] = [
   { id: 'library', shared: false, visibility: 'hidden', ordered: true, features: ['search', 'shuffle'] },
   { id: 'hand', shared: false, visibility: 'owner-only', ordered: false },
@@ -350,6 +387,185 @@ const mtgZones: ZoneDefinition[] = [
   { id: 'exile', shared: false, visibility: 'public', ordered: false },
   { id: 'command', shared: false, visibility: 'public', ordered: false },
 ];
+```
+
+#### One Piece Game Module (Detailed Requirements)
+
+The One Piece module is a **rules-agnostic** game state manager with cooperative decryption. It does not enforce game rules—it manages state and ensures fair deck operations through cryptographic protocols.
+
+##### Design Philosophy
+
+| Principle | Description |
+|-----------|-------------|
+| Rules-Agnostic | Module manages game state only; rules enforcement is player responsibility |
+| Cooperative Decryption | Both players participate in deck operations to prevent cheating |
+| Verifiable State | All state transitions produce cryptographic proofs |
+| Full Visibility Control | Cards can exist in multiple visibility states with tracked transitions |
+
+##### One Piece Zones
+
+| Zone | Visibility | Ordered | Shared | Features |
+|------|------------|---------|--------|----------|
+| Main Deck | Hidden (encrypted) | Yes | No | Peek, shuffle, search with cooperative decryption |
+| Life Deck | Mixed per-card | Yes | No | Face-up, face-down, owner-known states |
+| DON!! Deck | Public | No | No | Counter-like supply, no shuffle needed |
+| Trash | Public | Yes | No | Search, move cards to other zones |
+| Hand | Owner-only | No | No | Standard hand zone |
+| Play Area | Public | No | No | Flexible slots for Leader, Characters, Stage |
+| DON!! Area | Public | No | No | Active/attached DON!! cards |
+
+##### Card Visibility State Machine
+
+Cards can exist in the following visibility states:
+
+```typescript
+type CardVisibilityState =
+  | 'encrypted'      // Unknown to all (in shuffled deck)
+  | 'public'         // Visible to all players
+  | 'secret'         // Hidden from all (rare - transitional state)
+  | 'owner-known'    // Owner can see, opponent cannot
+  | 'opponent-known' // Opponent can see, owner cannot (rare)
+  | 'all-known';     // Both players know but not publicly revealed
+
+interface CardStateTransition {
+  cardId: string;
+  fromState: CardVisibilityState;
+  toState: CardVisibilityState;
+  zone: string;
+  position?: number;           // Position in ordered zones
+  timestamp: number;
+  proof: CryptographicProof;   // Both players sign
+}
+```
+
+##### Valid State Transitions
+
+| From | To | Trigger | Proof Required |
+|------|----|---------|----------------|
+| encrypted → owner-known | Deck peek operation | Cooperative decrypt, owner signs |
+| encrypted → public | Reveal (draw, flip life) | Cooperative decrypt, both sign |
+| owner-known → public | Play card, reveal | Owner signature |
+| owner-known → encrypted | Return to deck, shuffle | Re-encrypt, both sign shuffle |
+| public → encrypted | Rare (return + shuffle) | Re-encrypt protocol |
+| any → trash (public) | Discard/destroy | State change proof |
+
+##### Deck Peek Operation (Main Deck)
+
+The critical operation for One Piece is peeking at the top N cards of the Main Deck, allowing the owner to see them while keeping them hidden from the opponent.
+
+```typescript
+interface DeckPeekRequest {
+  playerId: string;
+  deckZone: 'mainDeck' | 'lifeDeck';
+  count: number;              // How many cards to peek
+  requestProof: Signature;    // Player signs request
+}
+
+interface DeckPeekProtocol {
+  // Step 1: Owner requests peek
+  request: DeckPeekRequest;
+
+  // Step 2: Opponent acknowledges and provides decryption share
+  opponentAck: {
+    requestHash: string;
+    decryptionShare: DecryptionShare;  // Mental poker partial decrypt
+    proof: Signature;
+  };
+
+  // Step 3: Owner completes decryption (only owner sees result)
+  ownerDecrypt: {
+    // Owner combines shares to see cards
+    // Cards transition to 'owner-known' state
+    cardStates: CardStateTransition[];
+  };
+
+  // Step 4: Owner may reorder peeked cards
+  reorder?: {
+    newPositions: number[];    // New positions for peeked cards
+    proof: Signature;          // Owner commits to new order
+  };
+}
+```
+
+##### Play Area Slot System
+
+The Play Area uses flexible slots rather than fixed zones:
+
+```typescript
+interface PlayAreaSlot {
+  id: string;
+  slotType: 'leader' | 'character' | 'stage' | 'custom';
+  cardId?: string;          // Card occupying this slot
+  attachedDon: number;      // Number of DON!! attached to this slot
+  position: { x: number; y: number };  // Rendering position
+}
+
+interface OnePiecePlayArea {
+  leaderSlot: PlayAreaSlot;                    // Exactly one leader
+  characterSlots: PlayAreaSlot[];              // 5 character slots typically
+  stageSlot?: PlayAreaSlot;                    // Optional stage card
+
+  // DON!! attachment is per-slot, tracked as count
+  attachDon(slotId: string, count: number): void;
+  detachDon(slotId: string, count: number): void;
+}
+```
+
+##### Proof Chain Architecture
+
+All state transitions produce cryptographic proofs forming an auditable chain:
+
+```typescript
+interface CryptographicProof {
+  transitionId: string;          // Unique ID for this transition
+  previousProofHash: string;     // Chain to previous proof
+
+  transitionData: {
+    type: 'peek' | 'reveal' | 'move' | 'shuffle' | 'attach_don';
+    details: TransitionDetails;
+  };
+
+  signatures: {
+    player1: Signature;          // First player's signature
+    player2: Signature;          // Second player's signature
+    timestamp: number;
+  };
+
+  // Hash of this proof (used as previousProofHash in next)
+  proofHash: string;
+}
+
+// The chain can be verified by either player or external arbiter
+function verifyProofChain(proofs: CryptographicProof[]): boolean;
+```
+
+##### Module Configuration
+
+```typescript
+interface OnePieceModuleConfig {
+  // Starting game state
+  startingLife: number;        // Cards dealt to Life Deck (typically 5)
+  startingDon: number;         // DON!! cards in DON!! Deck (typically 10)
+  startingHand: number;        // Cards drawn to starting hand (typically 5)
+
+  // Play area configuration
+  maxCharacterSlots: number;   // Maximum characters in play (typically 5)
+  allowStageCard: boolean;     // Whether stage cards are allowed
+
+  // Crypto configuration
+  deckEncryption: 'mental-poker';  // Algorithm for deck encryption
+  proofChainEnabled: boolean;      // Whether to generate proof chain
+}
+
+const defaultOnePieceConfig: OnePieceModuleConfig = {
+  startingLife: 5,
+  startingDon: 10,
+  startingHand: 5,
+  maxCharacterSlots: 5,
+  allowStageCard: true,
+  deckEncryption: 'mental-poker',
+  proofChainEnabled: true,
+};
 ```
 
 #### Game Actions
@@ -543,6 +759,12 @@ yarn link ./vendor/boardgameIO-p2p
 | Scry | Peek at top N cards of library and optionally reorder |
 | boardgame.io Game | Game definition object with setup, moves, phases, and victory conditions |
 | boardgame.io Plugin | Reusable module that extends game functionality (e.g., deck operations) |
+| DON!! | One Piece TCG resource cards used to boost character power |
+| Life Deck | One Piece zone containing face-down cards that act as life points |
+| Cooperative Decryption | Protocol where both players provide decryption shares to reveal cards fairly |
+| Proof Chain | Sequence of cryptographically signed state transitions for auditability |
+| Card Visibility State | Current visibility of a card (encrypted, public, owner-known, etc.) |
+| Play Area Slot | Flexible position in play area for Leader, Character, or Stage cards |
 
 ### References
 
@@ -563,6 +785,10 @@ yarn link ./vendor/boardgameIO-p2p
 
 #### Assets
 - [OpenGameArt Playing Cards](https://opengameart.org/sites/default/files/cards_0.zip) - Standard 52-card deck images for War/Poker
+
+#### One Piece TCG
+- [Official One Piece TCG Rules](https://en.onepiece-cardgame.com/rule/) - Game rules reference
+- [One Piece TCG Card Database](https://onepiece-cardgame.dev/) - Community card database
 
 #### Project Documents
 - CardGameTechStackDesign.markdown (detailed architecture)

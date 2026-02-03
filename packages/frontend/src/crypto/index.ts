@@ -5,7 +5,11 @@
  */
 
 // Mental Poker primitives
-export * from './mental-poker';
+export * from "./mental-poker";
 
 // boardgame.io plugin
-export * from './plugin';
+export * from "./plugin";
+
+// General utilities (sync; used by game logic)
+export * from "./sha256";
+export * from "./merkle";
