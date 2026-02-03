@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { INVALID_MOVE } from "boardgame.io/core";
 
-import { BattleshipGame } from "./game";
+import { MerkleBattleshipGame } from "./game";
 import { createInitialState } from "./logic";
 import { commitmentRootHexForBoard, proofForIndex } from "./commitment";
 
@@ -14,13 +14,13 @@ function setupTwoPlayerState() {
   return { G, ctx };
 }
 
-describe("BattleshipGame", () => {
+describe("MerkleBattleshipGame", () => {
   it("publishCommitment accepts valid root and locks placement", () => {
     const { G } = setupTwoPlayerState();
     const root = "a".repeat(64);
 
     const res1 = (
-      BattleshipGame.phases as any
+      MerkleBattleshipGame.phases as any
     ).placement.moves.publishCommitment.move(
       { G, ctx: { matchID: "m", phase: "placement" }, playerID: "0" },
       root,
@@ -30,7 +30,7 @@ describe("BattleshipGame", () => {
     expect(G.players["0"].commitmentRootHex).toBe(root);
 
     const res2 = (
-      BattleshipGame.phases as any
+      MerkleBattleshipGame.phases as any
     ).placement.moves.publishCommitment.move(
       { G, ctx: { matchID: "m", phase: "placement" }, playerID: "0" },
       root,
@@ -58,7 +58,9 @@ describe("BattleshipGame", () => {
 
     const badProof = proofForIndex(ctx.matchID, "1", boardBits, salts, 1);
 
-    const res = (BattleshipGame.phases as any).battle.moves.applyReveal.move(
+    const res = (
+      MerkleBattleshipGame.phases as any
+    ).battle.moves.applyReveal.move(
       { G, ctx, playerID: "0" },
       { x: 0, y: 0 },
       {
@@ -92,7 +94,9 @@ describe("BattleshipGame", () => {
     ctx.phase = "battle";
 
     const proof = proofForIndex(ctx.matchID, "1", boardBits, salts, 0);
-    const res = (BattleshipGame.phases as any).battle.moves.applyReveal.move(
+    const res = (
+      MerkleBattleshipGame.phases as any
+    ).battle.moves.applyReveal.move(
       { G, ctx, playerID: "0" },
       { x: 0, y: 0 },
       {

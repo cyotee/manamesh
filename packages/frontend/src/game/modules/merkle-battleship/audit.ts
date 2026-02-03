@@ -1,4 +1,4 @@
-import type { BattleshipState, CellBit, Coord } from "./types";
+import type { CellBit, Coord, MerkleBattleshipState } from "./types";
 import { commitmentRootHexForBoard } from "./commitment";
 import { coordToIndex } from "./logic";
 import { validateFleetFromBits } from "./fleet";
@@ -21,7 +21,7 @@ export function auditFullReveal(params: {
   boardBits: CellBit[];
   saltsHex: string[];
   expectedRootHex: string;
-  state: BattleshipState;
+  state: MerkleBattleshipState;
 }): {
   computedRootHex: string;
   rootMatches: boolean;

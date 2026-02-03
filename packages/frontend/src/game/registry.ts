@@ -16,7 +16,10 @@ import {
   type CryptoPokerState,
 } from "./modules/poker";
 import { WarGame, type WarState } from "./modules/war";
-import { BattleshipGame, type BattleshipState } from "./modules/battleship";
+import {
+  MerkleBattleshipGame,
+  type MerkleBattleshipState,
+} from "./modules/merkle-battleship";
 
 export interface GameInfo<T = unknown> {
   id: string;
@@ -32,13 +35,13 @@ export interface GameInfo<T = unknown> {
 
 export const GAMES: GameInfo[] = [
   {
-    id: "battleship",
-    name: "Battleship",
+    id: "merkle-battleship",
+    name: "Merkle Battleship",
     description:
       "Verifiable Battleship with binding placement (Merkle commitment).",
     minPlayers: 2,
     maxPlayers: 2,
-    getGame: () => BattleshipGame as Game,
+    getGame: () => MerkleBattleshipGame as Game,
   },
   {
     id: "poker",

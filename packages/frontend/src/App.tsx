@@ -12,7 +12,7 @@ import { GameBoard } from "./components/GameBoard";
 import { GameSelector } from "./components/GameSelector";
 import { PokerBoard } from "./components/PokerBoard";
 import { WarBoard } from "./components/WarBoard";
-import { BattleshipBoard } from "./components/BattleshipBoard";
+import { MerkleBattleshipBoard } from "./components/MerkleBattleshipBoard";
 import { P2PLobby, type P2PRole } from "./components/P2PLobby";
 import { startP2P, P2PMultiplayer, type JoinCodeConnection } from "./p2p";
 import { GAMES, getGameById, type GameInfo } from "./game/registry";
@@ -194,15 +194,15 @@ function getBoardComponent(
   p2pConnection?: JoinCodeConnection,
 ) {
   switch (gameId) {
-    case "battleship":
+    case "merkle-battleship":
       // Wrap to inject p2p connection when in P2P mode
       if (p2pConnection) {
         const WrappedBattleshipBoard: React.FC<any> = (props) => (
-          <BattleshipBoard {...props} p2pConnection={p2pConnection} />
+          <MerkleBattleshipBoard {...props} p2pConnection={p2pConnection} />
         );
         return WrappedBattleshipBoard;
       }
-      return BattleshipBoard;
+      return MerkleBattleshipBoard;
     case "poker":
       // Wrap PokerBoard to inject onNewHand callback
       if (onNewHand) {

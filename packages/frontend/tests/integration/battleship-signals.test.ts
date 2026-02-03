@@ -2,16 +2,16 @@ import { describe, it, expect } from "vitest";
 import { INVALID_MOVE } from "boardgame.io/core";
 
 import {
-  BattleshipGame,
+  MerkleBattleshipGame,
   createInitialState,
   commitmentRootHexForBoard,
   leafHash,
-} from "../../src/game/modules/battleship";
+} from "../../src/game/modules/merkle-battleship";
 import { verifyMerkleProof } from "../../src/crypto/merkle";
 import {
   handleBattleshipSignal,
   type BattleshipGuessSignal,
-} from "../../src/game/modules/battleship/signals";
+} from "../../src/game/modules/merkle-battleship/signals";
 
 describe("Battleship P2P signals", () => {
   it("guess -> reveal -> applyReveal works and verifies proof", () => {
@@ -27,7 +27,7 @@ describe("Battleship P2P signals", () => {
 
     // Defender (player 1) receives a guess from player 0.
     const guess: BattleshipGuessSignal = {
-      game: "battleship",
+      game: "merkle-battleship",
       matchID,
       type: "bs_guess",
       fromPlayerId: "0",
@@ -73,7 +73,9 @@ describe("Battleship P2P signals", () => {
     const ctx = { matchID, phase: "battle", currentPlayer: "0" } as any;
 
     const action = atkRes.applyRevealActions[0];
-    const res = (BattleshipGame.phases as any).battle.moves.applyReveal.move(
+    const res = (
+      MerkleBattleshipGame.phases as any
+    ).battle.moves.applyReveal.move(
       { G, ctx, playerID: "0" },
       action.coord,
       action.reveal,

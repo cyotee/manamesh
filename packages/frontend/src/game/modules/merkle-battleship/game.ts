@@ -1,6 +1,6 @@
 import type { Game } from "boardgame.io";
 import { INVALID_MOVE } from "boardgame.io/core";
-import type { BattleshipState, Coord } from "./types";
+import type { Coord, MerkleBattleshipState } from "./types";
 import {
   createInitialState,
   allPlacementsConfirmed,
@@ -25,8 +25,8 @@ type GuessReveal = {
   proof: MerkleProofStep[];
 };
 
-export const BattleshipGame: Game<BattleshipState> = {
-  name: "battleship",
+export const MerkleBattleshipGame: Game<MerkleBattleshipState> = {
+  name: "merkle-battleship",
 
   setup: (ctx) => {
     const playerIDs = (ctx.playOrder as string[]) ?? ["0", "1"];
@@ -63,7 +63,7 @@ export const BattleshipGame: Game<BattleshipState> = {
               publishCommitment(G, playerID, commitmentRootHex);
               return G;
             } catch (e) {
-              console.error("[battleship] publishCommitment failed", e);
+              console.error("[merkle-battleship] publishCommitment failed", e);
               return INVALID_MOVE;
             }
           },
@@ -147,7 +147,7 @@ export const BattleshipGame: Game<BattleshipState> = {
 
               return G;
             } catch (e) {
-              console.error("[battleship] applyReveal failed", e);
+              console.error("[merkle-battleship] applyReveal failed", e);
               return INVALID_MOVE;
             }
           },

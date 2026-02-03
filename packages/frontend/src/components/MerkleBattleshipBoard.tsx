@@ -1,5 +1,5 @@
 /**
- * Battleship Board Component
+ * Merkle Battleship Board Component
  *
  * Local ship placement with Merkle commitment binding.
  * Per-shot verification happens via out-of-band signals:
@@ -19,7 +19,7 @@ import type { JoinCodeConnection } from "../p2p";
 import type { MerkleProofStep } from "../crypto";
 
 import {
-  BattleshipState,
+  MerkleBattleshipState,
   CELL_COUNT,
   GRID_SIZE,
   STANDARD_FLEET,
@@ -28,24 +28,24 @@ import {
   type Coord,
   type Orientation,
   type PlacedShip,
-} from "../game/modules/battleship";
+} from "../game/modules/merkle-battleship";
 import {
   commitmentRootHexForBoard,
   auditFullReveal,
   proofForIndex,
   randomSaltHex,
   validateFleetFromBits,
-} from "../game/modules/battleship";
+} from "../game/modules/merkle-battleship";
 
 // Enforce legality at placement time (now that we do a full-reveal audit post-game).
 // We re-check legality in the audit too.
 
-type BattleshipBoardProps = BoardProps<BattleshipState> & {
+type BattleshipBoardProps = BoardProps<MerkleBattleshipState> & {
   p2pConnection?: JoinCodeConnection;
 };
 
 type BattleshipSignalBase = {
-  game: "battleship";
+  game: "merkle-battleship";
   matchID: string;
 };
 
@@ -203,7 +203,7 @@ function randomPlacement(): PlacedShip[] {
 
 const LETTERS = "ABCDEFGHIJ";
 
-export const BattleshipBoard: React.FC<BattleshipBoardProps> = ({
+export const MerkleBattleshipBoard: React.FC<BattleshipBoardProps> = ({
   G,
   ctx,
   moves,
@@ -213,7 +213,7 @@ export const BattleshipBoard: React.FC<BattleshipBoardProps> = ({
 }) => {
   const myId = playerID || "0";
   const storageKey = useMemo(
-    () => `manamesh:battleship:${matchID}:${myId}`,
+    () => `manamesh:merkle-battleship:${matchID}:${myId}`,
     [matchID, myId],
   );
   const opponentId = useMemo(() => {
@@ -270,7 +270,7 @@ export const BattleshipBoard: React.FC<BattleshipBoardProps> = ({
   const handleSignal = useCallback(
     (raw: unknown) => {
       if (!isObject(raw)) return;
-      if (raw.game !== "battleship") return;
+      if (raw.game !== "merkle-battleship") return;
       if (raw.matchID !== matchID) return;
 
       const type = raw.type;
@@ -292,7 +292,7 @@ export const BattleshipBoard: React.FC<BattleshipBoardProps> = ({
         const proof = proofForIndex(matchID, myId, bits, salts, idx);
 
         const reveal: BattleshipRevealSignal = {
-          game: "battleship",
+          game: "merkle-battleship",
           matchID,
           type: "bs_reveal",
           toPlayerId: s.fromPlayerId,
@@ -469,7 +469,7 @@ export const BattleshipBoard: React.FC<BattleshipBoardProps> = ({
       if (canAuditMine) {
         try {
           sendSignal({
-            game: "battleship",
+            game: "merkle-battleship",
             matchID,
             type: "bs_full_reveal",
             toPlayerId: opponentId,
@@ -680,7 +680,7 @@ export const BattleshipBoard: React.FC<BattleshipBoardProps> = ({
     setLastSignalError(null);
 
     const signal: BattleshipGuessSignal = {
-      game: "battleship",
+      game: "merkle-battleship",
       matchID,
       type: "bs_guess",
       fromPlayerId: myId,
@@ -875,7 +875,9 @@ export const BattleshipBoard: React.FC<BattleshipBoardProps> = ({
         }}
       >
         <div>
-          <div style={{ fontSize: "18px", fontWeight: 800 }}>Battleship</div>
+          <div style={{ fontSize: "18px", fontWeight: 800 }}>
+            Merkle Battleship
+          </div>
           <div style={{ fontSize: "12px", color: "#94a3b8" }}>
             Merkle-bound placement, per-shot proofs
           </div>

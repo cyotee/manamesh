@@ -1,4 +1,4 @@
-export type BattleshipPhase = "placement" | "battle" | "gameOver";
+export type MerkleBattleshipPhase = "placement" | "battle" | "gameOver";
 
 export type CellBit = 0 | 1;
 export type CellMark = "unknown" | "miss" | "hit";
@@ -30,7 +30,7 @@ export interface GuessRecord {
   at: number;
 }
 
-export interface BattleshipPlayerState {
+export interface MerkleBattleshipPlayerState {
   placementConfirmed: boolean;
   commitmentRootHex: string | null;
 
@@ -38,9 +38,9 @@ export interface BattleshipPlayerState {
   opponentMarks: CellMark[]; // length 100
 }
 
-export interface BattleshipState {
-  phase: BattleshipPhase;
-  players: Record<string, BattleshipPlayerState>;
+export interface MerkleBattleshipState {
+  phase: MerkleBattleshipPhase;
+  players: Record<string, MerkleBattleshipPlayerState>;
   guesses: GuessRecord[];
   winner: string | null;
 }

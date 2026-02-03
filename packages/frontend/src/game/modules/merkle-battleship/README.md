@@ -1,4 +1,4 @@
-# Battleship (Merkle-Bound Placement)
+# Merkle Battleship
 
 This Battleship module implements a 2-player game where ship placement is _binding_ (you cannot change your board after committing), while each shot reveals only a single bit (hit/miss) without revealing the rest of the board.
 
@@ -34,7 +34,7 @@ Each cell `i` also has a random salt `salt[i]` (hex string). Salts are generated
 
 Relevant code:
 
-- Commitment helpers: `packages/frontend/src/game/modules/battleship/commitment.ts`
+- Commitment helpers: `packages/frontend/src/game/modules/merkle-battleship/commitment.ts`
 - Merkle implementation: `packages/frontend/src/crypto/merkle.ts`
 - SHA-256 implementation: `packages/frontend/src/crypto/sha256.ts`
 
@@ -60,8 +60,8 @@ root = MerkleRoot(leaf[0..99])
 
 The root is published to the shared game state in placement phase via:
 
-- Move: `publishCommitment` in `packages/frontend/src/game/modules/battleship/game.ts`
-- Logic: `publishCommitment` in `packages/frontend/src/game/modules/battleship/logic.ts`
+- Move: `publishCommitment` in `packages/frontend/src/game/modules/merkle-battleship/game.ts`
+- Logic: `publishCommitment` in `packages/frontend/src/game/modules/merkle-battleship/logic.ts`
 
 Why salts matter:
 
@@ -84,7 +84,7 @@ Signals are _out-of-band_ relative to boardgame.io moves:
 - P2P mode: `JoinCodeConnection.sendSignal` / `onSignal`
 - Hotseat fallback: `BroadcastChannel`
 
-Implementation: `packages/frontend/src/components/BattleshipBoard.tsx`
+Implementation: `packages/frontend/src/components/MerkleBattleshipBoard.tsx`
 
 ### Step 2: Reveal (out-of-band)
 
@@ -108,7 +108,7 @@ When the attacker receives `bs_reveal`, the UI calls the boardgame.io move:
 
 - `moves.applyReveal(coord, reveal)`
 
-In `packages/frontend/src/game/modules/battleship/game.ts`, `applyReveal` verifies:
+In `packages/frontend/src/game/modules/merkle-battleship/game.ts`, `applyReveal` verifies:
 
 1. Phase and coordinate validity
 2. `reveal.ownerId` is the opponent
@@ -144,7 +144,7 @@ During gameplay, only the attacked cells are revealed. At the end, we can audit 
 
 ### What the audit checks
 
-The audit helper `auditFullReveal` in `packages/frontend/src/game/modules/battleship/audit.ts` checks:
+The audit helper `auditFullReveal` in `packages/frontend/src/game/modules/merkle-battleship/audit.ts` checks:
 
 1. Root consistency:
 
@@ -172,7 +172,7 @@ Any party can run the audit _if they have the full reveal material_:
 - `expectedRootHex`
 - the final game state (or at least the guess log)
 
-In the current UI (`packages/frontend/src/components/BattleshipBoard.tsx`), the “Audit My Board” button runs this locally using values stored in session storage during placement (so the player can still answer reveals even after refresh).
+In the current UI (`packages/frontend/src/components/MerkleBattleshipBoard.tsx`), the “Audit My Board” button runs this locally using values stored in session storage during placement (so the player can still answer reveals even after refresh).
 
 Optional stronger verification (future / out-of-band):
 

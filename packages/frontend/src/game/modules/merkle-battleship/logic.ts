@@ -1,7 +1,7 @@
 import type {
-  BattleshipPlayerState,
-  BattleshipState,
   Coord,
+  MerkleBattleshipPlayerState,
+  MerkleBattleshipState,
   ShipSpec,
 } from "./types";
 import { CELL_COUNT, GRID_SIZE, STANDARD_FLEET } from "./types";
@@ -25,7 +25,7 @@ function emptyMarks() {
   return Array.from({ length: CELL_COUNT }, () => "unknown" as const);
 }
 
-export function createEmptyPlayerState(): BattleshipPlayerState {
+export function createEmptyPlayerState(): MerkleBattleshipPlayerState {
   return {
     placementConfirmed: false,
     commitmentRootHex: null,
@@ -34,8 +34,8 @@ export function createEmptyPlayerState(): BattleshipPlayerState {
   };
 }
 
-export function createInitialState(playerIDs: string[]): BattleshipState {
-  const players: Record<string, BattleshipPlayerState> = {};
+export function createInitialState(playerIDs: string[]): MerkleBattleshipState {
+  const players: Record<string, MerkleBattleshipPlayerState> = {};
   for (const pid of playerIDs) {
     players[pid] = createEmptyPlayerState();
   }
@@ -48,10 +48,10 @@ export function createInitialState(playerIDs: string[]): BattleshipState {
 }
 
 export function publishCommitment(
-  state: BattleshipState,
+  state: MerkleBattleshipState,
   playerId: string,
   commitmentRootHex: string,
-): BattleshipState {
+): MerkleBattleshipState {
   if (!/^[0-9a-fA-F]{64}$/.test(commitmentRootHex)) {
     throw new Error("Invalid commitment root");
   }
@@ -65,18 +65,18 @@ export function publishCommitment(
   return state;
 }
 
-export function allPlacementsConfirmed(state: BattleshipState): boolean {
+export function allPlacementsConfirmed(state: MerkleBattleshipState): boolean {
   return Object.values(state.players).every(
     (p) => p.placementConfirmed && !!p.commitmentRootHex,
   );
 }
 
 export function applyVerifiedGuess(
-  state: BattleshipState,
+  state: MerkleBattleshipState,
   guesserId: string,
   target: Coord,
   result: "hit" | "miss",
-): BattleshipState {
+): MerkleBattleshipState {
   if (!isValidCoord(target)) throw new Error("Invalid target");
 
   const opponentId = Object.keys(state.players).find((id) => id !== guesserId);

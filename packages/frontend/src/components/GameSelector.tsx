@@ -18,7 +18,7 @@ const GameCard: React.FC<{
 }> = ({ game, onClick }) => {
   const getGameIcon = (id: string): string => {
     switch (id) {
-      case "battleship":
+      case "merkle-battleship":
         return "🚢";
       case "poker":
         return "🃏"; // Playing card

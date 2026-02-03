@@ -6,7 +6,7 @@ import { proofForIndex } from "./commitment";
 import { coordToIndex } from "./logic";
 
 type BattleshipSignalBase = {
-  game: "battleship";
+  game: "merkle-battleship";
   matchID: string;
 };
 
@@ -76,7 +76,7 @@ function isCoord(v: unknown): v is Coord {
 
 export function isBattleshipSignal(raw: unknown): raw is BattleshipSignal {
   if (!isObject(raw)) return false;
-  if (raw.game !== "battleship") return false;
+  if (raw.game !== "merkle-battleship") return false;
   if (typeof raw.matchID !== "string") return false;
   if (typeof raw.type !== "string") return false;
   return true;
@@ -145,7 +145,7 @@ export function handleBattleshipSignal(params: {
     const proof = proofForIndex(params.matchID, params.myId, bits, salts, idx);
 
     const reveal: BattleshipRevealSignal = {
-      game: "battleship",
+      game: "merkle-battleship",
       matchID: params.matchID,
       type: "bs_reveal",
       toPlayerId: s.fromPlayerId,
