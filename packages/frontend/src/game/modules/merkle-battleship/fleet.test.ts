@@ -7,7 +7,7 @@ function emptyBoard() {
   return Array.from({ length: CELL_COUNT }, () => 0 as const);
 }
 
-describe("battleship/fleet", () => {
+describe("merkle-battleship/fleet", () => {
   it("accepts a standard legal fleet", () => {
     const bits = emptyBoard();
 

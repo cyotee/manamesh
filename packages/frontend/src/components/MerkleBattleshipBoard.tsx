@@ -40,7 +40,7 @@ import {
 // Enforce legality at placement time (now that we do a full-reveal audit post-game).
 // We re-check legality in the audit too.
 
-type BattleshipBoardProps = BoardProps<MerkleBattleshipState> & {
+type MerkleBattleshipBoardProps = BoardProps<MerkleBattleshipState> & {
   p2pConnection?: JoinCodeConnection;
 };
 
@@ -203,7 +203,7 @@ function randomPlacement(): PlacedShip[] {
 
 const LETTERS = "ABCDEFGHIJ";
 
-export const MerkleBattleshipBoard: React.FC<BattleshipBoardProps> = ({
+export const MerkleBattleshipBoard: React.FC<MerkleBattleshipBoardProps> = ({
   G,
   ctx,
   moves,

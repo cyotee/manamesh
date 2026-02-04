@@ -4,7 +4,7 @@ import { createInitialState } from "./logic";
 import { auditFullReveal } from "./audit";
 import { commitmentRootHexForBoard } from "./commitment";
 
-describe("battleship/audit", () => {
+describe("merkle-battleship/audit", () => {
   it("matches commitment root for full reveal", () => {
     const state = createInitialState(["0", "1"]);
     const boardBits = Array.from({ length: 100 }, () => 0 as const);
