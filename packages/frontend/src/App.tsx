@@ -13,6 +13,7 @@ import { GameSelector } from "./components/GameSelector";
 import { PokerBoard } from "./components/PokerBoard";
 import { WarBoard } from "./components/WarBoard";
 import { MerkleBattleshipBoard } from "./components/MerkleBattleshipBoard";
+import { ThresholdTallyBoard } from "./components/ThresholdTallyBoard";
 import { P2PLobby, type P2PRole } from "./components/P2PLobby";
 import { startP2P, P2PMultiplayer, type JoinCodeConnection } from "./p2p";
 import { GAMES, getGameById, type GameInfo } from "./game/registry";
@@ -194,13 +195,22 @@ function getBoardComponent(
   p2pConnection?: JoinCodeConnection,
 ) {
   switch (gameId) {
+    case "threshold-tally":
+      // Wrap to inject p2p connection when in P2P mode
+      if (p2pConnection) {
+        const WrappedThresholdTallyBoard: React.FC<any> = (props) => (
+          <ThresholdTallyBoard {...props} p2pConnection={p2pConnection} />
+        );
+        return WrappedThresholdTallyBoard;
+      }
+      return ThresholdTallyBoard;
     case "merkle-battleship":
       // Wrap to inject p2p connection when in P2P mode
       if (p2pConnection) {
-        const WrappedBattleshipBoard: React.FC<any> = (props) => (
+        const WrappedMerkleBattleshipBoard: React.FC<any> = (props) => (
           <MerkleBattleshipBoard {...props} p2pConnection={p2pConnection} />
         );
-        return WrappedBattleshipBoard;
+        return WrappedMerkleBattleshipBoard;
       }
       return MerkleBattleshipBoard;
     case "poker":

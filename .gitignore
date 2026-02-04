@@ -11,6 +11,8 @@ node_modules/
 # Build output
 dist/
 build/
+packages/**/dist/
+packages/**/build/
 
 # Tool/test artifacts
 **/.vite/

@@ -16,10 +16,8 @@ import {
   type CryptoPokerState,
 } from "./modules/poker";
 import { WarGame, type WarState } from "./modules/war";
-import {
-  MerkleBattleshipGame,
-  type MerkleBattleshipState,
-} from "./modules/merkle-battleship";
+import { MerkleBattleshipGame } from "./modules/merkle-battleship";
+import { ThresholdTallyGame } from "./modules/threshold-tally";
 
 export interface GameInfo<T = unknown> {
   id: string;
@@ -34,6 +32,15 @@ export interface GameInfo<T = unknown> {
 }
 
 export const GAMES: GameInfo[] = [
+  {
+    id: "threshold-tally",
+    name: "Threshold Tally Arena (Demo)",
+    description:
+      "Threshold homomorphic tally demo: submit encrypted inputs and only decrypt the aggregate.",
+    minPlayers: 2,
+    maxPlayers: 3,
+    getGame: () => ThresholdTallyGame as Game,
+  },
   {
     id: "merkle-battleship",
     name: "Merkle Battleship",
