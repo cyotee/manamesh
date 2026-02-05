@@ -1428,10 +1428,16 @@ export function submitZkVerdict(
   const expectedHash = computeZkPayloadHash(pz);
   if (expectedHash !== pz.payloadHash) return INVALID_MOVE;
 
+  // Domain separation: bind verdict signatures to this specific match's shuffle seed.
+  // This helps prevent cross-match replay if the same verifier key is reused.
+  const matchSalt = G.shuffleRng?.finalSeedHex;
+  if (!matchSalt) return INVALID_MOVE;
+
   const decisionHash = sha256Hex(
     new TextEncoder().encode(
       stableStringify({
         pendingId: pz.id,
+        matchSalt,
         payloadHash: pz.payloadHash,
         verdict,
       }),

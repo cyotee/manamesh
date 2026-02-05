@@ -373,6 +373,7 @@ describe("CryptoGoFish", () => {
       new TextEncoder().encode(
         stableStringify({
           pendingId: pz.id,
+          matchSalt: state.shuffleRng.finalSeedHex,
           payloadHash: pz.payloadHash,
           verdict: "valid",
         }),
@@ -432,6 +433,7 @@ describe("CryptoGoFish", () => {
       new TextEncoder().encode(
         stableStringify({
           pendingId: pz.id,
+          matchSalt: state.shuffleRng.finalSeedHex,
           payloadHash: pz.payloadHash,
           verdict: "valid",
         }),

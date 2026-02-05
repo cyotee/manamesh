@@ -196,7 +196,7 @@ export const GoFishBoard: React.FC<BoardProps<CryptoGoFishState>> = ({
   const myHandCount =
     G.crypto?.encryptedZones?.[`hand:${currentPlayerID}`]?.length ?? 0;
 
-  const shuffleRng = (G as any).shuffleRng ?? null;
+  const shuffleRng = G.shuffleRng ?? null;
 
   // Ensure we always have a local keypair available for setup + secure reveal shares.
   useEffect(() => {
@@ -221,7 +221,7 @@ export const GoFishBoard: React.FC<BoardProps<CryptoGoFishState>> = ({
   const pendingAsk = G.pendingAsk;
   const iAmTarget = pendingAsk?.target === currentPlayerID;
   const pendingReveal = G.pendingReveal;
-  const pendingZk = (G as any).pendingZk ?? null;
+  const pendingZk = G.pendingZk ?? null;
 
   // In ZK mode, register a per-player secp256k1 signing public key in shared state.
   useEffect(() => {
@@ -458,12 +458,15 @@ export const GoFishBoard: React.FC<BoardProps<CryptoGoFishState>> = ({
     !pendingZk &&
     !!(moves as any).submitZkProofClaimBooks;
 
+  const zkMatchSalt = G.shuffleRng?.finalSeedHex ?? null;
+
   const canSubmitZkVerdict =
     G.phase === "play" &&
     isZkMode &&
     !!pendingZk &&
     currentPlayerID === verifierId &&
     pendingZk.verdict === null &&
+    !!zkMatchSalt &&
     !!(moves as any).submitZkVerdict;
 
   const heldRanks = useMemo(() => {
@@ -603,7 +606,7 @@ export const GoFishBoard: React.FC<BoardProps<CryptoGoFishState>> = ({
       moves.shuffleDeck
     ) {
       // Ensure deterministic commit-reveal seed is ready before shuffling.
-      const rng = (G as any).shuffleRng ?? null;
+      const rng = G.shuffleRng ?? null;
       const haveFinalSeed = !!rng?.finalSeedHex;
 
       if (moves.commitShuffleSeed && rng?.phase === "commit" && !rng?.commits?.[currentPlayerID]) {
@@ -1437,11 +1440,13 @@ export const GoFishBoard: React.FC<BoardProps<CryptoGoFishState>> = ({
                 onClick={() => {
                   const pz = pendingZk;
                   if (!pz) return;
+                  if (!zkMatchSalt) return;
                   const kp = getOrCreateZkSigKeyPair();
                   const decisionHash = sha256Hex(
                     new TextEncoder().encode(
                       stableStringify({
                         pendingId: pz.id,
+                        matchSalt: zkMatchSalt,
                         payloadHash: pz.payloadHash,
                         verdict: "valid",
                       }),
@@ -1464,6 +1469,8 @@ export const GoFishBoard: React.FC<BoardProps<CryptoGoFishState>> = ({
                 title={
                   currentPlayerID !== verifierId
                     ? `Only Player ${verifierId} can submit the verdict.`
+                    : !zkMatchSalt
+                      ? "Waiting for deterministic shuffle seed (commit-reveal)"
                     : "Sign + submit a VALID verdict"
                 }
               >
@@ -1474,11 +1481,13 @@ export const GoFishBoard: React.FC<BoardProps<CryptoGoFishState>> = ({
                 onClick={() => {
                   const pz = pendingZk;
                   if (!pz) return;
+                  if (!zkMatchSalt) return;
                   const kp = getOrCreateZkSigKeyPair();
                   const decisionHash = sha256Hex(
                     new TextEncoder().encode(
                       stableStringify({
                         pendingId: pz.id,
+                        matchSalt: zkMatchSalt,
                         payloadHash: pz.payloadHash,
                         verdict: "invalid",
                       }),
@@ -1501,6 +1510,8 @@ export const GoFishBoard: React.FC<BoardProps<CryptoGoFishState>> = ({
                 title={
                   currentPlayerID !== verifierId
                     ? `Only Player ${verifierId} can submit the verdict.`
+                    : !zkMatchSalt
+                      ? "Waiting for deterministic shuffle seed (commit-reveal)"
                     : "Sign + submit an INVALID verdict (voids game)"
                 }
               >
