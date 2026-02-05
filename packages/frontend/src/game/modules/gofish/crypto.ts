@@ -28,6 +28,7 @@ import {
 } from "../../../crypto";
 import type { KeyShare } from "../../../crypto/shamirs";
 
+import { GOFISH_SHUFFLE_STALL_WINDOW_MOVES } from "./types";
 import type {
   CryptoGoFishPhase,
   CryptoGoFishPlayerState,
@@ -68,6 +69,10 @@ function deterministicStamp(ctx: Ctx): number {
   const turn = Number((ctx as any).turn ?? 0);
   const numMoves = Number((ctx as any).numMoves ?? 0);
   return turn * 1000 + numMoves;
+}
+
+function ctxNumMoves(ctx: Ctx): number {
+  return Number((ctx as any).numMoves ?? 0);
 }
 
 function deterministicId(ctx: Ctx, tag: string): string {
@@ -115,9 +120,35 @@ function ensureShuffleRng(G: CryptoGoFishState): ShuffleRngState {
     commits,
     reveals,
     finalSeedHex: null,
+    startedAtMove: null,
+    lastProgressMove: null,
+    abortVotes: {},
   };
   (G as any).shuffleRng = created;
   return created;
+}
+
+function noteShuffleProgress(G: CryptoGoFishState, ctx: Ctx): void {
+  const rng = ensureShuffleRng(G);
+  const n = ctxNumMoves(ctx);
+  if (rng.startedAtMove === null) rng.startedAtMove = n;
+  rng.lastProgressMove = n;
+
+  // If the shuffle is making progress again, clear any stale abort votes.
+  rng.abortVotes = {};
+}
+
+function shuffleAbortVotesNeeded(G: CryptoGoFishState): number {
+  return Math.floor(G.playerOrder.length / 2) + 1;
+}
+
+function canAbortShuffleNow(G: CryptoGoFishState, ctx: Ctx): boolean {
+  const rng = ensureShuffleRng(G);
+  if (G.phase !== "shuffle") return false;
+  const last = rng.lastProgressMove ?? rng.startedAtMove;
+  if (last === null) return false;
+
+  return ctxNumMoves(ctx) - last >= GOFISH_SHUFFLE_STALL_WINDOW_MOVES;
 }
 
 function maybeFinalizeShuffleSeed(G: CryptoGoFishState): void {
@@ -413,6 +444,9 @@ export function createCryptoGoFishState(config: GameConfig): CryptoGoFishState {
     commits,
     reveals,
     finalSeedHex: null,
+    startedAtMove: null,
+    lastProgressMove: null,
+    abortVotes: {},
   };
 
   return {
@@ -455,6 +489,7 @@ export function commitShuffleSeed(
   const existing = rng.commits[playerId] ?? null;
   if (existing && existing !== commitHashHex) return INVALID_MOVE;
   rng.commits[playerId] = commitHashHex;
+  noteShuffleProgress(G, ctx);
 
   const allCommitted = (G.playerOrder ?? []).every((pid) => {
     const c = rng.commits[pid];
@@ -490,9 +525,34 @@ export function revealShuffleSeed(
   const existing = rng.reveals[playerId] ?? null;
   if (existing && existing.toLowerCase() !== seedHex.toLowerCase()) return INVALID_MOVE;
   rng.reveals[playerId] = seedHex.toLowerCase();
+  noteShuffleProgress(G, ctx);
 
   pushLog(G, ctx, `Player ${playerId} revealed their shuffle seed.`);
   maybeFinalizeShuffleSeed(G);
+  return G;
+}
+
+export function voteAbortShuffle(
+  G: CryptoGoFishState,
+  ctx: Ctx,
+  playerId: string,
+  callerId?: string,
+): CryptoGoFishState | typeof INVALID_MOVE {
+  if (G.phase !== "shuffle") return INVALID_MOVE;
+  if (callerId && callerId !== playerId) return INVALID_MOVE;
+  if (!G.players[playerId]) return INVALID_MOVE;
+  if (!canAbortShuffleNow(G, ctx)) return INVALID_MOVE;
+
+  const rng = ensureShuffleRng(G);
+  rng.abortVotes[playerId] = true;
+  pushLog(G, ctx, `Player ${playerId} voted to abort stalled shuffle.`);
+
+  const votes = Object.values(rng.abortVotes).filter(Boolean).length;
+  if (votes >= shuffleAbortVotesNeeded(G)) {
+    pushLog(G, ctx, "Shuffle stalled. Majority voted to abort. Game voided.");
+    G.phase = "voided";
+  }
+
   return G;
 }
 
@@ -747,6 +807,7 @@ export function shuffleDeck(
 
   const rng = ensureShuffleRng(G);
   if (!rng.finalSeedHex) return INVALID_MOVE;
+  noteShuffleProgress(G, ctx);
   // Deterministic Fisher-Yates using the agreed seed.
   G.crypto.encryptedZones["deck"] = deterministicShuffle(
     encryptedDeck,
@@ -1608,6 +1669,11 @@ export const CryptoGoFishGame: Game<CryptoGoFishState> = {
             shuffleDeck(G, ctx, playerId, privateKey, events),
           client: false,
         },
+        voteAbortShuffle: {
+          move: ({ G, ctx, playerID }, playerId: string) =>
+            voteAbortShuffle(G, ctx, playerId, playerID),
+          client: false,
+        },
       },
       next: "play",
       endIf: ({ G }) => G.phase === "play",
@@ -1656,6 +1722,12 @@ export const CryptoGoFishGame: Game<CryptoGoFishState> = {
         shuffleDeck: {
           move: ({ G, ctx, events }, playerId: string, privateKey: string) =>
             shuffleDeck(G, ctx, playerId, privateKey, events),
+          client: false,
+        },
+
+        voteAbortShuffle: {
+          move: ({ G, ctx, playerID }, playerId: string) =>
+            voteAbortShuffle(G, ctx, playerId, playerID),
           client: false,
         },
 

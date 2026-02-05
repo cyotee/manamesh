@@ -11,6 +11,7 @@ import {
   commitShuffleSeed,
   revealShuffleSeed,
   shuffleDeck,
+  voteAbortShuffle,
   peekHand,
   askRank,
   respondToAsk,
@@ -157,6 +158,35 @@ describe("CryptoGoFish", () => {
     commitShuffleSeed(state, ctx, "playerA", sha256Hex(new TextEncoder().encode(seedA)));
     const bad = revealShuffleSeed(state, ctx, "playerA", "22".repeat(32));
     expect(bad).toBe(INVALID_MOVE);
+  });
+
+  it("allows majority abort if shuffle stalls", () => {
+    // Setup to shuffle phase.
+    submitPublicKey(state, ctx, "playerA", playerA.keyPair.publicKey);
+    submitPublicKey(state, ctx, "playerB", playerB.keyPair.publicKey);
+    distributeKeyShares(state, ctx, "playerA", playerA.keyPair.privateKey, []);
+    distributeKeyShares(state, ctx, "playerB", playerB.keyPair.privateKey, []);
+    encryptDeck(state, ctx, "playerA", playerA.keyPair.privateKey);
+    encryptDeck(state, ctx, "playerB", playerB.keyPair.privateKey);
+    expect(state.phase).toBe("shuffle");
+
+    // Not stalled yet -> cannot abort.
+    expect(voteAbortShuffle(state, ctx, "playerA")).toBe(INVALID_MOVE);
+
+    // Advance deterministic move counter to simulate a stall.
+    (ctx as any).numMoves = 99;
+
+    // Ensure the shuffle RNG has recorded progress at some earlier move.
+    commitShuffleSeed(state, ctx, "playerA", "00".repeat(32));
+    ;(ctx as any).numMoves = 150;
+
+    // Majority of 2 is 2. First vote doesn't void.
+    expect(voteAbortShuffle(state, ctx, "playerA")).toBe(state);
+    expect(state.phase).toBe("shuffle");
+
+    // Second vote voids.
+    expect(voteAbortShuffle(state, ctx, "playerB")).toBe(state);
+    expect(state.phase).toBe("voided");
   });
 
   it("supports ask/respond and goFish flow", () => {

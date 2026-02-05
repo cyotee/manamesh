@@ -8,6 +8,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { BoardProps } from "boardgame.io/react";
 
+import { GOFISH_SHUFFLE_STALL_WINDOW_MOVES } from "../game/modules/gofish/types";
 import type {
   CryptoGoFishState,
   CryptoGoFishPlayerState,
@@ -222,6 +223,28 @@ export const GoFishBoard: React.FC<BoardProps<CryptoGoFishState>> = ({
   const iAmTarget = pendingAsk?.target === currentPlayerID;
   const pendingReveal = G.pendingReveal;
   const pendingZk = G.pendingZk ?? null;
+
+  const shuffleAbortVotesNeeded = useMemo(() => {
+    const n = G.playerOrder?.length ?? 0;
+    return Math.floor(n / 2) + 1;
+  }, [G.playerOrder]);
+
+  const shuffleAbortVotes = useMemo(() => {
+    const votes = shuffleRng?.abortVotes ?? {};
+    return Object.values(votes).filter(Boolean).length;
+  }, [shuffleRng?.abortVotes]);
+
+  const shuffleLastProgressMove =
+    shuffleRng?.lastProgressMove ?? shuffleRng?.startedAtMove ?? null;
+  const shuffleMovesSinceProgress =
+    shuffleLastProgressMove === null ? null : ctx.numMoves - shuffleLastProgressMove;
+  const shuffleCanVoteAbort =
+    G.phase === "shuffle" &&
+    shuffleMovesSinceProgress !== null &&
+    shuffleMovesSinceProgress >= GOFISH_SHUFFLE_STALL_WINDOW_MOVES &&
+    !!(moves as any).voteAbortShuffle;
+
+  const iVotedAbortShuffle = !!shuffleRng?.abortVotes?.[currentPlayerID];
 
   // In ZK mode, register a per-player secp256k1 signing public key in shared state.
   useEffect(() => {
@@ -611,7 +634,7 @@ export const GoFishBoard: React.FC<BoardProps<CryptoGoFishState>> = ({
 
       if (moves.commitShuffleSeed && rng?.phase === "commit" && !rng?.commits?.[currentPlayerID]) {
         setupAttemptRef.current.add(`${actionKey}:commitSeed`);
-        const seedHex = getOrCreateShuffleSeedHex();
+        const seedHex = getOrCreateShuffleSeedHex().toLowerCase();
         const commit = sha256Hex(new TextEncoder().encode(seedHex));
         setTimeout(() => (moves as any).commitShuffleSeed(currentPlayerID, commit), 50);
         return;
@@ -619,7 +642,7 @@ export const GoFishBoard: React.FC<BoardProps<CryptoGoFishState>> = ({
 
       if (moves.revealShuffleSeed && rng?.phase === "reveal" && !rng?.reveals?.[currentPlayerID]) {
         setupAttemptRef.current.add(`${actionKey}:revealSeed`);
-        const seedHex = getOrCreateShuffleSeedHex();
+        const seedHex = getOrCreateShuffleSeedHex().toLowerCase();
         setTimeout(() => (moves as any).revealShuffleSeed(currentPlayerID, seedHex), 50);
         return;
       }
@@ -777,7 +800,7 @@ export const GoFishBoard: React.FC<BoardProps<CryptoGoFishState>> = ({
       </div>
 
       {/* Deterministic shuffle seed status */}
-      {G.phase === "shuffle" && (isSecureMode || isZkMode) && (
+      {G.phase === "shuffle" && (
         <div
           style={{
             padding: "10px 14px",
@@ -797,6 +820,47 @@ export const GoFishBoard: React.FC<BoardProps<CryptoGoFishState>> = ({
                 : shuffleRng?.phase === "reveal"
                   ? "Waiting for reveals."
                   : "Preparing..."}
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              gap: 10,
+              alignItems: "center",
+              flexWrap: "wrap",
+              marginTop: 10,
+            }}
+          >
+            <div style={{ fontSize: 12, color: "#64748b" }}>
+              Abort votes: {shuffleAbortVotes}/{shuffleAbortVotesNeeded}
+              {shuffleMovesSinceProgress !== null
+                ? ` | moves since progress: ${shuffleMovesSinceProgress}`
+                : ""}
+            </div>
+            <button
+              onClick={() => (moves as any).voteAbortShuffle?.(currentPlayerID)}
+              disabled={!shuffleCanVoteAbort || iVotedAbortShuffle}
+              title={
+                iVotedAbortShuffle
+                  ? "You already voted to abort."
+                  : shuffleCanVoteAbort
+                  ? "Vote to abort a stalled shuffle (majority required)."
+                  : "Abort voting is only enabled after the shuffle stalls."
+              }
+              style={{
+                padding: "8px 10px",
+                borderRadius: 10,
+                border: "1px solid #3a3a5c",
+                backgroundColor:
+                  shuffleCanVoteAbort && !iVotedAbortShuffle ? "#3f1d1d" : "#1f2937",
+                color: "#fecaca",
+                cursor: "pointer",
+                fontWeight: 800,
+                opacity: shuffleCanVoteAbort && !iVotedAbortShuffle ? 1 : 0.55,
+              }}
+            >
+              {iVotedAbortShuffle ? "Abort Vote Submitted" : "Vote Abort Shuffle"}
+            </button>
           </div>
         </div>
       )}

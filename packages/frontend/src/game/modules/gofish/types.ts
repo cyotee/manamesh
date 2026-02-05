@@ -118,7 +118,22 @@ export interface ShuffleRngState {
   reveals: Record<string, string | null>;
   /** Final agreed seed once all reveals are present. */
   finalSeedHex: string | null;
+
+  /** Deterministic liveness bookkeeping (boardgame.io ctx.numMoves). */
+  startedAtMove: number | null;
+  /** Updated whenever a shuffle-related move makes progress. */
+  lastProgressMove: number | null;
+
+  /** Players voting to abort a stalled shuffle. */
+  abortVotes: Record<string, boolean>;
 }
+
+/**
+ * Deterministic "stall window" for shuffle commit-reveal liveness.
+ *
+ * Measured in boardgame.io `ctx.numMoves` (not wall-clock time).
+ */
+export const GOFISH_SHUFFLE_STALL_WINDOW_MOVES = 12;
 
 export interface CryptoGoFishState {
   players: Record<string, CryptoGoFishPlayerState>;
