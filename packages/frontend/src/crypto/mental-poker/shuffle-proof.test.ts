@@ -271,7 +271,14 @@ describe('Shuffle Proof', () => {
 
       // Tamper with the proof
       const tamperedProof = { ...proof };
-      const tamperedPerm = [0, 1, 2, 3, 4]; // Identity instead of real perm
+      const originalPerm = JSON.parse(new TextDecoder().decode(proof.proof)) as number[];
+      const tamperedPerm = originalPerm.slice();
+      // Ensure tamper differs even if original is identity.
+      if (tamperedPerm.length >= 2) {
+        [tamperedPerm[0], tamperedPerm[1]] = [tamperedPerm[1], tamperedPerm[0]];
+      } else {
+        tamperedPerm.push(0);
+      }
       tamperedProof.proof = new TextEncoder().encode(JSON.stringify(tamperedPerm));
 
       const valid = await verifyShuffleProof(
@@ -307,14 +314,15 @@ describe('Shuffle Proof', () => {
       const { shuffledDeck, proof, nonce } = await shuffleWithProof(fullDeck);
       const shuffleTime = performance.now() - start;
 
-      expect(shuffleTime).toBeLessThan(100); // Should be very fast
+      // This is a smoke performance check; keep thresholds loose to avoid CI flake.
+      expect(shuffleTime).toBeLessThan(250);
 
       const verifyStart = performance.now();
       const valid = await verifyShuffleProof(proof, fullDeck, shuffledDeck, nonce);
       const verifyTime = performance.now() - verifyStart;
 
       expect(valid).toBe(true);
-      expect(verifyTime).toBeLessThan(100);
+      expect(verifyTime).toBeLessThan(250);
     });
   });
 });

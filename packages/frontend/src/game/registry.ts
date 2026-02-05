@@ -16,6 +16,12 @@ import {
   type CryptoPokerState,
 } from "./modules/poker";
 import { WarGame, type WarState } from "./modules/war";
+import {
+  CryptoGoFishGame,
+  CryptoGoFishSecureGame,
+  CryptoGoFishZkAttestGame,
+  type CryptoGoFishState,
+} from "./modules/gofish";
 import { MerkleBattleshipGame } from "./modules/merkle-battleship";
 import { ThresholdTallyGame } from "./modules/threshold-tally";
 
@@ -49,6 +55,36 @@ export const GAMES: GameInfo[] = [
     minPlayers: 2,
     maxPlayers: 2,
     getGame: () => MerkleBattleshipGame as Game,
+  },
+  {
+    id: "gofish",
+    name: "Go Fish (Demo Private)",
+    description:
+      "Go Fish with demo-private hands using mental poker encryption. Supports 2-4 players locally.",
+    minPlayers: 2,
+    maxPlayers: 4,
+    getGame: () => CryptoGoFishGame as Game,
+    getCryptoGame: () => CryptoGoFishGame as Game,
+  },
+  {
+    id: "gofish-secure",
+    name: "Go Fish (Coop Reveal)",
+    description:
+      "Go Fish with cooperative decryption shares (no private keys in shared state). Currently supports forced-draw reveal demo.",
+    minPlayers: 2,
+    maxPlayers: 4,
+    getGame: () => CryptoGoFishSecureGame as Game,
+    getCryptoGame: () => CryptoGoFishSecureGame as Game,
+  },
+  {
+    id: "gofish-zk",
+    name: "Go Fish (ZK Attest)",
+    description:
+      "Go Fish with a deterministic verifier who signs ZK verdicts for off-move proof checking (scaffolding).",
+    minPlayers: 2,
+    maxPlayers: 4,
+    getGame: () => CryptoGoFishZkAttestGame as Game,
+    getCryptoGame: () => CryptoGoFishZkAttestGame as Game,
   },
   {
     id: "poker",

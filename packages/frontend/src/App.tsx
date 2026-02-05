@@ -14,6 +14,7 @@ import { PokerBoard } from "./components/PokerBoard";
 import { WarBoard } from "./components/WarBoard";
 import { MerkleBattleshipBoard } from "./components/MerkleBattleshipBoard";
 import { ThresholdTallyBoard } from "./components/ThresholdTallyBoard";
+import { GoFishBoard } from "./components/GoFishBoard";
 import { P2PLobby, type P2PRole } from "./components/P2PLobby";
 import { startP2P, P2PMultiplayer, type JoinCodeConnection } from "./p2p";
 import { GAMES, getGameById, type GameInfo } from "./game/registry";
@@ -147,7 +148,7 @@ const ModeSelect: React.FC<ModeSelectProps> = ({
             marginBottom: "16px",
           }}
         >
-          Local Hotseat ({game.minPlayers} Players)
+          Local Hotseat ({game.minPlayers}-{game.maxPlayers} Players)
         </button>
 
         <button
@@ -224,6 +225,10 @@ function getBoardComponent(
       return PokerBoard;
     case "war":
       return WarBoard;
+    case "gofish":
+    case "gofish-secure":
+    case "gofish-zk":
+      return GoFishBoard;
     case "simple":
     default:
       return GameBoard;
@@ -236,7 +241,8 @@ interface LocalGameProps {
 }
 
 const LocalGame: React.FC<LocalGameProps> = ({ game, onBack }) => {
-  const [activePlayer, setActivePlayer] = useState<"0" | "1">("0");
+  const [activePlayer, setActivePlayer] = useState<string>("0");
+  const [numPlayers, setNumPlayers] = useState<number>(game.minPlayers);
   // Hand counter - incrementing this recreates the game
   const [handNumber, setHandNumber] = useState(0);
   // Dealer position rotates each hand
@@ -289,6 +295,24 @@ const LocalGame: React.FC<LocalGameProps> = ({ game, onBack }) => {
   // Recreate when handNumber changes to start a fresh game
   const localMultiplayer = useMemo(() => Local(), [handNumber]);
 
+  const playerIDs = useMemo(
+    () => Array.from({ length: numPlayers }, (_, i) => String(i)),
+    [numPlayers],
+  );
+
+  // If player count changes, start a fresh match.
+  useEffect(() => {
+    setHandNumber(0);
+    setDealerIndex(0);
+  }, [numPlayers]);
+
+  // Keep activePlayer valid when numPlayers changes.
+  useEffect(() => {
+    if (!playerIDs.includes(activePlayer)) {
+      setActivePlayer(playerIDs[0] ?? "0");
+    }
+  }, [activePlayer, playerIDs]);
+
   // Get initial balances from blockchain service
   const [initialBalances, setInitialBalances] = useState<
     Record<string, number>
@@ -296,9 +320,9 @@ const LocalGame: React.FC<LocalGameProps> = ({ game, onBack }) => {
 
   // Only fetch initial balances on mount - subsequent updates come from settlement
   useEffect(() => {
-    blockchainService.getBalances(["0", "1"]).then(setInitialBalances);
+    blockchainService.getBalances(playerIDs).then(setInitialBalances);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [blockchainService]);
+  }, [blockchainService, playerIDs]);
 
   // Generate unique hand ID (regenerate each hand)
   const handId = useMemo(
@@ -317,12 +341,12 @@ const LocalGame: React.FC<LocalGameProps> = ({ game, onBack }) => {
         setup: (ctx: any) => {
           // Call original setup but pass options
           const config = {
-            numPlayers: ctx.numPlayers ?? 2,
-            playerIDs: ctx.playOrder ?? ["0", "1"],
+            numPlayers: ctx.numPlayers ?? numPlayers,
+            playerIDs: ctx.playOrder ?? playerIDs,
             options: {
               initialBalances,
               handId,
-              dealerIndex: dealerIndex % 2,
+              dealerIndex: dealerIndex % numPlayers,
             },
           };
           // Use imported createCryptoInitialState
@@ -332,24 +356,19 @@ const LocalGame: React.FC<LocalGameProps> = ({ game, onBack }) => {
     }
 
     return game.getGame();
-  }, [game, initialBalances, handId, dealerIndex]);
+  }, [game, initialBalances, handId, dealerIndex, numPlayers, playerIDs]);
 
   // Create separate client instances for each player, sharing the same Local transport
-  const GameClient0 = useMemo(() => {
-    return Client({
-      game: gameWithOptions,
-      board: getBoardComponent(game.id, handleNewHand),
-      multiplayer: localMultiplayer,
-    });
-  }, [gameWithOptions, game.id, localMultiplayer, handleNewHand]);
-
-  const GameClient1 = useMemo(() => {
-    return Client({
-      game: gameWithOptions,
-      board: getBoardComponent(game.id, handleNewHand),
-      multiplayer: localMultiplayer,
-    });
-  }, [gameWithOptions, game.id, localMultiplayer, handleNewHand]);
+  const clients = useMemo(() => {
+    return playerIDs.map((pid) => ({
+      pid,
+      Client: Client({
+        game: gameWithOptions,
+        board: getBoardComponent(game.id, handleNewHand),
+        multiplayer: localMultiplayer,
+      }),
+    }));
+  }, [playerIDs, gameWithOptions, game.id, localMultiplayer, handleNewHand]);
 
   return (
     <div>
@@ -383,34 +402,46 @@ const LocalGame: React.FC<LocalGameProps> = ({ game, onBack }) => {
           <span style={{ fontSize: "12px", color: "#6b7280" }}>
             Hand #{handNumber + 1}
           </span>
+          <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ color: "#a0a0a0", fontSize: 12 }}>Players</span>
+            <select
+              value={numPlayers}
+              onChange={(e) => setNumPlayers(Number(e.target.value))}
+              style={{
+                padding: "6px 10px",
+                borderRadius: 6,
+                border: "1px solid #3a3a5c",
+                backgroundColor: "#0f172a",
+                color: "#e4e4e4",
+              }}
+            >
+              {Array.from(
+                { length: game.maxPlayers - game.minPlayers + 1 },
+                (_, i) => game.minPlayers + i,
+              ).map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </label>
           <span style={{ marginRight: "12px" }}>Viewing as:</span>
-          <button
-            onClick={() => setActivePlayer("0")}
-            style={{
-              padding: "8px 16px",
-              cursor: "pointer",
-              backgroundColor: activePlayer === "0" ? "#4CAF50" : "#3a3a5c",
-              color: "#e4e4e4",
-              border: "none",
-              borderRadius: "4px",
-              marginRight: "8px",
-            }}
-          >
-            Player 0
-          </button>
-          <button
-            onClick={() => setActivePlayer("1")}
-            style={{
-              padding: "8px 16px",
-              cursor: "pointer",
-              backgroundColor: activePlayer === "1" ? "#4CAF50" : "#3a3a5c",
-              color: "#e4e4e4",
-              border: "none",
-              borderRadius: "4px",
-            }}
-          >
-            Player 1
-          </button>
+          {playerIDs.map((pid) => (
+            <button
+              key={pid}
+              onClick={() => setActivePlayer(pid)}
+              style={{
+                padding: "8px 16px",
+                cursor: "pointer",
+                backgroundColor: activePlayer === pid ? "#4CAF50" : "#3a3a5c",
+                color: "#e4e4e4",
+                border: "none",
+                borderRadius: "4px",
+              }}
+            >
+              Player {pid}
+            </button>
+          ))}
         </div>
       </div>
       {/* Settling overlay */}
@@ -443,13 +474,15 @@ const LocalGame: React.FC<LocalGameProps> = ({ game, onBack }) => {
           </div>
         </div>
       )}
-      {/* Render both clients but only show the active one */}
-      <div style={{ display: activePlayer === "0" ? "block" : "none" }}>
-        <GameClient0 playerID="0" matchID={`local-match-${handNumber}`} />
-      </div>
-      <div style={{ display: activePlayer === "1" ? "block" : "none" }}>
-        <GameClient1 playerID="1" matchID={`local-match-${handNumber}`} />
-      </div>
+      {/* Render all clients but only show the active one */}
+      {clients.map(({ pid, Client: GameClient }) => (
+        <div
+          key={pid}
+          style={{ display: activePlayer === pid ? "block" : "none" }}
+        >
+          <GameClient playerID={pid} matchID={`local-match-${handNumber}`} />
+        </div>
+      ))}
     </div>
   );
 };

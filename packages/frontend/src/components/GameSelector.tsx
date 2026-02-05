@@ -24,6 +24,12 @@ const GameCard: React.FC<{
         return "🃏"; // Playing card
       case "war":
         return "⚔️"; // Crossed swords
+      case "gofish":
+        return "🐟";
+      case "gofish-secure":
+        return "🐠";
+      case "gofish-zk":
+        return "🧾";
       case "simple":
         return "🎴"; // Flower playing card
       default:
