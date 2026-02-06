@@ -1,7 +1,7 @@
 # Task Index: ManaMesh
 
 **Repo:** MM
-**Last Updated:** 2026-02-01
+**Last Updated:** 2026-02-06
 
 ## Active Tasks
 
@@ -15,6 +15,7 @@
 | MM-034 | Ethereum Wallet Integration | Complete | MM-029 | - |
 | MM-035 | Bet Settlement & Escrow Vault | In Review | MM-034, MM-036 | - |
 | MM-036 | Foundry Setup | Complete | - | - |
+| MM-037 | One Piece Card Scraper & Asset Pack Builder | Ready | MM-033 | `feature/onepiece-card-scraper` |
 
 ## Status Legend
 
@@ -39,6 +40,7 @@ All active tasks are ready (dependencies complete):
 | MM-034 | Ethereum Wallet Integration | `/backlog:launch MM-034` |
 | MM-035 | Bet Settlement & Escrow Vault | `/backlog:launch MM-035` |
 | MM-036 | Foundry Setup | `/backlog:launch MM-036` |
+| MM-037 | One Piece Card Scraper & Asset Pack Builder | `/backlog:launch MM-037` |
 
 ## Dependency Graph
 
@@ -56,6 +58,9 @@ MM-029 (Complete, archived) ✓
 
 MM-036 (Ready - Foundry Setup, no dependencies)
 └── MM-035 (depends on MM-034 + MM-036)
+
+MM-033 (Complete) ✓
+└── MM-037 (Ready - One Piece Card Scraper)
 
 MM-002 (Complete, archived) ✓
 ├── MM-003 (Complete, archived) ✓
