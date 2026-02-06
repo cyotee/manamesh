@@ -58,9 +58,9 @@ export const GAMES: GameInfo[] = [
   },
   {
     id: "gofish",
-    name: "Go Fish (Demo Private)",
+    name: "Go Fish (Game Flow Demo)",
     description:
-      "Go Fish with demo-private hands using mental poker encryption. Supports 2-4 players locally.",
+      "Go Fish game-flow demo with basic mental poker encryption. Supports 2-4 players locally.",
     minPlayers: 2,
     maxPlayers: 4,
     getGame: () => CryptoGoFishGame as Game,
