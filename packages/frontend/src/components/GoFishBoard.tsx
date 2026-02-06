@@ -12,6 +12,7 @@ import { GOFISH_SHUFFLE_STALL_WINDOW_MOVES } from "../game/modules/gofish/types"
 import type {
   CryptoGoFishState,
   CryptoGoFishPlayerState,
+  GoFishCard,
   GoFishRank,
 } from "../game/modules/gofish/types";
 import { generateKeyPair } from "../crypto/mental-poker";
@@ -38,6 +39,116 @@ const RANKS: GoFishRank[] = [
   "Q",
   "K",
 ];
+
+/* ── Suit look-ups for pure-HTML card rendering ─────────────── */
+const SUIT_SYMBOLS: Record<string, string> = {
+  hearts: "\u2665",
+  diamonds: "\u2666",
+  clubs: "\u2663",
+  spades: "\u2660",
+};
+
+const SUIT_COLORS: Record<string, string> = {
+  hearts: "#e74c3c",
+  diamonds: "#e74c3c",
+  clubs: "#2c3e50",
+  spades: "#2c3e50",
+};
+
+/** Pure-HTML playing card – matches the style used in PokerBoard / WarBoard. */
+const CardDisplay: React.FC<{
+  card?: GoFishCard;
+  faceDown?: boolean;
+  small?: boolean;
+}> = ({ card, faceDown, small }) => {
+  const width = small ? 44 : 60;
+  const height = small ? 62 : 86;
+
+  if (faceDown || !card) {
+    return (
+      <div
+        style={{
+          width,
+          height,
+          backgroundColor: "#1a365d",
+          border: "2px solid #3182ce",
+          borderRadius: 6,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundImage:
+            "repeating-linear-gradient(45deg, #2a4365, #2a4365 10px, #1a365d 10px, #1a365d 20px)",
+          flexShrink: 0,
+        }}
+      >
+        <span style={{ fontSize: small ? 14 : 20, color: "#63b3ed" }}>
+          {"\uD83C\uDCA0"}
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      style={{
+        width,
+        height,
+        backgroundColor: "#fff",
+        border: "2px solid #ccc",
+        borderRadius: 6,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
+        flexShrink: 0,
+      }}
+    >
+      <span
+        style={{
+          fontSize: small ? 16 : 20,
+          fontWeight: "bold",
+          color: SUIT_COLORS[card.suit],
+          lineHeight: 1,
+        }}
+      >
+        {card.rank}
+      </span>
+      <span
+        style={{
+          fontSize: small ? 18 : 24,
+          color: SUIT_COLORS[card.suit],
+          lineHeight: 1,
+        }}
+      >
+        {SUIT_SYMBOLS[card.suit]}
+      </span>
+    </div>
+  );
+};
+
+/** A fan of face-down cards representing a hand count. */
+const FaceDownFan: React.FC<{ count: number }> = ({ count }) => {
+  if (count === 0) {
+    return (
+      <span style={{ color: "#6b7280", fontSize: 12 }}>Empty</span>
+    );
+  }
+  // Show up to 7 mini card backs, with a "+N" badge for larger hands.
+  const visible = Math.min(count, 7);
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 2, flexWrap: "wrap" }}>
+      {Array.from({ length: visible }).map((_, i) => (
+        <CardDisplay key={i} faceDown small />
+      ))}
+      {count > 7 && (
+        <span style={{ color: "#94a3b8", fontSize: 11, marginLeft: 4 }}>
+          +{count - 7}
+        </span>
+      )}
+    </div>
+  );
+};
 
 const PHASE_LABEL: Record<string, string> = {
   keyExchange: "Key Exchange",
@@ -621,16 +732,9 @@ export const GoFishBoard: React.FC<BoardProps<CryptoGoFishState>> = ({
       return;
     }
 
-    if (
-      phase === "shuffle" &&
-      me &&
-      !me.hasShuffled &&
-      isMySetupTurn &&
-      moves.shuffleDeck
-    ) {
-      // Ensure deterministic commit-reveal seed is ready before shuffling.
+    // Commit-reveal seed: ALL players must participate (not gated by isMySetupTurn).
+    if (phase === "shuffle" && me) {
       const rng = G.shuffleRng ?? null;
-      const haveFinalSeed = !!rng?.finalSeedHex;
 
       if (moves.commitShuffleSeed && rng?.phase === "commit" && !rng?.commits?.[currentPlayerID]) {
         setupAttemptRef.current.add(`${actionKey}:commitSeed`);
@@ -646,9 +750,21 @@ export const GoFishBoard: React.FC<BoardProps<CryptoGoFishState>> = ({
         setTimeout(() => (moves as any).revealShuffleSeed(currentPlayerID, seedHex), 50);
         return;
       }
+    }
+
+    // Actual shuffle: sequential per player (gated by isMySetupTurn).
+    if (
+      phase === "shuffle" &&
+      me &&
+      !me.hasShuffled &&
+      isMySetupTurn &&
+      moves.shuffleDeck
+    ) {
+      const rng = G.shuffleRng ?? null;
+      const haveFinalSeed = !!rng?.finalSeedHex;
 
       if (!haveFinalSeed) {
-        // Wait for other players to commit/reveal.
+        // Wait for all players to commit/reveal.
         return;
       }
 
@@ -657,7 +773,7 @@ export const GoFishBoard: React.FC<BoardProps<CryptoGoFishState>> = ({
       setTimeout(() => moves.shuffleDeck(currentPlayerID, kp.privateKey), 50);
       return;
     }
-  }, [G.phase, G.setupPlayerIndex, currentPlayerID, me, moves, isMySetupTurn]);
+  }, [G.phase, G.setupPlayerIndex, G.shuffleRng, currentPlayerID, me, moves, isMySetupTurn]);
 
   if (ctx.gameover || G.phase === "gameOver") {
     const winners =
@@ -1072,7 +1188,7 @@ export const GoFishBoard: React.FC<BoardProps<CryptoGoFishState>> = ({
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+          gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
           gap: 12,
           marginBottom: 16,
         }}
@@ -1131,52 +1247,75 @@ export const GoFishBoard: React.FC<BoardProps<CryptoGoFishState>> = ({
                         : "Waiting"}
                 </div>
               </div>
-              <div style={{ marginTop: 8, color: "#a0a0a0", fontSize: 13 }}>
-                Hand:{" "}
-                <span style={{ color: "#e4e4e4", fontWeight: 700 }}>
-                  {handCount}
-                </span>
+              <div
+                style={{
+                  marginTop: 8,
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
+                <div style={{ color: "#a0a0a0", fontSize: 13 }}>
+                  Hand:{" "}
+                  <span style={{ color: "#e4e4e4", fontWeight: 700 }}>
+                    {handCount}
+                  </span>
+                </div>
+                <div style={{ color: "#a0a0a0", fontSize: 13 }}>
+                  Books:{" "}
+                  <span style={{ color: "#fbbf24", fontWeight: 700 }}>
+                    {p.books}
+                  </span>
+                </div>
               </div>
-              <div style={{ marginTop: 6, color: "#a0a0a0", fontSize: 13 }}>
-                Books:{" "}
-                <span style={{ color: "#fbbf24", fontWeight: 700 }}>
-                  {p.books}
-                </span>
-              </div>
-              {isMe && p.hasPeeked && p.peekedCards?.length > 0 && (
-                <div
-                  style={{
-                    marginTop: 10,
-                    padding: 10,
-                    backgroundColor: "rgba(0,0,0,0.25)",
-                    border: "1px solid #3a3a5c",
-                    borderRadius: 10,
-                    fontSize: 12,
-                    color: "#cbd5e1",
-                    lineHeight: 1.35,
-                    maxHeight: 120,
-                    overflow: "auto",
-                  }}
-                >
+
+              {/* Visual cards: peeked face-up for self, face-down for others */}
+              {isMe && p.hasPeeked && p.peekedCards?.length > 0 ? (
+                <div style={{ marginTop: 10 }}>
                   <div
                     style={{
                       color: "#93c5fd",
                       fontWeight: 700,
+                      fontSize: 12,
                       marginBottom: 6,
                     }}
                   >
-                    Instant Peek
+                    Your Hand
                   </div>
-                  <div>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 4,
+                      flexWrap: "wrap",
+                    }}
+                  >
                     {p.peekedCards
                       .slice()
                       .sort(
                         (a, b) => RANKS.indexOf(a.rank) - RANKS.indexOf(b.rank),
                       )
-                      .map((c) => c.id)
-                      .join(", ")}
+                      .map((c) => (
+                        <CardDisplay key={c.id} card={c} small />
+                      ))}
                   </div>
                 </div>
+              ) : (
+                handCount > 0 && (
+                  <div style={{ marginTop: 10 }}>
+                    {isMe && !p.hasPeeked && (
+                      <div
+                        style={{
+                          color: "#6b7280",
+                          fontSize: 11,
+                          marginBottom: 6,
+                        }}
+                      >
+                        Peek to reveal your cards
+                      </div>
+                    )}
+                    <FaceDownFan count={handCount} />
+                  </div>
+                )
               )}
             </div>
           );

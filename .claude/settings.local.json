@@ -24,7 +24,9 @@
       "Bash(npx tsc:*)",
       "Bash(yarn dev:frontend --port 3001)",
       "Bash(lsof:*)",
-      "Skill(commit-commands:commit)"
+      "Skill(commit-commands:commit)",
+      "Bash(npx vitest run:*)",
+      "Bash(npx vite build:*)"
     ]
   }
 }
