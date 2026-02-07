@@ -2,6 +2,34 @@
 
 Scrapes One Piece TCG card data and images from multiple API sources and builds ManaMesh-compatible asset packs.
 
+## Quick Start
+
+```bash
+cd tools/onepiece-scraper
+cp config.example.yaml config.yaml   # edit as needed
+pip install -e .
+python -m onepiece_scraper scrape
+```
+
+The generated asset packs will be in `output/onepiece/` with per-set directories containing card images and ManaMesh-compatible manifests.
+
+## What's in the Repo vs What You Generate
+
+This directory contains the **scraper tool** (source code, tests, config template). The actual scraped data is **not** committed to the repo because it consists of thousands of card images.
+
+| Path | In Repo | Description |
+|------|---------|-------------|
+| `onepiece_scraper/` | Yes | Python scraper source code |
+| `tests/` | Yes | Test suite with mocked HTTP |
+| `config.example.yaml` | Yes | Example configuration template |
+| `pyproject.toml` | Yes | Python project config |
+| `config.yaml` | No (gitignored) | Your local configuration |
+| `output/` | No (gitignored) | Generated asset packs (manifests + card images) |
+| `state/` | No (gitignored) | Incremental scrape state tracking |
+| `data/` | No (gitignored) | Local vegapull-records fallback data |
+
+After running the scraper, point the frontend asset loader at `output/onepiece/` or serve it via IPFS.
+
 ## Installation
 
 ```bash
