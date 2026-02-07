@@ -15,7 +15,7 @@
 | MM-034 | Ethereum Wallet Integration | Complete | MM-029 | - |
 | MM-035 | Bet Settlement & Escrow Vault | In Review | MM-034, MM-036 | - |
 | MM-036 | Foundry Setup | Complete | - | - |
-| MM-037 | One Piece Card Scraper & Asset Pack Builder | Ready | MM-033 | `feature/onepiece-card-scraper` |
+| MM-037 | One Piece Card Scraper & Asset Pack Builder | Pending Merge | MM-033 | `feature/onepiece-card-scraper` |
 
 ## Status Legend
 
