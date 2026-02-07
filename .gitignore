@@ -51,3 +51,14 @@ coverage/
 # Foundry
 contracts/out/
 contracts/cache/
+
+# Python
+__pycache__/
+*.egg-info/
+.pytest_cache/
+
+# One Piece Scraper
+tools/onepiece-scraper/output/
+tools/onepiece-scraper/state/
+tools/onepiece-scraper/data/
+tools/onepiece-scraper/config.yaml

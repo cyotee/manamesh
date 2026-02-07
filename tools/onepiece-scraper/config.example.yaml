@@ -1,0 +1,31 @@
+# One Piece TCG Scraper Configuration
+# Copy to config.yaml and customize
+
+sources:
+  - name: optcg-api
+    enabled: true
+    priority: 1
+    rate_limit_ms: 200
+
+  - name: ryan-api
+    enabled: true
+    priority: 2
+    rate_limit_ms: 500
+
+  - name: vegapull-records
+    enabled: true
+    priority: 3
+    local_path: ./data/vegapull-records/
+
+output:
+  base_dir: ./output/onepiece/
+  image_format: original   # download as-is
+  manifest_version: "1.0"
+
+scrape:
+  sets: all                 # or comma-separated: OP-01,OP-02
+  include_starters: true
+  include_promos: true
+
+state:
+  state_file: ./state/scrape-state.json

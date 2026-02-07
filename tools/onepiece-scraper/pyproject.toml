@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "onepiece-scraper"
+version = "0.1.0"
+description = "One Piece TCG card scraper and ManaMesh asset pack builder"
+requires-python = ">=3.10"
+dependencies = [
+    "httpx>=0.25",
+    "pyyaml>=6.0",
+    "rich>=13.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21",
+    "respx>=0.20",
+]
+
+[project.scripts]
+onepiece-scraper = "onepiece_scraper.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["onepiece_scraper*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
