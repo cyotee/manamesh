@@ -24,6 +24,7 @@ import {
 } from "./modules/gofish";
 import { MerkleBattleshipGame } from "./modules/merkle-battleship";
 import { ThresholdTallyGame } from "./modules/threshold-tally";
+import { OnePieceGame } from "./modules/onepiece";
 
 export interface GameInfo<T = unknown> {
   id: string;
@@ -104,6 +105,15 @@ export const GAMES: GameInfo[] = [
     minPlayers: 2,
     maxPlayers: 2,
     getGame: () => WarGame as Game,
+  },
+  {
+    id: "onepiece",
+    name: "One Piece TCG",
+    description:
+      "One Piece Trading Card Game — rules-agnostic state manager with cooperative decryption.",
+    minPlayers: 2,
+    maxPlayers: 2,
+    getGame: () => OnePieceGame as Game,
   },
   {
     id: "simple",
