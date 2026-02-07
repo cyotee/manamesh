@@ -7,7 +7,7 @@
 
 | ID | Title | Status | Dependencies | Worktree |
 |----|-------|--------|--------------|----------|
-| MM-023 | One Piece TCG Game Module | Ready | MM-019, MM-020, MM-029 | `feature/game-onepiece` |
+| MM-023 | One Piece TCG Game Module | In Progress | MM-019, MM-020, MM-029 | `feature/game-onepiece` |
 | MM-024 | MTG Game Module | Ready | MM-019, MM-020 | `feature/game-mtg` |
 | MM-025 | Lorcana Game Module | Ready | MM-019, MM-020 | `feature/game-lorcana` |
 | MM-026 | Riftbound Game Module | Ready | MM-019, MM-020 | `feature/game-riftbound` |
@@ -15,7 +15,7 @@
 | MM-034 | Ethereum Wallet Integration | Complete | MM-029 | - |
 | MM-035 | Bet Settlement & Escrow Vault | In Review | MM-034, MM-036 | - |
 | MM-036 | Foundry Setup | Complete | - | - |
-| MM-037 | One Piece Card Scraper & Asset Pack Builder | Pending Merge | MM-033 | `feature/onepiece-card-scraper` |
+| MM-037 | One Piece Card Scraper & Asset Pack Builder | Complete | MM-033 | - |
 
 ## Status Legend
 
