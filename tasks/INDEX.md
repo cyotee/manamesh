@@ -1,14 +1,14 @@
 # Task Index: ManaMesh
 
 **Repo:** MM
-**Last Updated:** 2026-02-07
+**Last Updated:** 2026-02-08
 
 ## Active Tasks
 
 | ID | Title | Status | Dependencies | Worktree |
 |----|-------|--------|--------------|----------|
 | MM-023 | One Piece TCG Game Module | Complete | MM-019, MM-020, MM-029 | - |
-| MM-024 | MTG Game Module | Ready | MM-019, MM-020 | `feature/game-mtg` |
+| MM-024 | MTG Game Module (Crypto-Aware) | Ready | MM-019, MM-020, MM-029 | `feature/game-mtg` |
 | MM-025 | Lorcana Game Module | Ready | MM-019, MM-020 | `feature/game-lorcana` |
 | MM-026 | Riftbound Game Module | Ready | MM-019, MM-020 | `feature/game-riftbound` |
 | MM-033 | One Piece Card Data Sources Research | Complete | - | - |
@@ -17,7 +17,10 @@
 | MM-036 | Foundry Setup | Complete | - | - |
 | MM-037 | One Piece Card Scraper & Asset Pack Builder | Complete | MM-033 | - |
 | MM-038 | Card Rendering Engine (Phaser 3) | Complete | MM-023, MM-037 | - |
-| MM-039 | One Piece TCG Deck Builder | Ready | MM-037, MM-038 | - |
+| MM-039 | One Piece TCG Deck Builder | In Review | MM-037, MM-038 | - |
+| MM-040 | P2P Asset Pack Sharing & IPFS Hash Import | In Review | MM-039 | - |
+| MM-041 | MTG Card Data Sources Research | Complete | - | - |
+| MM-042 | MTG Card Scraper & Multi-Game Tool Refactor | Complete | MM-037, MM-041 | - |
 
 ## Status Legend
 
@@ -35,7 +38,7 @@ All active tasks are ready (dependencies complete):
 | ID | Title | Launch Command |
 |----|-------|----------------|
 | MM-023 | One Piece TCG Game Module (Rules-Agnostic + Crypto) | `/backlog:launch MM-023` |
-| MM-024 | MTG Game Module | `/backlog:launch MM-024` |
+| MM-024 | MTG Game Module (Crypto-Aware) | `/pm:launch MM-024` |
 | MM-025 | Lorcana Game Module | `/backlog:launch MM-025` |
 | MM-026 | Riftbound Game Module | `/backlog:launch MM-026` |
 | MM-033 | One Piece Card Data Sources Research | `/backlog:launch MM-033` |
@@ -50,12 +53,13 @@ All active tasks are ready (dependencies complete):
 ```
 MM-019 (Complete, archived) ✓
 └── MM-020 (Complete, archived) ✓
-    ├── MM-024 (Ready - MTG)
+    ├── MM-024 (Ready - MTG, also depends on MM-029)
     ├── MM-025 (Ready - Lorcana)
     └── MM-026 (Ready - Riftbound)
 
 MM-029 (Complete, archived) ✓
 ├── MM-023 (Ready - One Piece TCG, also depends on MM-019, MM-020)
+├── MM-024 (Ready - MTG, also depends on MM-019, MM-020)
 └── MM-034 (Ready - Ethereum Wallet Integration)
     └── MM-035 (Ready - Bet Settlement, also depends on MM-036)
 
@@ -69,6 +73,15 @@ MM-033 (Complete) ✓
 └── MM-037 (Complete) ✓
     ├── MM-038 (depends on MM-023 + MM-037)
     └── MM-039 (Ready - Deck Builder, depends on MM-037 + MM-038)
+
+MM-039 (In Review) ✓
+└── MM-040 (In Review - P2P Asset Pack Sharing & IPFS Hash Import)
+
+MM-037 (Complete) ✓
+└── MM-042 (Complete) ✓
+
+MM-041 (Complete) ✓
+└── MM-042 (Complete) ✓
 
 MM-002 (Complete, archived) ✓
 ├── MM-003 (Complete, archived) ✓
@@ -113,3 +126,5 @@ Tasks in other repos that depend on this repo's tasks:
 | MM-030 | War Game Crypto Integration | 2026-01-28 | archive/MM-030-war-crypto-integration/ |
 | MM-031 | Blockchain-Enabled Poker | 2026-01-28 | archive/MM-031-blockchain-poker/ |
 | MM-032 | Hybrid P2P Transport | 2026-01-28 | archive/MM-032-hybrid-p2p-transport/ |
+| MM-041 | MTG Card Data Sources Research | 2026-02-08 | archive/MM-041-mtg-card-sources/ |
+| MM-042 | MTG Card Scraper & Multi-Game Tool Refactor | 2026-02-08 | archive/MM-042-mtg-card-scraper/ |
