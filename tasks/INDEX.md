@@ -1,7 +1,7 @@
 # Task Index: ManaMesh
 
 **Repo:** MM
-**Last Updated:** 2026-02-06
+**Last Updated:** 2026-02-07
 
 ## Active Tasks
 
@@ -16,6 +16,8 @@
 | MM-035 | Bet Settlement & Escrow Vault | In Review | MM-034, MM-036 | - |
 | MM-036 | Foundry Setup | Complete | - | - |
 | MM-037 | One Piece Card Scraper & Asset Pack Builder | Complete | MM-033 | - |
+| MM-038 | Card Rendering Engine (Phaser 3) | In Progress | MM-023, MM-037 | `feature/card-rendering-engine` |
+| MM-039 | One Piece TCG Deck Builder | Blocked | MM-037, MM-038 | - |
 
 ## Status Legend
 
@@ -41,6 +43,7 @@ All active tasks are ready (dependencies complete):
 | MM-035 | Bet Settlement & Escrow Vault | `/backlog:launch MM-035` |
 | MM-036 | Foundry Setup | `/backlog:launch MM-036` |
 | MM-037 | One Piece Card Scraper & Asset Pack Builder | `/backlog:launch MM-037` |
+| MM-038 | Card Rendering Engine (Phaser 3) | `/backlog:launch MM-038` |
 
 ## Dependency Graph
 
@@ -59,8 +62,13 @@ MM-029 (Complete, archived) ✓
 MM-036 (Ready - Foundry Setup, no dependencies)
 └── MM-035 (depends on MM-034 + MM-036)
 
+MM-023 (Complete) ✓
+└── MM-038 (Ready - Card Rendering Engine, also depends on MM-037)
+
 MM-033 (Complete) ✓
-└── MM-037 (Ready - One Piece Card Scraper)
+└── MM-037 (Complete) ✓
+    ├── MM-038 (depends on MM-023 + MM-037)
+    └── MM-039 (Ready - Deck Builder, depends on MM-037 + MM-038)
 
 MM-002 (Complete, archived) ✓
 ├── MM-003 (Complete, archived) ✓

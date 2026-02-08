@@ -11,9 +11,15 @@ libp
 Lorcana
 manamesh
 mcmeta
+onepiece
+optcg
+optcgapi
+pyproject
 reskinnable
+ryanmichaelhirst
 scryfall
 trustlessly
 Unblind
 Untap
+vegapull
 Woogerworks

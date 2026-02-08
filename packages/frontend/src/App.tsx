@@ -15,6 +15,7 @@ import { WarBoard } from "./components/WarBoard";
 import { MerkleBattleshipBoard } from "./components/MerkleBattleshipBoard";
 import { ThresholdTallyBoard } from "./components/ThresholdTallyBoard";
 import { GoFishBoard } from "./components/GoFishBoard";
+import { OnePiecePhaserBoard } from "./components/OnePiecePhaserBoard";
 import { P2PLobby, type P2PRole } from "./components/P2PLobby";
 import { startP2P, P2PMultiplayer, type JoinCodeConnection } from "./p2p";
 import { GAMES, getGameById, type GameInfo } from "./game/registry";
@@ -229,6 +230,8 @@ function getBoardComponent(
     case "gofish-secure":
     case "gofish-zk":
       return GoFishBoard;
+    case "onepiece":
+      return OnePiecePhaserBoard;
     case "simple":
     default:
       return GameBoard;
