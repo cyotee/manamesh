@@ -11,6 +11,10 @@
 | MM-025 | Lorcana Game Module | Ready | MM-019, MM-020 | `feature/game-lorcana` |
 | MM-026 | Riftbound Game Module | Ready | MM-019, MM-020 | `feature/game-riftbound` |
 | MM-035 | Bet Settlement & Escrow Vault | Complete | MM-034, MM-036 | - |
+| MM-043 | CHIP Token Backing Model Fix | Ready | MM-035 | - |
+| MM-044 | EIP-712 On-Chain/Off-Chain Alignment | Ready | MM-035 | - |
+| MM-045 | Conservation-Safe Settlement Redesign | Blocked | MM-035, MM-044 | - |
+| MM-046 | Vault Authorization Hardening & Dispute | Blocked | MM-035, MM-044, MM-045 | - |
 
 ## Status Legend
 
@@ -30,6 +34,8 @@ Tasks with status "Ready" (all dependencies complete):
 | MM-024 | MTG Game Module (Crypto-Aware) | `/pm:launch MM-024` |
 | MM-025 | Lorcana Game Module | `/pm:launch MM-025` |
 | MM-026 | Riftbound Game Module | `/pm:launch MM-026` |
+| MM-043 | CHIP Token Backing Model Fix | `/pm:launch MM-043` |
+| MM-044 | EIP-712 On-Chain/Off-Chain Alignment | `/pm:launch MM-044` |
 
 ## Dependency Graph
 
@@ -48,6 +54,11 @@ MM-029 (Complete, archived) ✓
 
 MM-036 (Complete, archived) ✓
 └── MM-035 (Complete) ✓
+    ├── MM-043 (Ready - CHIP Token Backing)
+    ├── MM-044 (Ready - EIP-712 Alignment)
+    │   └── MM-045 (Blocked - Settlement Conservation, also depends on MM-035)
+    │       └── MM-046 (Blocked - Vault Hardening, also depends on MM-035, MM-044)
+    └── MM-045 (also depends on MM-044)
 
 MM-023 (Complete, archived) ✓
 └── MM-038 (Complete, archived) ✓

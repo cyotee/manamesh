@@ -110,8 +110,8 @@ Actionable items for follow-up tasks:
 
 - `contracts/src/ChipToken.sol`
 - `contracts/test/ChipToken.t.sol`
-  **User Response:** (pending)
-  **Notes:** This is the largest security/safety issue.
+  **User Response:** Accepted
+  **Notes:** Converted to task MM-043
 
 ### Suggestion 2: Align on-chain and off-chain EIP-712 (domain + hashing)
 
@@ -124,8 +124,8 @@ Actionable items for follow-up tasks:
 - `packages/frontend/src/wallet/signing/domain.ts`
 - `packages/frontend/src/wallet/signing/sign.ts`
 - `packages/frontend/src/wallet/signing/verify.ts`
-  **User Response:** (pending)
-  **Notes:** Without this, settlement signatures won’t verify.
+  **User Response:** Accepted
+  **Notes:** Converted to task MM-044
 
 ### Suggestion 3: Redesign settlement to be conservation-safe and game-agnostic
 
@@ -136,8 +136,8 @@ Actionable items for follow-up tasks:
 - `contracts/src/GameVault.sol`
 - `contracts/src/interfaces/IGameVault.sol`
 - `contracts/test/GameVault.t.sol`
-  **User Response:** (pending)
-  **Notes:** This also improves gas predictability.
+  **User Response:** Accepted
+  **Notes:** Converted to task MM-045
 
 ### Suggestion 4: Harden abandonment and fold flows (authorization + invariants)
 
@@ -147,8 +147,8 @@ Actionable items for follow-up tasks:
 
 - `contracts/src/GameVault.sol`
 - `contracts/test/GameVault.t.sol`
-  **User Response:** (pending)
-  **Notes:** Prevents escrow minting and unauthorized settlement.
+  **User Response:** Accepted (combined with Suggestion 5)
+  **Notes:** Converted to task MM-046
 
 ### Suggestion 5: Make dispute mechanism real or explicitly mark it out-of-scope
 
@@ -159,8 +159,8 @@ Actionable items for follow-up tasks:
 - `contracts/src/GameVault.sol`
 - `contracts/src/interfaces/IGameVault.sol`
 - `contracts/test/GameVault.t.sol`
-  **User Response:** (pending)
-  **Notes:** Current implementation is mostly signaling/events.
+  **User Response:** Accepted (combined with Suggestion 4)
+  **Notes:** Converted to task MM-046
 
 ---
 
