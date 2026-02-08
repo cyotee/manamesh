@@ -10,7 +10,7 @@
 | MM-024 | MTG Game Module (Crypto-Aware) | Ready | MM-019, MM-020, MM-029 | `feature/game-mtg` |
 | MM-025 | Lorcana Game Module | Ready | MM-019, MM-020 | `feature/game-lorcana` |
 | MM-026 | Riftbound Game Module | Ready | MM-019, MM-020 | `feature/game-riftbound` |
-| MM-035 | Bet Settlement & Escrow Vault | In Progress | MM-034, MM-036 | `feature/MM-035-bet-settlement-escrow` |
+| MM-035 | Bet Settlement & Escrow Vault | Pending Merge | MM-034, MM-036 | `feature/MM-035-bet-settlement-escrow` |
 
 ## Status Legend
 
