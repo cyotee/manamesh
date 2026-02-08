@@ -9,6 +9,7 @@ export type {
   IPFSSource,
   HTTPSource,
   IPFSZipSource,
+  LocalSource,
   AssetPackSource,
   LoadedAssetPack,
   CacheStatus,
@@ -56,3 +57,10 @@ export {
   entryToBlob,
   inferMimeType,
 } from './zip-extractor';
+
+// Local loader (directory/zip upload)
+export {
+  loadLocalZip,
+  loadLocalDirectory,
+  reloadLocalPack,
+} from './local-loader';

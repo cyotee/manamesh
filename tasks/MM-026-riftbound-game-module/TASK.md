@@ -1,7 +1,7 @@
 # Task MM-026: Riftbound Game Module
 
 **Repo:** ManaMesh
-**Status:** Blocked
+**Status:** Ready
 **Created:** 2026-01-21
 **Dependencies:** MM-019, MM-020
 **Worktree:** `feature/game-riftbound`

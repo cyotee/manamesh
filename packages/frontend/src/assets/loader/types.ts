@@ -35,9 +35,31 @@ export interface IPFSZipSource {
 }
 
 /**
+ * Source for loading an asset pack from local browser upload.
+ * The pack is uploaded via directory or zip, extracted, and cached
+ * into IndexedDB. The packId uniquely identifies it after loading.
+ */
+export interface LocalSource {
+  type: 'local';
+  /** Unique pack ID assigned on upload (e.g., "local:onepiece-complete") */
+  packId: string;
+}
+
+/**
+ * Source for an asset pack received from a P2P peer.
+ */
+export interface P2PSource {
+  type: 'p2p';
+  /** Peer ID the pack was received from */
+  peerId: string;
+  /** Original pack ID from the sender */
+  originalPackId: string;
+}
+
+/**
  * Combined source type for asset packs.
  */
-export type AssetPackSource = IPFSSource | HTTPSource | IPFSZipSource;
+export type AssetPackSource = IPFSSource | HTTPSource | IPFSZipSource | LocalSource | P2PSource;
 
 /**
  * A loaded asset pack with its manifest and source info.
@@ -114,6 +136,10 @@ export interface StoredPackMetadata {
   cardCount: number;
   /** Cached card IDs for cache status tracking */
   cachedCardIds: string[];
+  /** Full resolved card manifest entries (avoids re-extracting zip on reload) */
+  cards?: CardManifestEntry[];
+  /** Full manifest (avoids re-extracting zip on reload) */
+  manifest?: AssetPackManifest;
   /** Timestamp when loaded */
   loadedAt: number;
 }
@@ -153,6 +179,10 @@ export function sourceToPackId(source: AssetPackSource): string {
     return `ipfs:${source.cid}`;
   } else if (source.type === 'ipfs-zip') {
     return `ipfs-zip:${source.cid}`;
+  } else if (source.type === 'local') {
+    return source.packId;
+  } else if (source.type === 'p2p') {
+    return `p2p:${source.peerId}:${source.originalPackId}`;
   } else {
     // Use base64 encoding of URL for HTTP sources
     // Remove trailing slash and hash to normalize

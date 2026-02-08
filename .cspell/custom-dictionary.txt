@@ -16,6 +16,7 @@ optcg
 optcgapi
 pyproject
 reskinnable
+Riftbound
 ryanmichaelhirst
 scryfall
 trustlessly
@@ -23,3 +24,4 @@ Unblind
 Untap
 vegapull
 Woogerworks
+worktree

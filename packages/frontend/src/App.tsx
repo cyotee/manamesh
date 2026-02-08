@@ -16,6 +16,8 @@ import { MerkleBattleshipBoard } from "./components/MerkleBattleshipBoard";
 import { ThresholdTallyBoard } from "./components/ThresholdTallyBoard";
 import { GoFishBoard } from "./components/GoFishBoard";
 import { OnePiecePhaserBoard } from "./components/OnePiecePhaserBoard";
+import { DeckBuilderPage } from "./components/DeckBuilder/DeckBuilderPage";
+import { AssetPackManagement } from "./components/AssetPackManagement";
 import { P2PLobby, type P2PRole } from "./components/P2PLobby";
 import { startP2P, P2PMultiplayer, type JoinCodeConnection } from "./p2p";
 import { GAMES, getGameById, type GameInfo } from "./game/registry";
@@ -77,7 +79,7 @@ class AppErrorBoundary extends React.Component<
   }
 }
 
-type GameMode = "gameSelect" | "modeSelect" | "local" | "online" | "p2p-game";
+type GameMode = "gameSelect" | "modeSelect" | "local" | "online" | "p2p-game" | "deck-builder" | "asset-packs";
 
 interface ModeSelectProps {
   game: GameInfo;
@@ -857,6 +859,14 @@ const AppContent: React.FC = () => {
     setGameMode("modeSelect");
   }, []);
 
+  const handleDeckBuilder = useCallback(() => {
+    setGameMode("deck-builder");
+  }, []);
+
+  const handleAssetPacks = useCallback(() => {
+    setGameMode("asset-packs");
+  }, []);
+
   const handleSelectMode = useCallback((mode: "local" | "online") => {
     setGameMode(mode);
   }, []);
@@ -887,7 +897,7 @@ const AppContent: React.FC = () => {
 
   // Game selection screen
   if (gameMode === "gameSelect") {
-    return <GameSelector onSelectGame={handleSelectGame} />;
+    return <GameSelector onSelectGame={handleSelectGame} onDeckBuilder={handleDeckBuilder} onAssetPacks={handleAssetPacks} />;
   }
 
   // Mode selection screen
@@ -928,8 +938,26 @@ const AppContent: React.FC = () => {
     );
   }
 
+  // Deck builder
+  if (gameMode === "deck-builder") {
+    return (
+      <DeckBuilderPage
+        onBack={handleBackToGameSelect}
+      />
+    );
+  }
+
+  // Asset pack management
+  if (gameMode === "asset-packs") {
+    return (
+      <AssetPackManagement
+        onBack={handleBackToGameSelect}
+      />
+    );
+  }
+
   // Fallback to game selection
-  return <GameSelector onSelectGame={handleSelectGame} />;
+  return <GameSelector onSelectGame={handleSelectGame} onDeckBuilder={handleDeckBuilder} onAssetPacks={handleAssetPacks} />;
 };
 
 /**

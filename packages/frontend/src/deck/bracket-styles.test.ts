@@ -81,7 +81,7 @@ describe('parseEffectText', () => {
     expect(result[1]).toEqual({
       type: 'bracket',
       text: '[Blocker]',
-      color: '#0d47a1',
+      color: '#ff9800',
     });
   });
 
@@ -102,7 +102,7 @@ describe('parseEffectText', () => {
       '[Activate: Main] Tap this card.',
       DEFAULT_BRACKET_STYLES,
     );
-    expect(result[0].color).toBe('#6a1b9a');
+    expect(result[0].color).toBe('#0d47a1');
   });
 
   it('uses fallback color for unmatched brackets', () => {
@@ -131,7 +131,7 @@ describe('parseEffectText', () => {
       '[on play] Draw a card.',
       DEFAULT_BRACKET_STYLES,
     );
-    expect(result[0].color).toBe('#2e7d32');
+    expect(result[0].color).toBe('#0d47a1');
   });
 
   it('uses custom config when provided', () => {

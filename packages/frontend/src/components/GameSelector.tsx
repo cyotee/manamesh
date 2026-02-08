@@ -10,6 +10,8 @@ import { GAMES, type GameInfo } from "../game/registry";
 interface GameSelectorProps {
   onSelectGame: (gameId: string) => void;
   onBack?: () => void;
+  onDeckBuilder?: () => void;
+  onAssetPacks?: () => void;
 }
 
 const GameCard: React.FC<{
@@ -107,6 +109,8 @@ const GameCard: React.FC<{
 export const GameSelector: React.FC<GameSelectorProps> = ({
   onSelectGame,
   onBack,
+  onDeckBuilder,
+  onAssetPacks,
 }) => {
   return (
     <div
@@ -156,6 +160,46 @@ export const GameSelector: React.FC<GameSelectorProps> = ({
         <span style={{ color: "#a0a0a0", margin: "0 8px" }}>|</span>
         <span style={{ color: "#a0a0a0" }}>No servers required</span>
       </div>
+
+      {/* Tools section */}
+      {(onDeckBuilder || onAssetPacks) && (
+        <div style={{ marginBottom: 24, display: "flex", gap: 12, justifyContent: "center" }}>
+          {onDeckBuilder && (
+            <button
+              onClick={onDeckBuilder}
+              style={{
+                padding: "12px 24px",
+                backgroundColor: "#1565c0",
+                color: "#fff",
+                border: "none",
+                borderRadius: 8,
+                cursor: "pointer",
+                fontSize: 14,
+                fontWeight: "bold",
+              }}
+            >
+              Deck Builder
+            </button>
+          )}
+          {onAssetPacks && (
+            <button
+              onClick={onAssetPacks}
+              style={{
+                padding: "12px 24px",
+                backgroundColor: "#7c4dff",
+                color: "#fff",
+                border: "none",
+                borderRadius: 8,
+                cursor: "pointer",
+                fontSize: 14,
+                fontWeight: "bold",
+              }}
+            >
+              Asset Packs
+            </button>
+          )}
+        </div>
+      )}
 
       <h2 style={{ marginBottom: "24px", color: "#e4e4e4" }}>Choose a Game</h2>
 

@@ -1,8 +1,10 @@
 /**
  * Asset Pack Cache
  *
- * Extends the base IPFS cache with asset pack-specific functionality.
- * Stores pack metadata and card images with pack-level tracking.
+ * Three separate IndexedDB stores for clean data separation:
+ * - Pack metadata (name, game, card entries, etc.)
+ * - Card images (individual front/back blobs)
+ * - Pack zip archives (full zip blobs for offline reconstruction)
  */
 
 import { get, set, del, createStore, UseStore } from 'idb-keyval';
@@ -13,15 +15,18 @@ import type {
 } from './types';
 import { makeCardImageKey, sourceToPackId } from './types';
 
-// Database names
+// Database names — each data type gets its own IndexedDB database
 const PACK_DB_NAME = 'manamesh-asset-packs';
 const PACK_STORE_NAME = 'packs';
 const CARD_IMAGE_DB_NAME = 'manamesh-card-images';
 const CARD_IMAGE_STORE_NAME = 'images';
+const PACK_ZIP_DB_NAME = 'manamesh-pack-zips';
+const PACK_ZIP_STORE_NAME = 'zips';
 
 // Store instances
 let packStore: UseStore;
 let cardImageStore: UseStore;
+let packZipStore: UseStore;
 
 function initStores() {
   if (!packStore) {
@@ -29,6 +34,9 @@ function initStores() {
   }
   if (!cardImageStore) {
     cardImageStore = createStore(CARD_IMAGE_DB_NAME, CARD_IMAGE_STORE_NAME);
+  }
+  if (!packZipStore) {
+    packZipStore = createStore(PACK_ZIP_DB_NAME, PACK_ZIP_STORE_NAME);
   }
 }
 
@@ -62,7 +70,6 @@ export async function getPackMetadata(
  */
 export async function getAllPackMetadata(): Promise<StoredPackMetadata[]> {
   initStores();
-  // idb-keyval doesn't have a getAll, so we need to use entries
   const { entries } = await import('idb-keyval');
   const allEntries = await entries<string, StoredPackMetadata>(packStore);
   return allEntries.map(([, value]) => value);
@@ -157,6 +164,41 @@ export async function deleteCardImage(
 }
 
 // ============================================================================
+// Pack Zip Archives
+// ============================================================================
+
+/**
+ * Store a zip blob for an asset pack.
+ * Stored in a dedicated database separate from pack metadata.
+ */
+export async function storePackZip(
+  packId: string,
+  zipBlob: Blob
+): Promise<void> {
+  initStores();
+  await set(packId, zipBlob, packZipStore);
+}
+
+/**
+ * Get a stored zip blob for an asset pack.
+ */
+export async function getPackZip(
+  packId: string
+): Promise<Blob | null> {
+  initStores();
+  const blob = await get<Blob>(packId, packZipStore);
+  return blob || null;
+}
+
+/**
+ * Delete a stored zip blob.
+ */
+export async function deletePackZip(packId: string): Promise<void> {
+  initStores();
+  await del(packId, packZipStore);
+}
+
+// ============================================================================
 // Pack-Level Operations
 // ============================================================================
 
@@ -201,7 +243,7 @@ export async function getPackCacheStatus(
 }
 
 /**
- * Clear all cached data for an asset pack.
+ * Clear all cached data for an asset pack (metadata, images, and zip).
  */
 export async function clearPackCache(packId: string): Promise<void> {
   initStores();
@@ -218,6 +260,9 @@ export async function clearPackCache(packId: string): Promise<void> {
     // Delete pack metadata
     await deletePackMetadata(packId);
   }
+
+  // Delete stored zip archive
+  await deletePackZip(packId);
 }
 
 /**

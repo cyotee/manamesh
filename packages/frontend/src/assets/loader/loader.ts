@@ -77,6 +77,56 @@ export async function loadPack(
     return loadZipPack(source, options);
   }
 
+  // P2P sources: reconstruct from IndexedDB metadata (already cached by receiver)
+  if (source.type === 'p2p') {
+    const packId = sourceToPackId(source);
+    const existing = loadedPacks.get(packId);
+    if (existing) return existing;
+
+    // Try to reconstruct from stored metadata
+    const meta = await getPackMetadata(packId);
+    if (meta?.manifest && meta?.cards) {
+      const pack: LoadedAssetPack = {
+        id: packId,
+        manifest: meta.manifest,
+        cards: meta.cards,
+        source,
+        loadedAt: meta.loadedAt,
+      };
+      loadedPacks.set(packId, pack);
+      return pack;
+    }
+
+    throw new Error(
+      `P2P pack from peer "${source.peerId}" not found in cache. Request it again.`
+    );
+  }
+
+  // Local sources: check in-memory caches, then try IndexedDB reconstruction
+  if (source.type === 'local') {
+    const existing = loadedPacks.get(source.packId);
+    if (existing) return existing;
+
+    // Check local-loader's in-memory cache
+    const { getLocalPack, reloadLocalPack } = await import('./local-loader');
+    const localPack = getLocalPack(source.packId);
+    if (localPack) {
+      loadedPacks.set(localPack.id, localPack);
+      return localPack;
+    }
+
+    // Try to reconstruct from IndexedDB (survives page reload)
+    const reloaded = await reloadLocalPack(source.packId);
+    if (reloaded) {
+      loadedPacks.set(reloaded.id, reloaded);
+      return reloaded;
+    }
+
+    throw new Error(
+      `Local pack "${source.packId}" not found. Please re-upload the asset pack.`
+    );
+  }
+
   const packId = sourceToPackId(source);
 
   // Check if already loaded

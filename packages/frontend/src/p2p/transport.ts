@@ -23,6 +23,8 @@ import type {
   JoinCodeConnection,
   ConnectionState,
 } from "./discovery/join-code";
+import { isAssetSharingMessage } from "./asset-sharing";
+import type { AssetSharingMessage } from "./asset-sharing";
 
 /**
  * Simple in-memory storage for browser-side game state
@@ -108,7 +110,16 @@ export type P2PMessageType =
   | "sync" // Host -> Guest: full state sync response
   | "matchData" // Host -> Guest: player metadata
   | "patch" // Host -> Guest: incremental state patch
-  | "error"; // Both: error message
+  | "error" // Both: error message
+  // Asset sharing protocol (both directions)
+  | "deck-list-share"
+  | "deck-list-ack"
+  | "asset-pack-request"
+  | "asset-pack-offer"
+  | "asset-pack-chunk"
+  | "asset-pack-complete"
+  | "asset-pack-denied"
+  | "asset-pack-cancel";
 
 export interface P2PMessage {
   type: P2PMessageType;
@@ -596,6 +607,8 @@ export class P2PTransport {
   private numPlayers: number;
   private game: Game;
   private transportDataCallback: TransportDataCallback | null = null;
+  private assetSharingCallbacks: Set<(msg: AssetSharingMessage) => void> =
+    new Set();
 
   constructor(
     opts: P2PTransportOpts & { transportDataCallback?: TransportDataCallback },
@@ -769,6 +782,12 @@ export class P2PTransport {
   }
 
   private handleMessage(message: P2PMessage): void {
+    // Asset sharing messages are bidirectional — handle for both roles
+    if (isAssetSharingMessage(message.type)) {
+      this.handleAssetSharingMessage(message);
+      return;
+    }
+
     if (this.role === "host") {
       this.handleHostMessage(message);
     } else {
@@ -1032,6 +1051,26 @@ export class P2PTransport {
 
   updateCredentials(credentials?: string): void {
     this.credentials = credentials;
+  }
+
+  // --- Asset sharing protocol ---
+
+  /** Subscribe to incoming asset sharing messages. Returns unsubscribe fn. */
+  onAssetSharingMessage(
+    callback: (msg: AssetSharingMessage) => void,
+  ): () => void {
+    this.assetSharingCallbacks.add(callback);
+    return () => this.assetSharingCallbacks.delete(callback);
+  }
+
+  /** Send an asset sharing message to the peer. */
+  sendAssetSharingMessage(msg: AssetSharingMessage): void {
+    this.send({ type: msg.type as P2PMessageType, args: [msg] });
+  }
+
+  private handleAssetSharingMessage(message: P2PMessage): void {
+    const msg = message.args[0] as AssetSharingMessage;
+    this.assetSharingCallbacks.forEach((cb) => cb(msg));
   }
 }
 

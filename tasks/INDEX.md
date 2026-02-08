@@ -7,46 +7,31 @@
 
 | ID | Title | Status | Dependencies | Worktree |
 |----|-------|--------|--------------|----------|
-| MM-023 | One Piece TCG Game Module | Complete | MM-019, MM-020, MM-029 | - |
 | MM-024 | MTG Game Module (Crypto-Aware) | Ready | MM-019, MM-020, MM-029 | `feature/game-mtg` |
 | MM-025 | Lorcana Game Module | Ready | MM-019, MM-020 | `feature/game-lorcana` |
 | MM-026 | Riftbound Game Module | Ready | MM-019, MM-020 | `feature/game-riftbound` |
-| MM-033 | One Piece Card Data Sources Research | Complete | - | - |
-| MM-034 | Ethereum Wallet Integration | Complete | MM-029 | - |
 | MM-035 | Bet Settlement & Escrow Vault | In Review | MM-034, MM-036 | - |
-| MM-036 | Foundry Setup | Complete | - | - |
-| MM-037 | One Piece Card Scraper & Asset Pack Builder | Complete | MM-033 | - |
-| MM-038 | Card Rendering Engine (Phaser 3) | Complete | MM-023, MM-037 | - |
 | MM-039 | One Piece TCG Deck Builder | In Review | MM-037, MM-038 | - |
 | MM-040 | P2P Asset Pack Sharing & IPFS Hash Import | In Review | MM-039 | - |
-| MM-041 | MTG Card Data Sources Research | Complete | - | - |
-| MM-042 | MTG Card Scraper & Multi-Game Tool Refactor | Complete | MM-037, MM-041 | - |
 
 ## Status Legend
 
-- **Ready** - All dependencies met, can be launched with `/backlog:launch`
+- **Ready** - All dependencies met, can be launched with `/pm:launch`
 - **In Progress** - Implementation agent working (has worktree)
 - **In Review** - Implementation complete, awaiting code review
 - **Changes Requested** - Review found issues, needs fixes
-- **Complete** - Review passed, ready to archive with `/backlog:prune`
+- **Complete** - Review passed, ready to archive with `/pm:prune`
 - **Blocked** - Waiting on dependencies
 
 ## Ready for Launch
 
-All active tasks are ready (dependencies complete):
+Tasks with status "Ready" (all dependencies complete):
 
 | ID | Title | Launch Command |
 |----|-------|----------------|
-| MM-023 | One Piece TCG Game Module (Rules-Agnostic + Crypto) | `/backlog:launch MM-023` |
 | MM-024 | MTG Game Module (Crypto-Aware) | `/pm:launch MM-024` |
-| MM-025 | Lorcana Game Module | `/backlog:launch MM-025` |
-| MM-026 | Riftbound Game Module | `/backlog:launch MM-026` |
-| MM-033 | One Piece Card Data Sources Research | `/backlog:launch MM-033` |
-| MM-034 | Ethereum Wallet Integration | `/backlog:launch MM-034` |
-| MM-035 | Bet Settlement & Escrow Vault | `/backlog:launch MM-035` |
-| MM-036 | Foundry Setup | `/backlog:launch MM-036` |
-| MM-037 | One Piece Card Scraper & Asset Pack Builder | `/backlog:launch MM-037` |
-| MM-038 | Card Rendering Engine (Phaser 3) | `/backlog:launch MM-038` |
+| MM-025 | Lorcana Game Module | `/pm:launch MM-025` |
+| MM-026 | Riftbound Game Module | `/pm:launch MM-026` |
 
 ## Dependency Graph
 
@@ -58,30 +43,28 @@ MM-019 (Complete, archived) ✓
     └── MM-026 (Ready - Riftbound)
 
 MM-029 (Complete, archived) ✓
-├── MM-023 (Ready - One Piece TCG, also depends on MM-019, MM-020)
+├── MM-023 (Complete, archived) ✓
 ├── MM-024 (Ready - MTG, also depends on MM-019, MM-020)
-└── MM-034 (Ready - Ethereum Wallet Integration)
-    └── MM-035 (Ready - Bet Settlement, also depends on MM-036)
+└── MM-034 (Complete, archived) ✓
+    └── MM-035 (In Review - Bet Settlement, also depends on MM-036)
 
-MM-036 (Ready - Foundry Setup, no dependencies)
+MM-036 (Complete, archived) ✓
 └── MM-035 (depends on MM-034 + MM-036)
 
-MM-023 (Complete) ✓
-└── MM-038 (Ready - Card Rendering Engine, also depends on MM-037)
+MM-023 (Complete, archived) ✓
+└── MM-038 (Complete, archived) ✓
 
-MM-033 (Complete) ✓
-└── MM-037 (Complete) ✓
-    ├── MM-038 (depends on MM-023 + MM-037)
-    └── MM-039 (Ready - Deck Builder, depends on MM-037 + MM-038)
+MM-033 (Complete, archived) ✓
+└── MM-037 (Complete, archived) ✓
+    ├── MM-038 (Complete, archived) ✓
+    ├── MM-039 (In Review - Deck Builder, depends on MM-037 + MM-038)
+    └── MM-042 (Complete, archived) ✓
 
-MM-039 (In Review) ✓
+MM-039 (In Review)
 └── MM-040 (In Review - P2P Asset Pack Sharing & IPFS Hash Import)
 
-MM-037 (Complete) ✓
-└── MM-042 (Complete) ✓
-
-MM-041 (Complete) ✓
-└── MM-042 (Complete) ✓
+MM-041 (Complete, archived) ✓
+└── MM-042 (Complete, archived) ✓
 
 MM-002 (Complete, archived) ✓
 ├── MM-003 (Complete, archived) ✓
@@ -120,11 +103,17 @@ Tasks in other repos that depend on this repo's tasks:
 | MM-020 | Deck Plugin for boardgame.io | 2026-01-28 | archive/MM-020.md |
 | MM-021 | War Game Module | 2026-01-28 | archive/MM-021.md |
 | MM-022 | Poker Game Module (with Crypto) | 2026-01-28 | archive/MM-022-poker-game-module/ |
+| MM-023 | One Piece TCG Game Module | 2026-02-05 | archive/MM-023-onepiece-tcg-module/ |
 | MM-027 | Asset Pack Manifest Parser | 2026-01-28 | archive/MM-027.md |
 | MM-028 | Asset Pack Loader | 2026-01-28 | archive/MM-028-asset-pack-loader/ |
 | MM-029 | Cryptographic Deck Plugin (Mental Poker) | 2026-01-28 | archive/MM-029-crypto-deck-plugin/ |
 | MM-030 | War Game Crypto Integration | 2026-01-28 | archive/MM-030-war-crypto-integration/ |
 | MM-031 | Blockchain-Enabled Poker | 2026-01-28 | archive/MM-031-blockchain-poker/ |
 | MM-032 | Hybrid P2P Transport | 2026-01-28 | archive/MM-032-hybrid-p2p-transport/ |
+| MM-033 | One Piece Card Data Sources Research | 2026-02-05 | archive/MM-033-onepiece-card-sources/ |
+| MM-034 | Ethereum Wallet Integration | 2026-02-05 | archive/MM-034-ethereum-wallet-integration/ |
+| MM-036 | Foundry Setup | 2026-02-05 | archive/MM-036-foundry-setup/ |
+| MM-037 | One Piece Card Scraper & Asset Pack Builder | 2026-02-06 | archive/MM-037-onepiece-card-scraper/ |
+| MM-038 | Card Rendering Engine (Phaser 3) | 2026-02-07 | archive/MM-038-card-rendering-engine/ |
 | MM-041 | MTG Card Data Sources Research | 2026-02-08 | archive/MM-041-mtg-card-sources/ |
 | MM-042 | MTG Card Scraper & Multi-Game Tool Refactor | 2026-02-08 | archive/MM-042-mtg-card-scraper/ |

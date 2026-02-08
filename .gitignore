@@ -48,6 +48,9 @@ coverage/
 # Local Claude settings
 .claude/settings.local.json
 
+# Task management plugin caches
+tasks/.deps-cache*/
+
 # Foundry
 contracts/out/
 contracts/cache/
