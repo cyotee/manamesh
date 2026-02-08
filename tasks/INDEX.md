@@ -11,8 +11,6 @@
 | MM-025 | Lorcana Game Module | Ready | MM-019, MM-020 | `feature/game-lorcana` |
 | MM-026 | Riftbound Game Module | Ready | MM-019, MM-020 | `feature/game-riftbound` |
 | MM-035 | Bet Settlement & Escrow Vault | In Review | MM-034, MM-036 | - |
-| MM-039 | One Piece TCG Deck Builder | In Review | MM-037, MM-038 | - |
-| MM-040 | P2P Asset Pack Sharing & IPFS Hash Import | In Review | MM-039 | - |
 
 ## Status Legend
 
