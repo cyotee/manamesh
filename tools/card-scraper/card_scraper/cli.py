@@ -179,7 +179,7 @@ def _cmd_status(args: argparse.Namespace) -> None:
 
 def _cmd_validate(args: argparse.Namespace) -> None:
     config = _load_app_config(args)
-    output_dir = Path(config.output.base_dir)
+    output_dir = Path(config.output_dir)
 
     if not output_dir.exists():
         console.print(f"[red]Output directory {output_dir} does not exist[/red]")
@@ -226,7 +226,7 @@ def _cmd_validate(args: argparse.Namespace) -> None:
 def _cmd_clean(args: argparse.Namespace) -> None:
     config = _load_app_config(args)
 
-    output_dir = Path(config.output.base_dir)
+    output_dir = Path(config.output_dir)
     state_file = Path(config.state.state_file)
 
     if output_dir.exists():

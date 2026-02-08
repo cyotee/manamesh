@@ -18,10 +18,10 @@ Requires Python 3.10+.
 cp config.example.yaml config.yaml
 
 # Scrape MTG cards (default game in config.example.yaml)
-python -m card_scraper scrape --game mtg --sets MKM,LCI
+python -m card_scraper --game mtg scrape --sets MKM,LCI
 
 # Scrape One Piece TCG
-python -m card_scraper scrape --game onepiece
+python -m card_scraper --game onepiece scrape
 
 # Scrape all sets for the default game
 python -m card_scraper scrape
@@ -30,7 +30,7 @@ python -m card_scraper scrape
 python -m card_scraper scrape --force
 
 # Check scrape status
-python -m card_scraper status --game mtg
+python -m card_scraper --game mtg status
 
 # Validate generated manifests
 python -m card_scraper validate

@@ -12,7 +12,7 @@ games:
         priority: 1
         rate_limit_ms: 200
       - name: ryan-api
-        enabled: true
+        enabled: false          # optcg-api.com domain is down
         priority: 2
         rate_limit_ms: 500
       - name: vegapull-records
@@ -22,7 +22,6 @@ games:
     scrape:
       sets: all
       include_starters: true
-      include_promos: true
 
   mtg:
     sources:

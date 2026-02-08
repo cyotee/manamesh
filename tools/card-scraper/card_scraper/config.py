@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+
 import yaml
 
 from card_scraper.adapters import known_adapters
@@ -45,7 +46,6 @@ class ScrapeConfig:
     sets: str = "all"  # "all" or comma-separated set IDs
     categories: Optional[List[str]] = None  # MTG: ["core", "expansion", "commander"]
     include_starters: bool = True
-    include_promos: bool = True
     include_tokens: bool = False
 
 
@@ -99,6 +99,11 @@ class AppConfig:
                     ],
                 ),
             }
+
+    @property
+    def output_dir(self) -> str:
+        """Return the game-qualified output directory: base_dir/game."""
+        return str(Path(self.output.base_dir) / self.game)
 
     @property
     def active_game(self) -> GameConfig:
@@ -209,7 +214,6 @@ def _parse_game_config(raw: Dict[str, Any]) -> GameConfig:
             sets=str(scr.get("sets", "all")),
             categories=scr.get("categories"),
             include_starters=scr.get("include_starters", True),
-            include_promos=scr.get("include_promos", True),
             include_tokens=scr.get("include_tokens", False),
         )
 

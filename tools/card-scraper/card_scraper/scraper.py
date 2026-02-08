@@ -54,7 +54,7 @@ class Scraper:
         self._adapters: List[CardSourceAdapter] = []
         self._state = StateTracker(config.state.state_file)
         self._downloader = ImageDownloader(
-            config.output.base_dir,
+            config.output_dir,
             user_agent="ManaMesh-CardScraper/0.2",
         )
 
@@ -187,13 +187,13 @@ class Scraper:
         gen_root, gen_set = _get_manifest_generators(self._game)
         sets_with_cards = [s for s in all_sets if s.id in all_cards]
         gen_root(
-            self._config.output.base_dir,
+            self._config.output_dir,
             sets_with_cards,
             version=self._config.output.manifest_version,
         )
         for set_info in sets_with_cards:
             gen_set(
-                self._config.output.base_dir,
+                self._config.output_dir,
                 set_info,
                 all_cards[set_info.id],
                 version=self._config.output.manifest_version,
@@ -232,9 +232,6 @@ class Scraper:
                     sid = f"ST-{i:02d}"
                     if sid not in all_sets:
                         all_sets[sid] = SetInfo(id=sid, name=f"Starter Deck {i:02d}", category="starter")
-            if scrape_cfg.include_promos:
-                if "PROMO" not in all_sets:
-                    all_sets["PROMO"] = SetInfo(id="PROMO", name="Promo Cards", category="promo")
 
         return sorted(all_sets.values(), key=lambda s: s.id)
 
