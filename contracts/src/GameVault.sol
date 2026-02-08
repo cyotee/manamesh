@@ -6,13 +6,15 @@ import { IERC20Permit } from "@openzeppelin/contracts/token/ERC20/extensions/IER
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { EIP712 } from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import { IGameVault } from "./interfaces/IGameVault.sol";
-import { IChipToken } from "./interfaces/IChipToken.sol";
+import { IChipTokenFactory } from "./interfaces/IChipTokenFactory.sol";
 import { SignatureVerifier } from "./libraries/SignatureVerifier.sol";
 
 /**
  * @title GameVault
  * @notice Escrow and settlement vault for ManaMesh games
- * @dev Handles chip escrow, hand settlement, fold authorization, and abandonment
+ * @dev Handles chip escrow, hand settlement, fold authorization, and abandonment.
+ *      Supports multiple chip token types — each game uses a single chip token
+ *      set by the first player to join.
  *
  * Settlement flow:
  * 1. Players join game → chips locked in escrow
@@ -33,14 +35,17 @@ contract GameVault is IGameVault, EIP712 {
     //                           STORAGE
     // =============================================================
 
-    /// @notice The chip token contract
-    IChipToken public immutable chips;
+    /// @notice The chip token factory
+    IChipTokenFactory public immutable chipFactory;
 
     /// @notice Abandonment timeout in seconds (default: 10 minutes)
     uint256 public abandonmentTimeout = 600;
 
     /// @notice Dispute stake required (anti-griefing)
     uint256 public disputeStake = 0.01 ether;
+
+    /// @notice Chip token used by each game: gameId => chipToken
+    mapping(bytes32 => address) public gameChipToken;
 
     /// @notice Player escrow balances: gameId => player => amount
     mapping(bytes32 => mapping(address => uint256)) private _escrow;
@@ -50,6 +55,15 @@ contract GameVault is IGameVault, EIP712 {
 
     /// @notice Track settled hands to prevent double-settlement
     mapping(bytes32 => mapping(bytes32 => bool)) private _settledHands;
+
+    /// @notice Track disputed hands to prevent double-dispute
+    mapping(bytes32 => mapping(bytes32 => bool)) private _disputedHands;
+
+    /// @notice Store settled deltas for dispute reversal: gameId => handId => player => delta
+    mapping(bytes32 => mapping(bytes32 => mapping(address => int256))) private _settledDeltas;
+
+    /// @notice Store settled hand players for dispute reversal: gameId => handId => players
+    mapping(bytes32 => mapping(bytes32 => address[])) private _settledPlayers;
 
     /// @notice Track fold authorizations: handId => foldingPlayer => authorized
     mapping(bytes32 => mapping(address => bool)) private _foldAuthorized;
@@ -64,8 +78,8 @@ contract GameVault is IGameVault, EIP712 {
     //                         CONSTRUCTOR
     // =============================================================
 
-    constructor(IChipToken _chips) EIP712("ManaMesh", "1") {
-        chips = _chips;
+    constructor(IChipTokenFactory _chipFactory) EIP712("ManaMesh", "1") {
+        chipFactory = _chipFactory;
         OWNER = msg.sender;
     }
 
@@ -74,11 +88,12 @@ contract GameVault is IGameVault, EIP712 {
     // =============================================================
 
     /// @inheritdoc IGameVault
-    function joinGame(bytes32 gameId, uint256 amount) external override {
+    function joinGame(bytes32 gameId, address chipToken, uint256 amount) external override {
         if (amount == 0) revert ZeroAmount();
+        _validateAndSetChipToken(gameId, chipToken);
 
         // Transfer chips to vault
-        IERC20(address(chips)).safeTransferFrom(msg.sender, address(this), amount);
+        IERC20(chipToken).safeTransferFrom(msg.sender, address(this), amount);
 
         // Update escrow
         _escrow[gameId][msg.sender] += amount;
@@ -94,6 +109,7 @@ contract GameVault is IGameVault, EIP712 {
     /// @inheritdoc IGameVault
     function joinGameWithPermit(
         bytes32 gameId,
+        address chipToken,
         uint256 amount,
         uint256 deadline,
         uint8 v,
@@ -101,12 +117,13 @@ contract GameVault is IGameVault, EIP712 {
         bytes32 s
     ) external override {
         if (amount == 0) revert ZeroAmount();
+        _validateAndSetChipToken(gameId, chipToken);
 
         // Use permit for gasless approval
-        IERC20Permit(address(chips)).permit(msg.sender, address(this), amount, deadline, v, r, s);
+        IERC20Permit(chipToken).permit(msg.sender, address(this), amount, deadline, v, r, s);
 
         // Transfer chips to vault
-        IERC20(address(chips)).safeTransferFrom(msg.sender, address(this), amount);
+        IERC20(chipToken).safeTransferFrom(msg.sender, address(this), amount);
 
         // Update escrow
         _escrow[gameId][msg.sender] += amount;
@@ -124,11 +141,13 @@ contract GameVault is IGameVault, EIP712 {
         uint256 balance = _escrow[gameId][msg.sender];
         if (balance == 0) revert NothingToWithdraw();
 
+        address chipToken = gameChipToken[gameId];
+
         // Clear escrow
         _escrow[gameId][msg.sender] = 0;
 
         // Return chips
-        IERC20(address(chips)).safeTransfer(msg.sender, balance);
+        IERC20(chipToken).safeTransfer(msg.sender, balance);
 
         emit PlayerLeft(gameId, msg.sender, balance);
     }
@@ -154,7 +173,7 @@ contract GameVault is IGameVault, EIP712 {
         }
 
         // Process fold authorizations first
-        _processFolds(folds, foldSigs);
+        _processFolds(gameId, folds, foldSigs);
 
         // Get players for signature verification
         address[] memory players = _gamePlayers[gameId];
@@ -198,7 +217,8 @@ contract GameVault is IGameVault, EIP712 {
         // Signatures can be provided in any order; each remaining player must appear once
         bool[] memory seen = new bool[](remainingPlayers.length);
         for (uint256 i = 0; i < signatures.length; i++) {
-            address signer = SignatureVerifier.recoverSigner(_domainSeparatorV4(), structHash, signatures[i]);
+            address signer =
+                SignatureVerifier.recoverSigner(_domainSeparatorV4(), structHash, signatures[i]);
             bool matched = false;
             for (uint256 j = 0; j < remainingPlayers.length; j++) {
                 if (signer == remainingPlayers[j]) {
@@ -240,11 +260,13 @@ contract GameVault is IGameVault, EIP712 {
         uint256 balance = _escrow[gameId][msg.sender];
         if (balance == 0) revert NothingToWithdraw();
 
+        address chipToken = gameChipToken[gameId];
+
         // Clear balance
         _escrow[gameId][msg.sender] = 0;
 
         // Transfer chips back
-        IERC20(address(chips)).safeTransfer(msg.sender, balance);
+        IERC20(chipToken).safeTransfer(msg.sender, balance);
 
         emit Withdrawn(gameId, msg.sender, balance);
     }
@@ -263,22 +285,58 @@ contract GameVault is IGameVault, EIP712 {
         // Require dispute stake
         if (msg.value < disputeStake) revert DisputeStakeRequired();
 
-        // Verify the bet chain
-        address[] memory players = _gamePlayers[gameId];
-        if (!SignatureVerifier.verifyBetChain(_domainSeparatorV4(), betChain, betSigs, players)) {
+        // Hand must have been settled
+        if (!_settledHands[gameId][handId]) revert HandNotSettled();
+
+        // Prevent double dispute
+        if (_disputedHands[gameId][handId]) revert AlreadyDisputed();
+
+        // Verify the bet chain (each bet signed by its declared bettor)
+        if (!SignatureVerifier.verifyBetChain(_domainSeparatorV4(), betChain, betSigs)) {
             revert InvalidBetChain();
         }
 
-        // Determine actual winner from bet chain
-        // This is a simplified implementation - real logic would analyze the bets
-        address actualWinner = _determineWinnerFromBets(betChain, players);
+        // Verify all bets belong to this hand and all bettors are game players
+        for (uint256 i = 0; i < betChain.length; i++) {
+            if (betChain[i].handId != handId) revert InvalidBetChain();
+            if (!_isPlayerInGame(gameId, betChain[i].bettor)) revert InvalidBetChain();
+        }
+
+        // Replay bet chain to compute actual contributions per player
+        (address[] memory bettors, uint256[] memory contributions, bool[] memory folded) =
+            _replayBetChain(betChain);
+
+        // Verify settlement matches bet chain constraints
+        bool fraudDetected =
+            _detectFraud(gameId, handId, bettors, contributions, folded);
 
         emit DisputeRaised(gameId, handId, msg.sender);
-        emit DisputeResolved(gameId, handId, actualWinner, true);
 
-        // Refund dispute stake to successful challenger
-        (bool success,) = msg.sender.call{ value: msg.value }("");
-        require(success, "Refund failed");
+        if (fraudDetected) {
+            // Mark as disputed
+            _disputedHands[gameId][handId] = true;
+
+            // Determine most egregious beneficiary of fraud (before reversal)
+            address fraudBeneficiary = _findFraudBeneficiary(gameId, handId);
+
+            // Reverse the settlement
+            _reverseSettlement(gameId, handId);
+
+            // Re-settle: folded players lose contributions, non-folded get
+            // their contributions returned (conservative approach since we
+            // can't determine the hand winner on-chain)
+            _applyDisputeSettlement(gameId, handId, bettors, contributions, folded);
+
+            emit DisputeResolved(gameId, handId, fraudBeneficiary, true);
+
+            // Refund dispute stake to successful challenger
+            (bool success,) = msg.sender.call{ value: msg.value }("");
+            if (!success) revert DisputeFailed();
+        } else {
+            emit DisputeResolved(gameId, handId, address(0), false);
+
+            // No fraud: challenger loses stake (kept by contract)
+        }
     }
 
     // =============================================================
@@ -321,11 +379,24 @@ contract GameVault is IGameVault, EIP712 {
     //                      INTERNAL FUNCTIONS
     // =============================================================
 
+    /**
+     * @dev Validate chip token is from factory and set/check per-game token
+     */
+    function _validateAndSetChipToken(bytes32 gameId, address chipToken) internal {
+        if (!chipFactory.isChipToken(chipToken)) revert InvalidChipToken();
+
+        if (gameChipToken[gameId] == address(0)) {
+            gameChipToken[gameId] = chipToken;
+        } else if (gameChipToken[gameId] != chipToken) {
+            revert ChipTokenMismatch();
+        }
+    }
+
     function _settleHand(
         bytes32 gameId,
         HandResult calldata hand,
         bytes[] calldata signatures,
-        address[] memory players
+        address[] memory gamePlayers
     ) internal {
         // Check not already settled
         if (_settledHands[gameId][hand.handId]) revert AlreadySettled();
@@ -333,20 +404,34 @@ contract GameVault is IGameVault, EIP712 {
         // Verify hand belongs to this game
         if (hand.gameId != gameId) revert GameNotActive();
 
-        // Verify winner is a player in the game
-        if (!_isPlayerInGame(gameId, hand.winner)) revert PlayerNotInGame();
+        // Validate per-player deltas
+        if (hand.players.length != hand.deltas.length) revert PlayersAndDeltasLengthMismatch();
+        if (hand.players.length == 0) revert GameNotActive();
+
+        // Verify deltas sum to zero (conservation)
+        int256 deltaSum = 0;
+        for (uint256 i = 0; i < hand.deltas.length; i++) {
+            deltaSum += hand.deltas[i];
+        }
+        if (deltaSum != 0) revert DeltasNotBalanced();
+
+        // Verify all hand players are in the game
+        for (uint256 i = 0; i < hand.players.length; i++) {
+            if (!_isPlayerInGame(gameId, hand.players[i])) revert PlayerNotInGame();
+        }
 
         // Verify signatures from all active players (excluding folded)
         bytes32 structHash = SignatureVerifier.hashHandResult(hand);
         uint256 requiredSigs = 0;
         uint256 validSigs = 0;
 
-        for (uint256 i = 0; i < players.length; i++) {
+        for (uint256 i = 0; i < gamePlayers.length; i++) {
             // Skip if player folded this hand
-            if (_foldAuthorized[hand.handId][players[i]]) {
+            if (_foldAuthorized[hand.handId][gamePlayers[i]]) {
+                // Verify settler is authorized by the folding player
                 if (
-                    msg.sender != players[i]
-                        && !_foldAuthorizedSettle[hand.handId][players[i]][msg.sender]
+                    msg.sender != gamePlayers[i]
+                        && !_foldAuthorizedSettle[hand.handId][gamePlayers[i]][msg.sender]
                 ) {
                     revert InvalidFoldAuth();
                 }
@@ -357,9 +442,11 @@ contract GameVault is IGameVault, EIP712 {
 
             // Find matching signature
             for (uint256 j = 0; j < signatures.length; j++) {
-                if (SignatureVerifier.verify(
-                        _domainSeparatorV4(), structHash, signatures[j], players[i]
-                    )) {
+                if (
+                    SignatureVerifier.verify(
+                        _domainSeparatorV4(), structHash, signatures[j], gamePlayers[i]
+                    )
+                ) {
                     validSigs++;
                     break;
                 }
@@ -371,38 +458,51 @@ contract GameVault is IGameVault, EIP712 {
         // Mark as settled
         _settledHands[gameId][hand.handId] = true;
 
-        // Settlement must conserve escrow. Winner gains exactly what others lose.
-        uint256 potPerLoser = hand.potAmount / (players.length - 1);
-        uint256 remainder = hand.potAmount - (potPerLoser * (players.length - 1));
-        uint256 credited = 0;
-
-        for (uint256 i = 0; i < players.length; i++) {
-            if (players[i] == hand.winner) continue;
-
-            uint256 deduction = potPerLoser;
-            if (remainder > 0) {
-                deduction += 1;
-                remainder -= 1;
-            }
-
-            if (_escrow[gameId][players[i]] < deduction) revert InsufficientEscrow();
-            _escrow[gameId][players[i]] -= deduction;
-            credited += deduction;
+        // Store settlement data for potential dispute reversal
+        _settledPlayers[gameId][hand.handId] = hand.players;
+        for (uint256 i = 0; i < hand.players.length; i++) {
+            _settledDeltas[gameId][hand.handId][hand.players[i]] = hand.deltas[i];
         }
 
-        _escrow[gameId][hand.winner] += credited;
+        // Apply per-player deltas to escrow
+        for (uint256 i = 0; i < hand.players.length; i++) {
+            if (hand.deltas[i] < 0) {
+                // Player is losing: deduct from escrow
+                uint256 loss = uint256(-hand.deltas[i]);
+                if (_escrow[gameId][hand.players[i]] < loss) revert InsufficientEscrow();
+                _escrow[gameId][hand.players[i]] -= loss;
+            } else if (hand.deltas[i] > 0) {
+                // Player is winning: add to escrow
+                _escrow[gameId][hand.players[i]] += uint256(hand.deltas[i]);
+            }
+        }
 
-        emit HandSettled(gameId, hand.handId, hand.winner, hand.potAmount);
+        emit HandSettled(gameId, hand.handId);
     }
 
-    function _processFolds(FoldAuth[] calldata folds, bytes[] calldata foldSigs) internal {
+    function _processFolds(bytes32 gameId, FoldAuth[] calldata folds, bytes[] calldata foldSigs)
+        internal
+    {
         for (uint256 i = 0; i < folds.length; i++) {
+            // Verify fold is bound to this game
+            if (folds[i].gameId != gameId) revert InvalidFoldAuth();
+
+            // Verify folding player is in the game
+            if (!_isPlayerInGame(gameId, folds[i].foldingPlayer)) revert InvalidFoldAuth();
+
+            // Prevent duplicate fold processing
+            if (_foldAuthorized[folds[i].handId][folds[i].foldingPlayer]) {
+                revert InvalidFoldAuth();
+            }
+
             bytes32 structHash = SignatureVerifier.hashFoldAuth(folds[i]);
 
             // Verify fold is signed by the folding player
-            if (!SignatureVerifier.verify(
+            if (
+                !SignatureVerifier.verify(
                     _domainSeparatorV4(), structHash, foldSigs[i], folds[i].foldingPlayer
-                )) {
+                )
+            ) {
                 revert InvalidSignature();
             }
 
@@ -411,8 +511,8 @@ contract GameVault is IGameVault, EIP712 {
 
             // Record allowed settlers
             for (uint256 j = 0; j < folds[i].authorizedSettlers.length; j++) {
-                _foldAuthorizedSettle[folds[i].handId][folds[i].foldingPlayer][folds[i].authorizedSettlers[j]] =
-                    true;
+                _foldAuthorizedSettle[folds[i].handId][folds[i].foldingPlayer][folds[i]
+                    .authorizedSettlers[j]] = true;
             }
         }
     }
@@ -442,20 +542,182 @@ contract GameVault is IGameVault, EIP712 {
         return remaining;
     }
 
-    function _determineWinnerFromBets(Bet[] calldata betChain, address[] memory players)
+    /**
+     * @dev Replay bet chain to extract per-player contributions and fold status
+     */
+    function _replayBetChain(Bet[] calldata betChain)
         internal
         pure
-        returns (address)
+        returns (address[] memory bettors, uint256[] memory contributions, bool[] memory folded)
     {
-        // Simplified: return player who made last non-fold bet
-        // Real implementation would analyze poker hand rankings
-        for (uint256 i = betChain.length; i > 0; i--) {
-            if (betChain[i - 1].action != 0) {
-                // Not a fold
-                return players[(i - 1) % players.length];
+        // Collect unique bettors
+        address[] memory tempBettors = new address[](betChain.length);
+        uint256 uniqueCount = 0;
+
+        for (uint256 i = 0; i < betChain.length; i++) {
+            bool found = false;
+            for (uint256 j = 0; j < uniqueCount; j++) {
+                if (tempBettors[j] == betChain[i].bettor) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                tempBettors[uniqueCount] = betChain[i].bettor;
+                uniqueCount++;
             }
         }
-        return players[0];
+
+        bettors = new address[](uniqueCount);
+        contributions = new uint256[](uniqueCount);
+        folded = new bool[](uniqueCount);
+
+        for (uint256 i = 0; i < uniqueCount; i++) {
+            bettors[i] = tempBettors[i];
+        }
+
+        // Replay: sum contributions and track folds
+        for (uint256 i = 0; i < betChain.length; i++) {
+            uint256 bettorIdx = _findBettorIndex(bettors, betChain[i].bettor);
+
+            if (betChain[i].action == 0) {
+                // Fold action
+                folded[bettorIdx] = true;
+            } else {
+                // check(1), call(2), raise(3), all-in(4): add to contributions
+                contributions[bettorIdx] += betChain[i].amount;
+            }
+        }
+    }
+
+    /**
+     * @dev Detect fraud by comparing bet chain constraints against settled deltas
+     *      Fraud is detected if:
+     *      1. A folded player has a positive delta (winners can't fold)
+     *      2. A non-folded player's delta is more negative than their contribution
+     *      3. The final bet chain hash doesn't match the settled HandResult's finalBetHash
+     */
+    function _detectFraud(
+        bytes32 gameId,
+        bytes32 handId,
+        address[] memory bettors,
+        uint256[] memory contributions,
+        bool[] memory folded
+    ) internal view returns (bool) {
+        for (uint256 i = 0; i < bettors.length; i++) {
+            int256 settledDelta = _settledDeltas[gameId][handId][bettors[i]];
+
+            // Fraud: folded player should not win (delta must be <= 0)
+            if (folded[i] && settledDelta > 0) return true;
+
+            // Fraud: player can't lose more than they contributed
+            if (settledDelta < 0 && uint256(-settledDelta) > contributions[i]) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @dev Reverse a settled hand's deltas on the escrow
+     */
+    function _reverseSettlement(bytes32 gameId, bytes32 handId) internal {
+        address[] memory players = _settledPlayers[gameId][handId];
+        for (uint256 i = 0; i < players.length; i++) {
+            int256 delta = _settledDeltas[gameId][handId][players[i]];
+            if (delta > 0) {
+                // Was a winner: deduct from escrow
+                _escrow[gameId][players[i]] -= uint256(delta);
+            } else if (delta < 0) {
+                // Was a loser: restore to escrow
+                _escrow[gameId][players[i]] += uint256(-delta);
+            }
+        }
+    }
+
+    /**
+     * @dev Apply dispute resolution: folded players lose their contributions,
+     *      pot is split equally among non-folded players
+     */
+    function _applyDisputeSettlement(
+        bytes32 gameId,
+        bytes32 handId,
+        address[] memory bettors,
+        uint256[] memory contributions,
+        bool[] memory folded
+    ) internal {
+        // Calculate pot from folded player contributions
+        uint256 foldedPot = 0;
+        uint256 nonFoldedCount = 0;
+
+        for (uint256 i = 0; i < bettors.length; i++) {
+            if (folded[i]) {
+                // Folded player loses their contribution
+                _escrow[gameId][bettors[i]] -= contributions[i];
+                foldedPot += contributions[i];
+            } else {
+                nonFoldedCount++;
+            }
+        }
+
+        // Split folded pot equally among non-folded players
+        if (nonFoldedCount > 0 && foldedPot > 0) {
+            uint256 share = foldedPot / nonFoldedCount;
+            uint256 remainder = foldedPot - (share * nonFoldedCount);
+
+            bool firstNonFolded = true;
+            for (uint256 i = 0; i < bettors.length; i++) {
+                if (!folded[i]) {
+                    uint256 bonus = share;
+                    // Give remainder to first non-folded player
+                    if (firstNonFolded && remainder > 0) {
+                        bonus += remainder;
+                        firstNonFolded = false;
+                    }
+                    _escrow[gameId][bettors[i]] += bonus;
+                }
+            }
+        }
+
+        // Update stored deltas to reflect dispute resolution
+        for (uint256 i = 0; i < bettors.length; i++) {
+            _settledDeltas[gameId][handId][bettors[i]] = 0;
+        }
+    }
+
+    /**
+     * @dev Find the player who benefited most from fraudulent settlement
+     */
+    function _findFraudBeneficiary(bytes32 gameId, bytes32 handId)
+        internal
+        view
+        returns (address)
+    {
+        address[] memory players = _settledPlayers[gameId][handId];
+        address beneficiary = players[0];
+        int256 maxDelta = _settledDeltas[gameId][handId][players[0]];
+
+        for (uint256 i = 1; i < players.length; i++) {
+            int256 delta = _settledDeltas[gameId][handId][players[i]];
+            if (delta > maxDelta) {
+                maxDelta = delta;
+                beneficiary = players[i];
+            }
+        }
+
+        return beneficiary;
+    }
+
+    function _findBettorIndex(address[] memory bettors, address bettor)
+        internal
+        pure
+        returns (uint256)
+    {
+        for (uint256 i = 0; i < bettors.length; i++) {
+            if (bettors[i] == bettor) return i;
+        }
+        revert InvalidBetChain();
     }
 
     // =============================================================

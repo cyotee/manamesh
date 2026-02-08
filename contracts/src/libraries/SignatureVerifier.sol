@@ -17,19 +17,20 @@ library SignatureVerifier {
     //                         TYPE HASHES
     // =============================================================
 
-    /// @dev keccak256("Bet(bytes32 handId,uint256 betIndex,uint8 action,uint256 amount,bytes32 previousBetHash)")
+    /// @dev keccak256("Bet(bytes32 handId,address bettor,uint256 betIndex,uint8 action,uint256 amount,bytes32 previousBetHash)")
     bytes32 internal constant BET_TYPEHASH = keccak256(
-        "Bet(bytes32 handId,uint256 betIndex,uint8 action,uint256 amount,bytes32 previousBetHash)"
+        "Bet(bytes32 handId,address bettor,uint256 betIndex,uint8 action,uint256 amount,bytes32 previousBetHash)"
     );
 
-    /// @dev keccak256("HandResult(bytes32 gameId,bytes32 handId,address winner,uint256 potAmount,bytes32 finalBetHash)")
+    /// @dev keccak256("HandResult(bytes32 gameId,bytes32 handId,bytes32 finalBetHash,address[] players,int256[] deltas)")
     bytes32 internal constant HAND_RESULT_TYPEHASH = keccak256(
-        "HandResult(bytes32 gameId,bytes32 handId,address winner,uint256 potAmount,bytes32 finalBetHash)"
+        "HandResult(bytes32 gameId,bytes32 handId,bytes32 finalBetHash,address[] players,int256[] deltas)"
     );
 
-    /// @dev keccak256("FoldAuth(bytes32 handId,address foldingPlayer,address[] authorizedSettlers)")
-    bytes32 internal constant FOLD_AUTH_TYPEHASH =
-        keccak256("FoldAuth(bytes32 handId,address foldingPlayer,address[] authorizedSettlers)");
+    /// @dev keccak256("FoldAuth(bytes32 gameId,bytes32 handId,address foldingPlayer,address[] authorizedSettlers)")
+    bytes32 internal constant FOLD_AUTH_TYPEHASH = keccak256(
+        "FoldAuth(bytes32 gameId,bytes32 handId,address foldingPlayer,address[] authorizedSettlers)"
+    );
 
     /// @dev keccak256("Abandonment(bytes32 gameId,bytes32 handId,address abandonedPlayer,uint256 abandonedAt,address[] splitRecipients,uint256[] splitAmounts)")
     bytes32 internal constant ABANDONMENT_TYPEHASH = keccak256(
@@ -48,7 +49,7 @@ library SignatureVerifier {
     function hashBet(IGameVault.Bet memory bet) internal pure returns (bytes32) {
         return keccak256(
             abi.encode(
-                BET_TYPEHASH, bet.handId, bet.betIndex, bet.action, bet.amount, bet.previousBetHash
+                BET_TYPEHASH, bet.handId, bet.bettor, bet.betIndex, bet.action, bet.amount, bet.previousBetHash
             )
         );
     }
@@ -59,14 +60,16 @@ library SignatureVerifier {
      * @return The struct hash
      */
     function hashHandResult(IGameVault.HandResult memory result) internal pure returns (bytes32) {
+        bytes32 playersHash = _hashAddressArray(result.players);
+        bytes32 deltasHash = _hashInt256Array(result.deltas);
         return keccak256(
             abi.encode(
                 HAND_RESULT_TYPEHASH,
                 result.gameId,
                 result.handId,
-                result.winner,
-                result.potAmount,
-                result.finalBetHash
+                result.finalBetHash,
+                playersHash,
+                deltasHash
             )
         );
     }
@@ -81,6 +84,7 @@ library SignatureVerifier {
         return keccak256(
             abi.encode(
                 FOLD_AUTH_TYPEHASH,
+                auth.gameId,
                 auth.handId,
                 auth.foldingPlayer,
                 authorizedSettlersHash
@@ -125,16 +129,16 @@ library SignatureVerifier {
         return keccak256(packed);
     }
 
-    /// @dev EIP-712 array hash for uint256[]: keccak256(concat(abi.encode(uint256_i)))
+    /// @dev EIP-712 array hash for uint256[]: keccak256(concat(encodeData(uint256_i)))
+    ///      abi.encodePacked on uint256[] concatenates each as 32-byte words
     function _hashUint256Array(uint256[] memory values) private pure returns (bytes32) {
-        bytes memory packed = new bytes(values.length * 32);
-        for (uint256 i = 0; i < values.length; i++) {
-            bytes32 word = bytes32(values[i]);
-            assembly {
-                mstore(add(add(packed, 0x20), mul(i, 0x20)), word)
-            }
-        }
-        return keccak256(packed);
+        return keccak256(abi.encodePacked(values));
+    }
+
+    /// @dev EIP-712 array hash for int256[]: keccak256(concat(encodeData(int256_i)))
+    ///      abi.encodePacked on int256[] concatenates each as 32-byte words
+    function _hashInt256Array(int256[] memory values) private pure returns (bytes32) {
+        return keccak256(abi.encodePacked(values));
     }
 
     // =============================================================
@@ -201,16 +205,14 @@ library SignatureVerifier {
     /**
      * @notice Verify bet chain integrity
      * @param domainSeparator The EIP-712 domain separator
-     * @param bets The chain of bets
+     * @param bets The chain of bets (each bet declares its own bettor)
      * @param signatures Signatures for each bet
-     * @param players The expected signers (in betting order)
      * @return True if chain is valid and all bets properly signed
      */
     function verifyBetChain(
         bytes32 domainSeparator,
         IGameVault.Bet[] memory bets,
-        bytes[] memory signatures,
-        address[] memory players
+        bytes[] memory signatures
     ) internal pure returns (bool) {
         if (bets.length != signatures.length) return false;
         if (bets.length == 0) return false;
@@ -227,12 +229,9 @@ library SignatureVerifier {
             // Verify bet index
             if (bets[i].betIndex != i) return false;
 
-            // Determine signer (round-robin through players)
-            address expectedSigner = players[i % players.length];
-
-            // Verify signature
+            // Verify signature matches the bet's declared bettor
             bytes32 betHash = hashBet(bets[i]);
-            if (!verify(domainSeparator, betHash, signatures[i], expectedSigner)) {
+            if (!verify(domainSeparator, betHash, signatures[i], bets[i].bettor)) {
                 return false;
             }
 

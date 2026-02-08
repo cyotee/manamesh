@@ -10,3 +10,6 @@
 [submodule "contracts/lib/openzeppelin-contracts"]
 	path = contracts/lib/openzeppelin-contracts
 	url = https://github.com/OpenZeppelin/openzeppelin-contracts
+[submodule "contracts/lib/crane"]
+	path = contracts/lib/crane
+	url = https://github.com/cyotee/crane

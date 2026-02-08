@@ -385,6 +385,7 @@ export function createSubmitResultData(
  */
 export function createBetData(
   handId: string,
+  bettor: string,
   betIndex: number,
   action: BetAction,
   amount: bigint,
@@ -392,6 +393,7 @@ export function createBetData(
 ): BetData {
   return {
     handId: (handId.startsWith("0x") ? handId : `0x${handId}`) as `0x${string}`,
+    bettor: bettor as `0x${string}`,
     betIndex: BigInt(betIndex),
     action,
     amount,
@@ -407,18 +409,18 @@ export function createBetData(
 export function createHandResultData(
   gameId: string,
   handId: string,
-  winner: string,
-  potAmount: bigint,
   finalBetHash: string,
+  players: string[],
+  deltas: bigint[],
 ): HandResultData {
   return {
     gameId: (gameId.startsWith("0x") ? gameId : `0x${gameId}`) as `0x${string}`,
     handId: (handId.startsWith("0x") ? handId : `0x${handId}`) as `0x${string}`,
-    winner: winner as `0x${string}`,
-    potAmount,
     finalBetHash: (finalBetHash.startsWith("0x")
       ? finalBetHash
       : `0x${finalBetHash}`) as `0x${string}`,
+    players: players as `0x${string}`[],
+    deltas,
   };
 }
 
@@ -426,11 +428,13 @@ export function createHandResultData(
  * Create a FoldAuth to authorize settlement without folded player
  */
 export function createFoldAuthData(
+  gameId: string,
   handId: string,
   foldingPlayer: string,
   authorizedSettlers: string[],
 ): FoldAuthData {
   return {
+    gameId: (gameId.startsWith("0x") ? gameId : `0x${gameId}`) as `0x${string}`,
     handId: (handId.startsWith("0x") ? handId : `0x${handId}`) as `0x${string}`,
     foldingPlayer: foldingPlayer as `0x${string}`,
     authorizedSettlers: authorizedSettlers as `0x${string}`[],
@@ -467,7 +471,7 @@ export function hashBet(bet: BetData): `0x${string}` {
   const BET_TYPEHASH = keccak256(
     toHex(
       new TextEncoder().encode(
-        "Bet(bytes32 handId,uint256 betIndex,uint8 action,uint256 amount,bytes32 previousBetHash)",
+        "Bet(bytes32 handId,address bettor,uint256 betIndex,uint8 action,uint256 amount,bytes32 previousBetHash)",
       ),
     ),
   );
@@ -476,6 +480,7 @@ export function hashBet(bet: BetData): `0x${string}` {
     [
       { type: "bytes32" },
       { type: "bytes32" },
+      { type: "address" },
       { type: "uint256" },
       { type: "uint8" },
       { type: "uint256" },
@@ -484,6 +489,7 @@ export function hashBet(bet: BetData): `0x${string}` {
     [
       BET_TYPEHASH,
       bet.handId,
+      bet.bettor,
       bet.betIndex,
       bet.action,
       bet.amount,

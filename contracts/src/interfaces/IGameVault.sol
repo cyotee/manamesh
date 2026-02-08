@@ -1,28 +1,33 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import { IChipToken } from "./IChipToken.sol";
+import { IChipTokenFactory } from "./IChipTokenFactory.sol";
 
 /**
  * @title IGameVault
  * @notice Interface for the ManaMesh game escrow and settlement vault
+ * @dev Each game uses a single chip token type. The first player to join
+ *      sets the game's chip token; all subsequent joins must use the same one.
  */
 interface IGameVault {
     // =============================================================
     //                            STRUCTS
     // =============================================================
 
-    /// @notice A signed hand result representing the outcome of one hand
+    /// @notice A signed hand result representing the outcome of one hand.
+    ///         Uses per-player deltas for conservation-safe settlement.
+    ///         Deltas must sum to zero (winners positive, losers negative).
     struct HandResult {
         bytes32 gameId;
         bytes32 handId;
-        address winner;
-        uint256 potAmount;
         bytes32 finalBetHash;
+        address[] players;
+        int256[] deltas;
     }
 
     /// @notice Authorization for settlement without folded player
     struct FoldAuth {
+        bytes32 gameId;
         bytes32 handId;
         address foldingPlayer;
         address[] authorizedSettlers;
@@ -41,6 +46,7 @@ interface IGameVault {
     /// @notice A bet in a hand (used for disputes)
     struct Bet {
         bytes32 handId;
+        address bettor;
         uint256 betIndex;
         uint8 action; // 0=fold, 1=check, 2=call, 3=raise, 4=all-in
         uint256 amount;
@@ -53,9 +59,7 @@ interface IGameVault {
 
     event PlayerJoined(bytes32 indexed gameId, address indexed player, uint256 amount);
     event PlayerLeft(bytes32 indexed gameId, address indexed player, uint256 amount);
-    event HandSettled(
-        bytes32 indexed gameId, bytes32 indexed handId, address indexed winner, uint256 potAmount
-    );
+    event HandSettled(bytes32 indexed gameId, bytes32 indexed handId);
     event PlayerAbandoned(bytes32 indexed gameId, address indexed player, uint256 forfeited);
     event EscrowDistributed(bytes32 indexed gameId, address[] recipients, uint256[] amounts);
     event DisputeRaised(bytes32 indexed gameId, bytes32 indexed handId, address indexed challenger);
@@ -81,6 +85,13 @@ interface IGameVault {
     error DisputeStakeRequired();
     error AlreadySettled();
     error NothingToWithdraw();
+    error DeltasNotBalanced();
+    error PlayersAndDeltasLengthMismatch();
+    error HandNotSettled();
+    error DisputeFailed();
+    error AlreadyDisputed();
+    error InvalidChipToken();
+    error ChipTokenMismatch();
 
     // =============================================================
     //                      ESCROW MANAGEMENT
@@ -89,13 +100,16 @@ interface IGameVault {
     /**
      * @notice Join a game by locking chips in escrow
      * @param gameId The game identifier
+     * @param chipToken The chip token to use (must be from the factory)
      * @param amount The amount of chips to escrow
+     * @dev First player sets the game's chip token; others must match
      */
-    function joinGame(bytes32 gameId, uint256 amount) external;
+    function joinGame(bytes32 gameId, address chipToken, uint256 amount) external;
 
     /**
      * @notice Join a game using ERC-2612 permit (gasless for user)
      * @param gameId The game identifier
+     * @param chipToken The chip token to use
      * @param amount The amount of chips to escrow
      * @param deadline Permit deadline
      * @param v Signature v
@@ -104,6 +118,7 @@ interface IGameVault {
      */
     function joinGameWithPermit(
         bytes32 gameId,
+        address chipToken,
         uint256 amount,
         uint256 deadline,
         uint8 v,
@@ -188,10 +203,17 @@ interface IGameVault {
     function getEscrow(bytes32 gameId, address player) external view returns (uint256);
 
     /**
-     * @notice Get the chip token address
-     * @return The ChipToken contract address
+     * @notice Get the chip token factory
+     * @return The ChipTokenFactory contract
      */
-    function chips() external view returns (IChipToken);
+    function chipFactory() external view returns (IChipTokenFactory);
+
+    /**
+     * @notice Get the chip token used by a game
+     * @param gameId The game identifier
+     * @return The chip token address (address(0) if game not yet created)
+     */
+    function gameChipToken(bytes32 gameId) external view returns (address);
 
     /**
      * @notice Get the abandonment timeout in seconds

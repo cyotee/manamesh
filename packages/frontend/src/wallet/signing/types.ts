@@ -89,6 +89,7 @@ export const SubmitResultTypes = {
 export const BetTypes = {
   Bet: [
     { name: 'handId', type: 'bytes32' },
+    { name: 'bettor', type: 'address' },
     { name: 'betIndex', type: 'uint256' },
     { name: 'action', type: 'uint8' },
     { name: 'amount', type: 'uint256' },
@@ -103,9 +104,9 @@ export const HandResultTypes = {
   HandResult: [
     { name: 'gameId', type: 'bytes32' },
     { name: 'handId', type: 'bytes32' },
-    { name: 'winner', type: 'address' },
-    { name: 'potAmount', type: 'uint256' },
     { name: 'finalBetHash', type: 'bytes32' },
+    { name: 'players', type: 'address[]' },
+    { name: 'deltas', type: 'int256[]' },
   ],
 } as const;
 
@@ -114,6 +115,7 @@ export const HandResultTypes = {
  */
 export const FoldAuthTypes = {
   FoldAuth: [
+    { name: 'gameId', type: 'bytes32' },
     { name: 'handId', type: 'bytes32' },
     { name: 'foldingPlayer', type: 'address' },
     { name: 'authorizedSettlers', type: 'address[]' },
@@ -226,6 +228,7 @@ export enum BetAction {
  */
 export interface BetData {
   handId: `0x${string}`;
+  bettor: `0x${string}`;
   betIndex: bigint;
   action: BetAction;
   amount: bigint;
@@ -238,15 +241,16 @@ export interface BetData {
 export interface HandResultData {
   gameId: `0x${string}`;
   handId: `0x${string}`;
-  winner: `0x${string}`;
-  potAmount: bigint;
   finalBetHash: `0x${string}`;
+  players: `0x${string}`[];
+  deltas: bigint[];
 }
 
 /**
  * Fold authorization data (matches Solidity FoldAuth struct)
  */
 export interface FoldAuthData {
+  gameId: `0x${string}`;
   handId: `0x${string}`;
   foldingPlayer: `0x${string}`;
   authorizedSettlers: `0x${string}`[];
