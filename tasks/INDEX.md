@@ -16,8 +16,8 @@
 | MM-035 | Bet Settlement & Escrow Vault | In Review | MM-034, MM-036 | - |
 | MM-036 | Foundry Setup | Complete | - | - |
 | MM-037 | One Piece Card Scraper & Asset Pack Builder | Complete | MM-033 | - |
-| MM-038 | Card Rendering Engine (Phaser 3) | In Progress | MM-023, MM-037 | `feature/card-rendering-engine` |
-| MM-039 | One Piece TCG Deck Builder | Blocked | MM-037, MM-038 | - |
+| MM-038 | Card Rendering Engine (Phaser 3) | Complete | MM-023, MM-037 | - |
+| MM-039 | One Piece TCG Deck Builder | Ready | MM-037, MM-038 | - |
 
 ## Status Legend
 
