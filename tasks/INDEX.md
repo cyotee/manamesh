@@ -10,7 +10,7 @@
 | MM-024 | MTG Game Module (Crypto-Aware) | Ready | MM-019, MM-020, MM-029 | `feature/game-mtg` |
 | MM-025 | Lorcana Game Module | Ready | MM-019, MM-020 | `feature/game-lorcana` |
 | MM-026 | Riftbound Game Module | Ready | MM-019, MM-020 | `feature/game-riftbound` |
-| MM-035 | Bet Settlement & Escrow Vault | Pending Merge | MM-034, MM-036 | `feature/MM-035-bet-settlement-escrow` |
+| MM-035 | Bet Settlement & Escrow Vault | Complete | MM-034, MM-036 | - |
 
 ## Status Legend
 
@@ -44,10 +44,10 @@ MM-029 (Complete, archived) ✓
 ├── MM-023 (Complete, archived) ✓
 ├── MM-024 (Ready - MTG, also depends on MM-019, MM-020)
 └── MM-034 (Complete, archived) ✓
-    └── MM-035 (In Review - Bet Settlement, also depends on MM-036)
+    └── MM-035 (Complete) ✓
 
 MM-036 (Complete, archived) ✓
-└── MM-035 (depends on MM-034 + MM-036)
+└── MM-035 (Complete) ✓
 
 MM-023 (Complete, archived) ✓
 └── MM-038 (Complete, archived) ✓
@@ -115,3 +115,4 @@ Tasks in other repos that depend on this repo's tasks:
 | MM-038 | Card Rendering Engine (Phaser 3) | 2026-02-07 | archive/MM-038-card-rendering-engine/ |
 | MM-041 | MTG Card Data Sources Research | 2026-02-08 | archive/MM-041-mtg-card-sources/ |
 | MM-042 | MTG Card Scraper & Multi-Game Tool Refactor | 2026-02-08 | archive/MM-042-mtg-card-scraper/ |
+| MM-035 | Bet Settlement & Escrow Vault | 2026-02-08 | archive/MM-035-bet-settlement-escrow/ |
