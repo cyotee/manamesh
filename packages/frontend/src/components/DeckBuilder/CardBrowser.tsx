@@ -13,6 +13,7 @@ import type { EnrichedCard, CardFilters as CardFiltersType } from '../../deck/ty
 import { DEFAULT_FILTERS } from '../../deck/types';
 import { CardFilters } from './CardFilters';
 import { CardPreview } from './CardPreview';
+import { StyledEffectText } from './StyledEffectText';
 
 interface CardBrowserProps {
   cards: EnrichedCard[];
@@ -351,7 +352,7 @@ const HoverPreviewPane: React.FC<{
                 lineHeight: 1.4,
                 color: '#ccc',
               }}>
-                {card.effectText}
+                <StyledEffectText text={card.effectText} />
               </div>
             )}
           </div>
