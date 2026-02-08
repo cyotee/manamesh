@@ -1,0 +1,16 @@
+# Scraper output
+output/
+state/
+data/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+
+# User config (template is tracked)
+config.yaml

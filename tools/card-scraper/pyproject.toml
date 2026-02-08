@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "card-scraper"
+version = "0.2.0"
+description = "Multi-game card scraper and ManaMesh asset pack builder"
+requires-python = ">=3.10"
+dependencies = [
+    "httpx>=0.25",
+    "pyyaml>=6.0",
+    "rich>=13.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21",
+    "respx>=0.20",
+]
+
+[project.scripts]
+card-scraper = "card_scraper.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["card_scraper*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

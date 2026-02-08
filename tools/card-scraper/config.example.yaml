@@ -1,0 +1,56 @@
+# ManaMesh Card Scraper - Multi-Game Configuration
+# Copy to config.yaml and customize for your needs.
+
+# Default game to scrape (can be overridden with --game flag)
+game: mtg
+
+games:
+  onepiece:
+    sources:
+      - name: optcg-api
+        enabled: true
+        priority: 1
+        rate_limit_ms: 200
+      - name: ryan-api
+        enabled: true
+        priority: 2
+        rate_limit_ms: 500
+      - name: vegapull-records
+        enabled: true
+        priority: 3
+        local_path: ./data/vegapull-records/
+    scrape:
+      sets: all
+      include_starters: true
+      include_promos: true
+
+  mtg:
+    sources:
+      - name: scryfall-bulk
+        enabled: true
+        priority: 1
+        bulk_ttl_hours: 24
+        image_size: normal    # small, normal, large, png, border_crop, art_crop
+      - name: scryfall-api
+        enabled: true
+        priority: 2
+        rate_limit_ms: 100
+        image_size: normal
+      - name: mtgjson
+        enabled: false
+        priority: 3
+        local_path: ./data/mtgjson/AllPrintings.json
+    scrape:
+      sets: all               # "all" or comma-separated set codes (e.g., "MKM,LCI,WOE")
+      categories:             # Filter by Scryfall set_type category
+        - core
+        - expansion
+        - commander
+      include_tokens: false
+
+output:
+  base_dir: ./output/
+  manifest_version: "1.0"
+
+state:
+  state_file: ./state/scrape-state.json
