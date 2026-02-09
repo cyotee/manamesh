@@ -105,9 +105,12 @@ export class CardSprite extends Phaser.GameObjects.Container {
     }
   }
 
-  /** Show card name on hover. */
+  /** Show card name on hover. Only reveals name for face-up cards. */
   showName(): void {
     if (this.nameText) return;
+    // Don't reveal names for face-down (encrypted/secret) cards
+    const vis = this.cardState.visibility;
+    if (vis === 'encrypted' || vis === 'secret') return;
     this.nameText = this.scene.add.text(0, this.cardSize.height / 2 + 8, this.cardState.name, {
       fontSize: '9px',
       fontFamily: 'sans-serif',

@@ -32,6 +32,7 @@ import type {
   ProgressCallback,
   StoredPackMetadata,
 } from './types';
+import { computeCidFromBlob } from './cid';
 
 // In-memory cache of locally loaded packs
 const localPacks = new Map<string, LoadedAssetPack>();
@@ -224,6 +225,9 @@ async function processExtractedEntries(
 
   const source: LocalSource = { type: 'local', packId };
 
+  // Compute IPFS CID from zip blob and store it
+  const ipfsCid = await computeCidFromBlob(zipBlob);
+
   // Store the zip blob in IndexedDB for persistence across sessions
   await storePackZip(packId, zipBlob);
 
@@ -316,6 +320,7 @@ async function processExtractedEntries(
     cachedCardIds: existingMetadata?.cachedCardIds ?? cachedCardIds,
     cards,
     manifest,
+    ipfsCid,
     loadedAt: loadedPack.loadedAt,
   };
 
@@ -323,7 +328,7 @@ async function processExtractedEntries(
 
   console.log(
     `[LocalLoader] Loaded "${manifest.name}" — ${cards.length} cards, ` +
-    `zip: ${(zipBlob.size / 1024).toFixed(0)}KB, packId: ${packId}`
+    `zip: ${(zipBlob.size / 1024).toFixed(0)}KB, packId: ${packId}, CID: ${ipfsCid}`
   );
 
   return loadedPack;

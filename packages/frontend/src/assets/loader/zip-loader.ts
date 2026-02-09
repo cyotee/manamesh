@@ -29,6 +29,7 @@ import type {
   AssetPackSource,
 } from './types';
 import { sourceToPackId } from './types';
+import { computeCidFromBlob } from './cid';
 
 // In-memory cache of loaded packs
 const zipLoadedPacks = new Map<string, LoadedAssetPack>();
@@ -371,6 +372,9 @@ async function doLoadZipPack(
 
   zipLoadedPacks.set(packId, loadedPack);
 
+  // Compute IPFS CID from the zip blob
+  const ipfsCid = await computeCidFromBlob(result.blob);
+
   // Store metadata
   const metadata: StoredPackMetadata = {
     id: packId,
@@ -380,6 +384,7 @@ async function doLoadZipPack(
     source: source as AssetPackSource,
     cardCount: cards.length,
     cachedCardIds: existingMetadata?.cachedCardIds ?? cachedCardIds,
+    ipfsCid,
     loadedAt: loadedPack.loadedAt,
   };
 

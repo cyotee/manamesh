@@ -48,6 +48,20 @@ describe('enrichCard', () => {
     expect(card.colors).toEqual(['red', 'green']);
   });
 
+  it('splits combined multi-color strings', () => {
+    const card = enrichCard(
+      makeEntry({ metadata: { colors: ['Green Red'] } }),
+    );
+    expect(card.colors).toEqual(['green', 'red']);
+  });
+
+  it('splits slash-separated multi-color strings', () => {
+    const card = enrichCard(
+      makeEntry({ metadata: { colors: ['Blue/Purple'] } }),
+    );
+    expect(card.colors).toEqual(['blue', 'purple']);
+  });
+
   it('lowercases card type', () => {
     const card = enrichCard(
       makeEntry({ metadata: { cardType: 'Leader' } }),

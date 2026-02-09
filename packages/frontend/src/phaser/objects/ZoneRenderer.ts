@@ -106,8 +106,9 @@ export class ZoneRenderer extends Phaser.GameObjects.Container {
     cardImages: Record<string, string>,
     cardBackKey: string,
   ): void {
-    // Only render the top card for stacks
-    const topCard = state.cards[state.cards.length - 1];
+    // Only render the top card for stacks.
+    // Index 0 is the logical "top" — the next card drawn via shift().
+    const topCard = state.cards[0];
     if (!topCard) return;
 
     const cx = this.config.rect.width / 2;

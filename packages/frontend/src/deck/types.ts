@@ -191,9 +191,9 @@ export function enrichCard(entry: CardManifestEntry): EnrichedCard {
   const meta = entry.metadata ?? {};
   return {
     ...entry,
-    colors: ((meta.colors ?? meta.color) as string[] | undefined)?.map(c =>
-      String(c).toLowerCase(),
-    ) ?? [],
+    colors: ((meta.colors ?? meta.color) as string[] | undefined)
+      ?.flatMap(c => String(c).toLowerCase().split(/[\s\/]+/))
+      .filter(c => c.length > 0) ?? [],
     cardType: String(meta.cardType ?? meta.card_type ?? 'unknown').toLowerCase(),
     cost: meta.cost != null ? Number(meta.cost) : null,
     power: meta.power != null ? Number(meta.power) : null,

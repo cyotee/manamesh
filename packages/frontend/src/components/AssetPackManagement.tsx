@@ -5,7 +5,7 @@
  * Features: view loaded/stored packs, delete individual packs, IPFS import.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   getStoredPacks,
   getAllLoadedPacks,
@@ -15,6 +15,7 @@ import {
   type LoadedAssetPack,
 } from '../assets/loader';
 import { clearPackCache } from '../assets/loader/cache';
+import { loadLocalZip, loadLocalDirectory } from '../assets/loader/local-loader';
 
 interface AssetPackManagementProps {
   onBack: () => void;
@@ -29,6 +30,12 @@ export const AssetPackManagement: React.FC<AssetPackManagementProps> = ({ onBack
   const [importError, setImportError] = useState<string | null>(null);
   const [importSuccess, setImportSuccess] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
+  const zipInputRef = useRef<HTMLInputElement>(null);
+  const dirInputRef = useRef<HTMLInputElement>(null);
 
   const CID_REGEX = /^(Qm[1-9A-HJ-NP-Za-km-z]{44}|b[a-z2-7]{58,})$/i;
 
@@ -75,7 +82,62 @@ export const AssetPackManagement: React.FC<AssetPackManagementProps> = ({ onBack
     await refresh();
   }, [refresh]);
 
+  const handleUploadProgress = useCallback((loaded: number, total: number) => {
+    setUploadProgress(Math.round((loaded / total) * 100));
+  }, []);
+
+  const handleZipUpload = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      setIsUploading(true);
+      setUploadError(null);
+      setUploadSuccess(null);
+      setUploadProgress(0);
+
+      try {
+        const pack = await loadLocalZip(file, handleUploadProgress);
+        setUploadSuccess(`Loaded "${pack.manifest.name}" (${pack.cards.length} cards)`);
+        await refresh();
+      } catch (err) {
+        setUploadError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setIsUploading(false);
+        if (zipInputRef.current) zipInputRef.current.value = '';
+      }
+    },
+    [handleUploadProgress, refresh],
+  );
+
+  const handleDirectoryUpload = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = e.target.files;
+      if (!files || files.length === 0) return;
+
+      setIsUploading(true);
+      setUploadError(null);
+      setUploadSuccess(null);
+      setUploadProgress(0);
+
+      try {
+        const pack = await loadLocalDirectory(files, handleUploadProgress);
+        setUploadSuccess(`Loaded "${pack.manifest.name}" (${pack.cards.length} cards)`);
+        await refresh();
+      } catch (err) {
+        setUploadError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setIsUploading(false);
+        if (dirInputRef.current) dirInputRef.current.value = '';
+      }
+    },
+    [handleUploadProgress, refresh],
+  );
+
   const getPackCid = (pack: StoredPackMetadata): string | null => {
+    // Prefer computed CID (available for all packs with stored zips)
+    if (pack.ipfsCid) return pack.ipfsCid;
+    // Fallback to source CID for IPFS-imported packs
     const source = pack.source;
     if (!source || typeof source !== 'object') return null;
     if ('cid' in source && typeof (source as any).cid === 'string') {
@@ -180,6 +242,93 @@ export const AssetPackManagement: React.FC<AssetPackManagementProps> = ({ onBack
         )}
       </div>
 
+      {/* Local Upload */}
+      <div style={cardStyle}>
+        <h3 style={{ color: '#e4e4e4', marginTop: 0, marginBottom: '12px' }}>Upload Local Pack</h3>
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+          {/* Zip upload */}
+          <label
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              padding: '10px 20px',
+              backgroundColor: '#2196F3',
+              color: '#fff',
+              borderRadius: '6px',
+              cursor: isUploading ? 'not-allowed' : 'pointer',
+              opacity: isUploading ? 0.5 : 1,
+              fontSize: '14px',
+              fontWeight: 500,
+            }}
+          >
+            Upload Zip
+            <input
+              ref={zipInputRef}
+              type="file"
+              accept=".zip"
+              onChange={handleZipUpload}
+              disabled={isUploading}
+              style={{ display: 'none' }}
+            />
+          </label>
+
+          {/* Directory upload */}
+          <label
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              padding: '10px 20px',
+              backgroundColor: '#4CAF50',
+              color: '#fff',
+              borderRadius: '6px',
+              cursor: isUploading ? 'not-allowed' : 'pointer',
+              opacity: isUploading ? 0.5 : 1,
+              fontSize: '14px',
+              fontWeight: 500,
+            }}
+          >
+            Select Directory
+            <input
+              ref={dirInputRef}
+              type="file"
+              {...({ webkitdirectory: '', directory: '' } as any)}
+              onChange={handleDirectoryUpload}
+              disabled={isUploading}
+              style={{ display: 'none' }}
+            />
+          </label>
+        </div>
+
+        {/* Progress bar */}
+        {isUploading && (
+          <div style={{ marginTop: '12px' }}>
+            <div style={{
+              height: '6px',
+              backgroundColor: '#2a2a4a',
+              borderRadius: '3px',
+              overflow: 'hidden',
+            }}>
+              <div style={{
+                width: `${uploadProgress}%`,
+                height: '100%',
+                backgroundColor: '#4CAF50',
+                transition: 'width 200ms',
+              }} />
+            </div>
+            <div style={{ fontSize: '12px', color: '#a0a0a0', marginTop: '4px' }}>
+              Loading... {uploadProgress}%
+            </div>
+          </div>
+        )}
+
+        {uploadError && (
+          <div style={{ color: '#ff6b6b', fontSize: '12px', marginTop: '8px' }}>{uploadError}</div>
+        )}
+        {uploadSuccess && (
+          <div style={{ color: '#6fcf6f', fontSize: '12px', marginTop: '8px' }}>{uploadSuccess}</div>
+        )}
+      </div>
+
       {/* Pack list */}
       <div style={cardStyle}>
         <h3 style={{ color: '#e4e4e4', marginTop: 0, marginBottom: '12px' }}>
@@ -231,7 +380,7 @@ export const AssetPackManagement: React.FC<AssetPackManagementProps> = ({ onBack
                           alignItems: 'center',
                           gap: '6px',
                         }}>
-                          IPFS: <span style={{ fontFamily: 'monospace' }}>{cid.slice(0, 16)}...{cid.slice(-6)}</span>
+                          CID: <span style={{ fontFamily: 'monospace' }}>{cid.slice(0, 16)}...{cid.slice(-6)}</span>
                           <button
                             onClick={() => copyToClipboard(cid)}
                             style={{

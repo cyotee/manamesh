@@ -140,6 +140,8 @@ export interface StoredPackMetadata {
   cards?: CardManifestEntry[];
   /** Full manifest (avoids re-extracting zip on reload) */
   manifest?: AssetPackManifest;
+  /** IPFS CID (CIDv1 SHA-256 raw) of the zip blob, computed at storage time */
+  ipfsCid?: string;
   /** Timestamp when loaded */
   loadedAt: number;
 }
