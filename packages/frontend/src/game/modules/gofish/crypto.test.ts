@@ -17,7 +17,7 @@ import {
   respondToAsk,
   goFish,
   claimBooks,
-  submitDecryptionShare,
+  submitDecryptedShare,
   submitZkProofRespondToAsk,
   submitZkVerdict,
   allKeysSubmitted,
@@ -33,6 +33,8 @@ import {
   ecdsaSignDigestHex,
   sha256Hex,
   stableStringify,
+  decrypt,
+  buildCardPointLookup,
 } from "../../../crypto";
 
 describe("CryptoGoFish", () => {
@@ -41,7 +43,7 @@ describe("CryptoGoFish", () => {
   let playerA: CryptoPlayerContext;
   let playerB: CryptoPlayerContext;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     const seedA = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]);
     const seedB = new Uint8Array([8, 7, 6, 5, 4, 3, 2, 1]);
     playerA = createPlayerCryptoContext("playerA", seedA);
@@ -51,6 +53,12 @@ describe("CryptoGoFish", () => {
       numPlayers: 2,
       playerIDs: ["playerA", "playerB"],
     });
+
+    // Build card point lookup (V1: real SHA-256)
+    const lookup = await buildCardPointLookup(state.cardIds);
+    for (const [cardId, point] of lookup) {
+      state.crypto.cardPointLookup[cardId] = point;
+    }
 
     ctx = {
       numPlayers: 2,
@@ -68,7 +76,7 @@ describe("CryptoGoFish", () => {
     expect(state.log).toEqual([]);
   });
 
-  it("submits keys and advances to keyEscrow", () => {
+  it("submits keys and advances to keyEscrow", async () => {
     expect(allKeysSubmitted(state)).toBe(false);
     submitPublicKey(state, ctx, "playerA", playerA.keyPair.publicKey);
     expect(state.phase).toBe("keyExchange");
@@ -124,11 +132,20 @@ describe("CryptoGoFish", () => {
     encryptDeck(state, ctx, "playerB", playerB.keyPair.privateKey);
     expect(state.phase).toBe("shuffle");
 
-    // Commit-reveal deterministic shuffle seed for both players.
     const seedA = "aa".repeat(32);
     const seedB = "bb".repeat(32);
-    commitShuffleSeed(state, ctx, "playerA", sha256Hex(new TextEncoder().encode(seedA)));
-    commitShuffleSeed(state, ctx, "playerB", sha256Hex(new TextEncoder().encode(seedB)));
+    commitShuffleSeed(
+      state,
+      ctx,
+      "playerA",
+      sha256Hex(new TextEncoder().encode(seedA)),
+    );
+    commitShuffleSeed(
+      state,
+      ctx,
+      "playerB",
+      sha256Hex(new TextEncoder().encode(seedB)),
+    );
     revealShuffleSeed(state, ctx, "playerA", seedA);
     revealShuffleSeed(state, ctx, "playerB", seedB);
     expect(state.shuffleRng.finalSeedHex).toBeTruthy();
@@ -155,13 +172,17 @@ describe("CryptoGoFish", () => {
     expect(state.phase).toBe("shuffle");
 
     const seedA = "11".repeat(32);
-    commitShuffleSeed(state, ctx, "playerA", sha256Hex(new TextEncoder().encode(seedA)));
+    commitShuffleSeed(
+      state,
+      ctx,
+      "playerA",
+      sha256Hex(new TextEncoder().encode(seedA)),
+    );
     const bad = revealShuffleSeed(state, ctx, "playerA", "22".repeat(32));
     expect(bad).toBe(INVALID_MOVE);
   });
 
   it("allows majority abort if shuffle stalls", () => {
-    // Setup to shuffle phase.
     submitPublicKey(state, ctx, "playerA", playerA.keyPair.publicKey);
     submitPublicKey(state, ctx, "playerB", playerB.keyPair.publicKey);
     distributeKeyShares(state, ctx, "playerA", playerA.keyPair.privateKey, []);
@@ -170,27 +191,21 @@ describe("CryptoGoFish", () => {
     encryptDeck(state, ctx, "playerB", playerB.keyPair.privateKey);
     expect(state.phase).toBe("shuffle");
 
-    // Not stalled yet -> cannot abort.
     expect(voteAbortShuffle(state, ctx, "playerA")).toBe(INVALID_MOVE);
 
-    // Advance deterministic move counter to simulate a stall.
     (ctx as any).numMoves = 99;
 
-    // Ensure the shuffle RNG has recorded progress at some earlier move.
     commitShuffleSeed(state, ctx, "playerA", "00".repeat(32));
-    ;(ctx as any).numMoves = 150;
+    (ctx as any).numMoves = 150;
 
-    // Majority of 2 is 2. First vote doesn't void.
     expect(voteAbortShuffle(state, ctx, "playerA")).toBe(state);
     expect(state.phase).toBe("shuffle");
 
-    // Second vote voids.
     expect(voteAbortShuffle(state, ctx, "playerB")).toBe(state);
     expect(state.phase).toBe("voided");
   });
 
   it("supports ask/respond and goFish flow", () => {
-    // Setup to play
     submitPublicKey(state, ctx, "playerA", playerA.keyPair.publicKey);
     submitPublicKey(state, ctx, "playerB", playerB.keyPair.publicKey);
     distributeKeyShares(state, ctx, "playerA", playerA.keyPair.privateKey, []);
@@ -199,8 +214,18 @@ describe("CryptoGoFish", () => {
     encryptDeck(state, ctx, "playerB", playerB.keyPair.privateKey);
     const seedA = "aa".repeat(32);
     const seedB = "bb".repeat(32);
-    commitShuffleSeed(state, ctx, "playerA", sha256Hex(new TextEncoder().encode(seedA)));
-    commitShuffleSeed(state, ctx, "playerB", sha256Hex(new TextEncoder().encode(seedB)));
+    commitShuffleSeed(
+      state,
+      ctx,
+      "playerA",
+      sha256Hex(new TextEncoder().encode(seedA)),
+    );
+    commitShuffleSeed(
+      state,
+      ctx,
+      "playerB",
+      sha256Hex(new TextEncoder().encode(seedB)),
+    );
     revealShuffleSeed(state, ctx, "playerA", seedA);
     revealShuffleSeed(state, ctx, "playerB", seedB);
     shuffleDeck(state, ctx, "playerA", playerA.keyPair.privateKey);
@@ -208,43 +233,31 @@ describe("CryptoGoFish", () => {
 
     expect(state.turnPlayer).toBe("playerA");
 
-    // Peek to learn a rank we hold so we can ask legally.
     peekHand(state, ctx, "playerA", playerA.keyPair.privateKey);
     const myRank = state.players.playerA.peekedCards?.[0]?.rank;
     expect(myRank).toBeTruthy();
 
-    // Ask for a rank we have; should create pending ask.
     askRank(state, ctx, "playerA", "playerB", myRank!);
     expect(state.pendingAsk?.asker).toBe("playerA");
 
-    // Respond should clear pending ask.
     respondToAsk(state, ctx, "playerB");
     expect(state.pendingAsk).toBe(null);
 
-    // If the ask missed, playerA should not be able to ask again until goFish.
     if (state.awaitingGoFishFor === "playerA") {
-      // Try asking again for the same rank (should be blocked until goFish).
       const res = askRank(state, ctx, "playerA", "playerB", myRank!);
       expect(res).toBe(INVALID_MOVE);
       expect(state.awaitingGoFishFor).toBe("playerA");
 
-      // After goFish, awaitingGoFish should clear.
       goFish(state, ctx, "playerA");
       expect(state.awaitingGoFishFor).toBe(null);
       expect(state.awaitingGoFishRank).toBe(null);
 
-      // Asking again may or may not be legal depending on whether the player
-      // drew the requested rank (they might keep the turn) and whether they
-      // still hold that rank. We only assert that it's no longer blocked by
-      // the forced-go-fish state.
       if (state.turnPlayer === "playerA") {
         const res2 = askRank(state, ctx, "playerA", "playerB", myRank!);
         expect(res2).not.toBe(INVALID_MOVE);
       }
     }
 
-    // If no forced goFish is pending and it's still playerA's turn,
-    // voluntary goFish should draw exactly 1 card.
     if (state.awaitingGoFishFor === null && state.turnPlayer === "playerA") {
       const deckBefore = state.crypto.encryptedZones["deck"]?.length ?? 0;
       const res = goFish(state, ctx, "playerA");
@@ -255,7 +268,6 @@ describe("CryptoGoFish", () => {
   });
 
   it("can claim books without crashing (demo)", () => {
-    // Setup to play
     submitPublicKey(state, ctx, "playerA", playerA.keyPair.publicKey);
     submitPublicKey(state, ctx, "playerB", playerB.keyPair.publicKey);
     distributeKeyShares(state, ctx, "playerA", playerA.keyPair.privateKey, []);
@@ -264,21 +276,29 @@ describe("CryptoGoFish", () => {
     encryptDeck(state, ctx, "playerB", playerB.keyPair.privateKey);
     const seedA = "aa".repeat(32);
     const seedB = "bb".repeat(32);
-    commitShuffleSeed(state, ctx, "playerA", sha256Hex(new TextEncoder().encode(seedA)));
-    commitShuffleSeed(state, ctx, "playerB", sha256Hex(new TextEncoder().encode(seedB)));
+    commitShuffleSeed(
+      state,
+      ctx,
+      "playerA",
+      sha256Hex(new TextEncoder().encode(seedA)),
+    );
+    commitShuffleSeed(
+      state,
+      ctx,
+      "playerB",
+      sha256Hex(new TextEncoder().encode(seedB)),
+    );
     revealShuffleSeed(state, ctx, "playerA", seedA);
     revealShuffleSeed(state, ctx, "playerB", seedB);
     shuffleDeck(state, ctx, "playerA", playerA.keyPair.privateKey);
     shuffleDeck(state, ctx, "playerB", playerB.keyPair.privateKey);
 
-    // Peek then try to claim books.
     peekHand(state, ctx, "playerA", playerA.keyPair.privateKey);
     claimBooks(state, ctx, "playerA");
     expect(state.players.playerA.books).toBeGreaterThanOrEqual(0);
   });
 
   it("supports coop-reveal forced Go Fish draw resolution", () => {
-    // Setup to play (secure mode: no private keys in shared state)
     state.securityMode = "coop-reveal";
     delete (state.crypto as any).privateKeys;
 
@@ -291,8 +311,18 @@ describe("CryptoGoFish", () => {
     encryptDeck(state, ctx, "playerB", playerB.keyPair.privateKey);
     const seedA = "aa".repeat(32);
     const seedB = "bb".repeat(32);
-    commitShuffleSeed(state, ctx, "playerA", sha256Hex(new TextEncoder().encode(seedA)));
-    commitShuffleSeed(state, ctx, "playerB", sha256Hex(new TextEncoder().encode(seedB)));
+    commitShuffleSeed(
+      state,
+      ctx,
+      "playerA",
+      sha256Hex(new TextEncoder().encode(seedA)),
+    );
+    commitShuffleSeed(
+      state,
+      ctx,
+      "playerB",
+      sha256Hex(new TextEncoder().encode(seedB)),
+    );
     revealShuffleSeed(state, ctx, "playerA", seedA);
     revealShuffleSeed(state, ctx, "playerB", seedB);
     shuffleDeck(state, ctx, "playerA", playerA.keyPair.privateKey);
@@ -300,7 +330,6 @@ describe("CryptoGoFish", () => {
     expect(state.phase).toBe("play");
     expect((state.crypto as any).privateKeys).toBeUndefined();
 
-    // Create a forced Go Fish requirement.
     state.turnPlayer = "playerA";
     state.awaitingGoFishFor = "playerA";
     state.awaitingGoFishRank = "A";
@@ -318,23 +347,16 @@ describe("CryptoGoFish", () => {
     expect(zoneId).toBe("hand:playerA");
     expect(Number.isFinite(cardIndex)).toBe(true);
 
-    // Both players submit shares; card becomes revealed and forced state resolves.
-    submitDecryptionShare(
-      state,
-      ctx,
-      zoneId,
-      cardIndex,
-      "playerA",
-      playerA.keyPair.privateKey,
-    );
-    submitDecryptionShare(
-      state,
-      ctx,
-      zoneId,
-      cardIndex,
-      "playerB",
-      playerB.keyPair.privateKey,
-    );
+    const deck = state.crypto.encryptedZones[zoneId];
+    const encryptedCard = deck[cardIndex];
+
+    // V2: decrypt locally, submit decrypted card
+    const decA = decrypt(encryptedCard, playerA.keyPair.privateKey);
+    submitDecryptedShare(state, ctx, zoneId, cardIndex, "playerA", decA);
+
+    const currentCard = state.crypto.encryptedZones[zoneId][cardIndex];
+    const decB = decrypt(currentCard, playerB.keyPair.privateKey);
+    submitDecryptedShare(state, ctx, zoneId, cardIndex, "playerB", decB);
 
     const revealed = state.crypto.revealedCards[key!];
     expect(typeof revealed).toBe("string");
@@ -349,7 +371,6 @@ describe("CryptoGoFish", () => {
   });
 
   it("zk-attest accepts verifier-signed verdict and applies payload", () => {
-    // Setup to play
     submitPublicKey(state, ctx, "playerA", playerA.keyPair.publicKey);
     submitPublicKey(state, ctx, "playerB", playerB.keyPair.publicKey);
     distributeKeyShares(state, ctx, "playerA", playerA.keyPair.privateKey, []);
@@ -358,8 +379,18 @@ describe("CryptoGoFish", () => {
     encryptDeck(state, ctx, "playerB", playerB.keyPair.privateKey);
     const seedA = "aa".repeat(32);
     const seedB = "bb".repeat(32);
-    commitShuffleSeed(state, ctx, "playerA", sha256Hex(new TextEncoder().encode(seedA)));
-    commitShuffleSeed(state, ctx, "playerB", sha256Hex(new TextEncoder().encode(seedB)));
+    commitShuffleSeed(
+      state,
+      ctx,
+      "playerA",
+      sha256Hex(new TextEncoder().encode(seedA)),
+    );
+    commitShuffleSeed(
+      state,
+      ctx,
+      "playerB",
+      sha256Hex(new TextEncoder().encode(seedB)),
+    );
     revealShuffleSeed(state, ctx, "playerA", seedA);
     revealShuffleSeed(state, ctx, "playerB", seedB);
     shuffleDeck(state, ctx, "playerA", playerA.keyPair.privateKey);
@@ -369,7 +400,6 @@ describe("CryptoGoFish", () => {
     state.securityMode = "zk-attest";
     state.turnPlayer = "playerA";
 
-    // Create a pending ask
     state.pendingAsk = {
       asker: "playerA",
       target: "playerB",
@@ -378,15 +408,12 @@ describe("CryptoGoFish", () => {
       timestamp: 0,
     };
 
-    // Deterministic verifier is playerOrder[0]
     const verifier = state.playerOrder[0];
     expect(verifier).toBe("playerA");
 
-    // Register verifier signing key
     const verifierSigKeys = ecdsaGenerateKeyPair(new Uint8Array([9, 9, 9, 9]));
     submitZkSigPublicKey(state, ctx, verifier, verifierSigKeys.publicKey);
 
-    // Target submits proof with payload “give none” (miss)
     submitZkProofRespondToAsk(
       state,
       ctx,
@@ -414,12 +441,10 @@ describe("CryptoGoFish", () => {
     submitZkVerdict(state, ctx, verifier, "valid", sig);
     expect(state.pendingZk).toBe(null);
     expect(state.pendingAsk).toBe(null);
-    // For a miss payload, forced go fish should be set for asker.
     expect(state.awaitingGoFishFor).toBe("playerA");
   });
 
   it("zk-attest rejects verdict if signature is wrong", () => {
-    // Setup to play
     submitPublicKey(state, ctx, "playerA", playerA.keyPair.publicKey);
     submitPublicKey(state, ctx, "playerB", playerB.keyPair.publicKey);
     distributeKeyShares(state, ctx, "playerA", playerA.keyPair.privateKey, []);
@@ -428,8 +453,18 @@ describe("CryptoGoFish", () => {
     encryptDeck(state, ctx, "playerB", playerB.keyPair.privateKey);
     const seedA = "aa".repeat(32);
     const seedB = "bb".repeat(32);
-    commitShuffleSeed(state, ctx, "playerA", sha256Hex(new TextEncoder().encode(seedA)));
-    commitShuffleSeed(state, ctx, "playerB", sha256Hex(new TextEncoder().encode(seedB)));
+    commitShuffleSeed(
+      state,
+      ctx,
+      "playerA",
+      sha256Hex(new TextEncoder().encode(seedA)),
+    );
+    commitShuffleSeed(
+      state,
+      ctx,
+      "playerB",
+      sha256Hex(new TextEncoder().encode(seedB)),
+    );
     revealShuffleSeed(state, ctx, "playerA", seedA);
     revealShuffleSeed(state, ctx, "playerB", seedB);
     shuffleDeck(state, ctx, "playerA", playerA.keyPair.privateKey);

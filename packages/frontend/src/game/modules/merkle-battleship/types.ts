@@ -30,12 +30,22 @@ export interface GuessRecord {
   at: number;
 }
 
+export interface PendingGuess {
+  attackerId: string;
+  target: Coord;
+  index: number;
+  sentAt: number;
+}
+
 export interface MerkleBattleshipPlayerState {
   placementConfirmed: boolean;
   commitmentRootHex: string | null;
 
   opponentCommitmentRootHex: string | null;
   opponentMarks: CellMark[]; // length 100
+
+  /** Number of times defender timed out on reveals */
+  missByTimeout: number;
 }
 
 export interface MerkleBattleshipState {
@@ -43,6 +53,8 @@ export interface MerkleBattleshipState {
   players: Record<string, MerkleBattleshipPlayerState>;
   guesses: GuessRecord[];
   winner: string | null;
+  /** Pending guess awaiting reveal from defender */
+  pendingGuess: PendingGuess | null;
 }
 
 export const GRID_SIZE = 10;

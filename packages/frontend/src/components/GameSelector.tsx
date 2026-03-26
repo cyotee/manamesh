@@ -39,6 +39,8 @@ const GameCard: React.FC<{
     }
   };
 
+  const isDemoOnly = !game.getCryptoGame;
+
   return (
     <button
       onClick={onClick}
@@ -78,6 +80,21 @@ const GameCard: React.FC<{
         }}
       >
         {game.name}
+        {isDemoOnly && (
+          <span
+            style={{
+              fontSize: "10px",
+              color: "#f59e0b",
+              marginLeft: "8px",
+              padding: "2px 6px",
+              backgroundColor: "rgba(245, 158, 11, 0.2)",
+              borderRadius: "4px",
+              verticalAlign: "middle",
+            }}
+          >
+            (Demo Only)
+          </span>
+        )}
       </div>
       <div
         style={{
@@ -163,7 +180,14 @@ export const GameSelector: React.FC<GameSelectorProps> = ({
 
       {/* Tools section */}
       {(onDeckBuilder || onAssetPacks) && (
-        <div style={{ marginBottom: 24, display: "flex", gap: 12, justifyContent: "center" }}>
+        <div
+          style={{
+            marginBottom: 24,
+            display: "flex",
+            gap: 12,
+            justifyContent: "center",
+          }}
+        >
           {onDeckBuilder && (
             <button
               onClick={onDeckBuilder}

@@ -26,6 +26,7 @@ import { useDeckStorage } from '../hooks/useDeckStorage';
 import { useGameCardImages } from '../hooks/useGameCardImages';
 import type { DeckList } from '../deck/types';
 import { resolveDeckList } from '../game/modules/onepiece/deckResolver';
+import { CardPreviewPane } from './CardPreviewPane';
 
 /**
  * Convert a OnePieceCard or DON card to renderable CardSceneState.
@@ -295,6 +296,9 @@ export function OnePiecePhaserBoard(props: BoardProps<OnePieceState>) {
   const [cardPackMap, setCardPackMap] = useState<Map<string, string>>(new Map());
   const [cardRegistry, setCardRegistry] = useState<Map<string, OnePieceCard>>(new Map());
 
+  const [previewCardId, setPreviewCardId] = useState<string | null>(null);
+  const [previewCardName, setPreviewCardName] = useState<string | null>(null);
+
   const { decks, isLoading: isLoadingDecks } = useDeckStorage();
 
   // Check if the local player's deck is loaded
@@ -387,7 +391,7 @@ export function OnePiecePhaserBoard(props: BoardProps<OnePieceState>) {
   })();
 
   return (
-    <div style={{ width: '100%', maxWidth: '1200px', margin: '0 auto' }}>
+    <div style={{ width: '100%', margin: '0 auto' }}>
       {/* Phase / turn indicator */}
       <div
         style={{
@@ -407,53 +411,69 @@ export function OnePiecePhaserBoard(props: BoardProps<OnePieceState>) {
         </span>
       </div>
 
-      <PhaserBoard
-        sceneState={sceneState}
-        zoneLayout={OnePieceZoneLayout}
-        playerId={localPlayerId}
-        onInteraction={(event: CardInteractionEvent) => {
-          if (!moves) return;
-
-          switch (event.type) {
-            case 'play':
-              if (event.cardId && event.targetSlot != null) {
-                moves.playCard?.(localPlayerId, event.cardId, event.targetSlot);
-              }
-              break;
-
-            case 'draw':
-              if (event.sourceZone === 'mainDeck') {
-                moves.drawCard?.(localPlayerId);
-              } else if (event.sourceZone === 'donDeck') {
-                moves.drawDon?.(localPlayerId);
-              }
-              break;
-
-            case 'attachDon':
-              if (event.targetSlot != null) {
-                moves.attachDon?.(localPlayerId, event.targetSlot, 1);
-              }
-              break;
-
-            case 'discard':
+      <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+        <CardPreviewPane
+          cardId={previewCardId}
+          cardImages={gameCardImages}
+          cardName={previewCardName}
+        />
+        <PhaserBoard
+          sceneState={sceneState}
+          zoneLayout={OnePieceZoneLayout}
+          playerId={localPlayerId}
+          onInteraction={(event: CardInteractionEvent) => {
+            if (event.type === 'preview') {
+              setPreviewCardId(event.cardId ?? null);
               if (event.cardId) {
-                // Find the slot position for the card to trash from play
-                const slot = G.players[localPlayerId]?.playArea?.find(
-                  (s) => s.cardId === event.cardId,
-                );
-                if (slot) {
-                  moves.trashFromPlay?.(localPlayerId, slot.position);
-                }
+                const card = cardRegistry.get(event.cardId);
+                setPreviewCardName(card?.name ?? null);
+              } else {
+                setPreviewCardName(null);
               }
-              break;
+              return;
+            }
 
-            default:
-              // 'preview', 'peek', 'tap', 'untap', 'detachDon' — handled by UI overlays or not yet implemented
-              break;
-          }
-        }}
-        height="650px"
-      />
+            if (!moves) return;
+
+            switch (event.type) {
+              case 'play':
+                if (event.cardId && event.targetSlot != null) {
+                  moves.playCard?.(localPlayerId, event.cardId, event.targetSlot);
+                }
+                break;
+
+              case 'draw':
+                if (event.sourceZone === 'mainDeck') {
+                  moves.drawCard?.(localPlayerId);
+                } else if (event.sourceZone === 'donDeck') {
+                  moves.drawDon?.(localPlayerId);
+                }
+                break;
+
+              case 'attachDon':
+                if (event.targetSlot != null) {
+                  moves.attachDon?.(localPlayerId, event.targetSlot, 1);
+                }
+                break;
+
+              case 'discard':
+                if (event.cardId) {
+                  const slot = G.players[localPlayerId]?.playArea?.find(
+                    (s) => s.cardId === event.cardId,
+                  );
+                  if (slot) {
+                    moves.trashFromPlay?.(localPlayerId, slot.position);
+                  }
+                }
+                break;
+
+              default:
+                break;
+            }
+          }}
+          height="1300px"
+        />
+      </div>
     </div>
   );
 }

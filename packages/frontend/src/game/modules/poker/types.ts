@@ -5,10 +5,11 @@
  * standard (trusted server) and crypto (mental poker) variants.
  */
 
-import type { ZoneDefinition } from '../types';
-import type { StandardCard, CoreCard } from '../types';
-import type { CryptoPluginState } from '../../../crypto/plugin/crypto-plugin';
-import type { KeyShare } from '../../../crypto/shamirs';
+import type { ZoneDefinition } from "../types";
+import type { StandardCard, CoreCard } from "../types";
+import type { CryptoPluginState } from "../../../crypto/plugin/crypto-plugin";
+import type { KeyShare } from "../../../crypto/shamirs";
+import type { EncryptedCard } from "../../../crypto/mental-poker";
 
 // ============================================================================
 // Card Types
@@ -35,15 +36,15 @@ export const SUIT_VALUES: Record<string, number> = {
  * Rank values for comparison (Ace is high by default)
  */
 export const RANK_VALUES: Record<string, number> = {
-  '2': 2,
-  '3': 3,
-  '4': 4,
-  '5': 5,
-  '6': 6,
-  '7': 7,
-  '8': 8,
-  '9': 9,
-  '10': 10,
+  "2": 2,
+  "3": 3,
+  "4": 4,
+  "5": 5,
+  "6": 6,
+  "7": 7,
+  "8": 8,
+  "9": 9,
+  "10": 10,
   J: 11,
   Q: 12,
   K: 13,
@@ -82,16 +83,16 @@ export enum HandRank {
  * Human-readable hand rank names
  */
 export const HAND_RANK_NAMES: Record<HandRank, string> = {
-  [HandRank.HIGH_CARD]: 'High Card',
-  [HandRank.PAIR]: 'Pair',
-  [HandRank.TWO_PAIR]: 'Two Pair',
-  [HandRank.THREE_OF_A_KIND]: 'Three of a Kind',
-  [HandRank.STRAIGHT]: 'Straight',
-  [HandRank.FLUSH]: 'Flush',
-  [HandRank.FULL_HOUSE]: 'Full House',
-  [HandRank.FOUR_OF_A_KIND]: 'Four of a Kind',
-  [HandRank.STRAIGHT_FLUSH]: 'Straight Flush',
-  [HandRank.ROYAL_FLUSH]: 'Royal Flush',
+  [HandRank.HIGH_CARD]: "High Card",
+  [HandRank.PAIR]: "Pair",
+  [HandRank.TWO_PAIR]: "Two Pair",
+  [HandRank.THREE_OF_A_KIND]: "Three of a Kind",
+  [HandRank.STRAIGHT]: "Straight",
+  [HandRank.FLUSH]: "Flush",
+  [HandRank.FULL_HOUSE]: "Full House",
+  [HandRank.FOUR_OF_A_KIND]: "Four of a Kind",
+  [HandRank.STRAIGHT_FLUSH]: "Straight Flush",
+  [HandRank.ROYAL_FLUSH]: "Royal Flush",
 };
 
 /**
@@ -115,18 +116,25 @@ export interface EvaluatedHand {
 /**
  * Game phases for standard poker
  */
-export type PokerPhase = 'waiting' | 'preflop' | 'flop' | 'turn' | 'river' | 'showdown' | 'gameOver';
+export type PokerPhase =
+  | "waiting"
+  | "preflop"
+  | "flop"
+  | "turn"
+  | "river"
+  | "showdown"
+  | "gameOver";
 
 /**
  * Extended phases for crypto poker (includes setup phases)
  */
 export type CryptoPokerPhase =
-  | 'keyExchange'
-  | 'keyEscrow'
-  | 'encrypt'
-  | 'shuffle'
+  | "keyExchange"
+  | "keyEscrow"
+  | "encrypt"
+  | "shuffle"
   | PokerPhase
-  | 'voided';
+  | "voided";
 
 /**
  * Betting round state
@@ -244,7 +252,7 @@ export interface SidePot {
 /**
  * Crypto poker game state
  */
-export interface CryptoPokerState extends Omit<BasePokerState, 'players'> {
+export interface CryptoPokerState extends Omit<BasePokerState, "players"> {
   /** Extended player state */
   players: Record<string, CryptoPokerPlayerState>;
   /** Extended phase */
@@ -325,18 +333,17 @@ export interface DecryptRequest {
   /** Timestamp of request */
   timestamp: number;
   /** Status of the request */
-  status: 'pending' | 'approved' | 'completed' | 'rejected';
+  status: "pending" | "approved" | "completed" | "rejected";
   /** Players who have approved */
   approvals: Record<string, boolean>;
-  /** Decryption shares submitted by approving players */
-  decryptionShares: Record<string, string[]>;
+  decryptionShares: Record<string, EncryptedCard>;
 }
 
 /**
  * Notification for decrypt request events
  */
 export interface DecryptNotification {
-  type: 'request' | 'approval' | 'completed' | 'rejected';
+  type: "request" | "approval" | "completed" | "rejected";
   requestId: string;
   playerId: string;
   message: string;
@@ -352,41 +359,41 @@ export interface DecryptNotification {
  */
 export const POKER_ZONES: ZoneDefinition[] = [
   {
-    id: 'deck',
-    name: 'Deck',
-    visibility: 'hidden',
+    id: "deck",
+    name: "Deck",
+    visibility: "hidden",
     shared: true,
     ordered: true,
-    features: ['shuffle', 'draw'],
+    features: ["shuffle", "draw"],
   },
   {
-    id: 'hand',
-    name: 'Hand',
-    visibility: 'owner-only',
+    id: "hand",
+    name: "Hand",
+    visibility: "owner-only",
     shared: false,
     ordered: false,
     features: [],
   },
   {
-    id: 'community',
-    name: 'Community',
-    visibility: 'public',
+    id: "community",
+    name: "Community",
+    visibility: "public",
     shared: true,
     ordered: true,
     features: [],
   },
   {
-    id: 'discard',
-    name: 'Discard',
-    visibility: 'hidden',
+    id: "discard",
+    name: "Discard",
+    visibility: "hidden",
     shared: true,
     ordered: false,
     features: [],
   },
   {
-    id: 'mucked',
-    name: 'Mucked',
-    visibility: 'hidden',
+    id: "mucked",
+    name: "Mucked",
+    visibility: "hidden",
     shared: true,
     ordered: false,
     features: [],
@@ -401,26 +408,26 @@ export const POKER_ZONES: ZoneDefinition[] = [
  * Poker move types
  */
 export type PokerMoveType =
-  | 'fold'
-  | 'check'
-  | 'call'
-  | 'bet'
-  | 'raise'
-  | 'allIn'
+  | "fold"
+  | "check"
+  | "call"
+  | "bet"
+  | "raise"
+  | "allIn"
   // Crypto-specific moves
-  | 'submitPublicKey'
-  | 'distributeKeyShares'
-  | 'encryptDeck'
-  | 'shuffleDeck'
-  | 'peekHoleCards'
-  | 'submitDecryptionShare'
-  | 'releaseKey'
-  | 'showHand'
-  | 'acknowledgeResult'
+  | "submitPublicKey"
+  | "distributeKeyShares"
+  | "encryptDeck"
+  | "shuffleDeck"
+  | "peekHoleCards"
+  | "submitDecryptionShare"
+  | "releaseKey"
+  | "showHand"
+  | "acknowledgeResult"
   // Cooperative decryption moves
-  | 'requestDecrypt'
-  | 'approveDecrypt'
-  | 'dismissNotification';
+  | "requestDecrypt"
+  | "approveDecrypt"
+  | "dismissNotification";
 
 /**
  * Move validation result
@@ -522,8 +529,10 @@ export function getCardId(suit: string, rank: string): string {
 /**
  * Parse a card ID into suit and rank
  */
-export function parseCardId(cardId: string): { suit: string; rank: string } | null {
-  const parts = cardId.split('-');
+export function parseCardId(
+  cardId: string,
+): { suit: string; rank: string } | null {
+  const parts = cardId.split("-");
   if (parts.length !== 2) return null;
   return { suit: parts[0], rank: parts[1] };
 }
@@ -532,8 +541,22 @@ export function parseCardId(cardId: string): { suit: string; rank: string } | nu
  * Get all 52 standard card IDs
  */
 export function getAllCardIds(): string[] {
-  const suits = ['clubs', 'diamonds', 'hearts', 'spades'];
-  const ranks = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
+  const suits = ["clubs", "diamonds", "hearts", "spades"];
+  const ranks = [
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8",
+    "9",
+    "10",
+    "J",
+    "Q",
+    "K",
+    "A",
+  ];
   const ids: string[] = [];
   for (const suit of suits) {
     for (const rank of ranks) {

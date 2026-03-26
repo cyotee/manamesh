@@ -31,6 +31,7 @@ export function createEmptyPlayerState(): MerkleBattleshipPlayerState {
     commitmentRootHex: null,
     opponentCommitmentRootHex: null,
     opponentMarks: emptyMarks(),
+    missByTimeout: 0,
   };
 }
 
@@ -44,6 +45,7 @@ export function createInitialState(playerIDs: string[]): MerkleBattleshipState {
     players,
     guesses: [],
     winner: null,
+    pendingGuess: null,
   };
 }
 
@@ -99,4 +101,42 @@ export function hasAllShipsSunkFromMarks(
   const requiredHits = fleet.reduce((acc, s) => acc + s.size, 0);
   const hitCount = marks.filter((m) => m === "hit").length;
   return hitCount >= requiredHits;
+}
+
+const REVEAL_TIMEOUT_MS = 120000; // 2 minutes
+const MAX_TIMEOUTS_FORFEIT = 3;
+
+export function claimTimeout(
+  state: MerkleBattleshipState,
+  attackerId: string,
+): { timedOut: boolean; defenderForfeited: boolean } {
+  const pending = state.pendingGuess;
+  if (!pending) return { timedOut: false, defenderForfeited: false };
+
+  const elapsed = Date.now() - pending.sentAt;
+  if (elapsed < REVEAL_TIMEOUT_MS)
+    return { timedOut: false, defenderForfeited: false };
+
+  const defenderId = Object.keys(state.players).find((id) => id !== attackerId);
+  if (!defenderId) return { timedOut: false, defenderForfeited: false };
+
+  const defender = state.players[defenderId];
+  defender.missByTimeout++;
+
+  if (defender.missByTimeout >= MAX_TIMEOUTS_FORFEIT) {
+    state.winner = attackerId;
+    state.phase = "gameOver";
+    state.pendingGuess = null;
+    return { timedOut: true, defenderForfeited: true };
+  }
+
+  state.pendingGuess = null;
+  return { timedOut: true, defenderForfeited: false };
+}
+
+export function isTimedOut(state: MerkleBattleshipState): boolean {
+  const pending = state.pendingGuess;
+  if (!pending) return false;
+  const elapsed = Date.now() - pending.sentAt;
+  return elapsed >= REVEAL_TIMEOUT_MS;
 }

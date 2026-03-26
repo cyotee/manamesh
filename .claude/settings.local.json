@@ -62,7 +62,9 @@
       "WebFetch(domain:www.cardmarket.com)",
       "WebFetch(domain:apitcg.com)",
       "WebFetch(domain:www.cardtrader.com)",
-      "WebFetch(domain:www.pricecharting.com)"
+      "WebFetch(domain:www.pricecharting.com)",
+      "WebFetch(domain:tcgking.nl)",
+      "WebFetch(domain:api.github.com)"
     ]
   }
 }

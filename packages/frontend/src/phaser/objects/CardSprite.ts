@@ -112,7 +112,7 @@ export class CardSprite extends Phaser.GameObjects.Container {
     const vis = this.cardState.visibility;
     if (vis === 'encrypted' || vis === 'secret') return;
     this.nameText = this.scene.add.text(0, this.cardSize.height / 2 + 8, this.cardState.name, {
-      fontSize: '9px',
+      fontSize: '18px',
       fontFamily: 'sans-serif',
       color: '#ffffff',
       backgroundColor: '#000000aa',

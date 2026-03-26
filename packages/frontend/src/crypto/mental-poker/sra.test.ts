@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeAll } from 'vitest';
+import { describe, expect, it, beforeAll } from "vitest";
 import {
   generateKeyPair,
   encrypt,
@@ -10,10 +10,10 @@ import {
   buildCardPointLookup,
   verifyCommutative,
   decryptToCardId,
-} from './sra';
-import type { CryptoKeyPair, EncryptedCard } from './types';
+} from "./sra";
+import type { CryptoKeyPair, EncryptedCard } from "./types";
 
-describe('SRA Commutative Encryption', () => {
+describe("SRA Commutative Encryption", () => {
   let keyA: CryptoKeyPair;
   let keyB: CryptoKeyPair;
 
@@ -22,8 +22,8 @@ describe('SRA Commutative Encryption', () => {
     keyB = generateKeyPair();
   });
 
-  describe('generateKeyPair', () => {
-    it('generates valid key pairs', () => {
+  describe("generateKeyPair", () => {
+    it("generates valid key pairs", () => {
       const keyPair = generateKeyPair();
 
       expect(keyPair.publicKey).toBeDefined();
@@ -32,7 +32,7 @@ describe('SRA Commutative Encryption', () => {
       expect(keyPair.privateKey.length).toBeGreaterThan(0);
     });
 
-    it('generates different keys each time', () => {
+    it("generates different keys each time", () => {
       const key1 = generateKeyPair();
       const key2 = generateKeyPair();
 
@@ -40,8 +40,10 @@ describe('SRA Commutative Encryption', () => {
       expect(key1.publicKey).not.toBe(key2.publicKey);
     });
 
-    it('generates deterministic keys from seed', () => {
-      const seed = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
+    it("generates deterministic keys from seed", () => {
+      const seed = new Uint8Array([
+        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
+      ]);
       const key1 = generateKeyPair(seed);
       const key2 = generateKeyPair(seed);
 
@@ -50,9 +52,9 @@ describe('SRA Commutative Encryption', () => {
     });
   });
 
-  describe('encrypt/decrypt', () => {
-    it('encrypts a card ID', () => {
-      const cardId = 'ace-of-spades';
+  describe("encrypt/decrypt", () => {
+    it("encrypts a card ID", () => {
+      const cardId = "ace-of-spades";
       const encrypted = encrypt(cardId, keyA.privateKey);
 
       expect(encrypted.ciphertext).toBeDefined();
@@ -60,9 +62,9 @@ describe('SRA Commutative Encryption', () => {
       expect(encrypted.ciphertext).not.toBe(cardId);
     });
 
-    it('decrypts back to original point', () => {
-      const cardId = 'king-of-hearts';
-      const originalPoint = getCardPoint(cardId);
+    it("decrypts back to original point", async () => {
+      const cardId = "king-of-hearts";
+      const originalPoint = await getCardPoint(cardId);
 
       const encrypted = encrypt(cardId, keyA.privateKey);
       const decrypted = decrypt(encrypted, keyA.privateKey);
@@ -71,19 +73,20 @@ describe('SRA Commutative Encryption', () => {
       expect(decrypted.ciphertext).toBe(originalPoint);
     });
 
-    it('throws when decrypting plaintext', () => {
+    it("throws when decrypting plaintext", () => {
       const plaintext: EncryptedCard = {
-        ciphertext: 'some-point',
+        ciphertext: "some-point",
         layers: 0,
       };
 
       expect(() => decrypt(plaintext, keyA.privateKey)).toThrow(
-        'Cannot decrypt a plaintext card'
+        "Cannot decrypt a plaintext card",
       );
     });
 
-    it('handles multiple encryption layers', () => {
-      const cardId = 'queen-of-diamonds';
+    it("handles multiple encryption layers", async () => {
+      const cardId = "queen-of-diamonds";
+      const originalPoint = await getCardPoint(cardId);
 
       const enc1 = encrypt(cardId, keyA.privateKey);
       expect(enc1.layers).toBe(1);
@@ -96,19 +99,19 @@ describe('SRA Commutative Encryption', () => {
 
       const dec2 = decrypt(dec1, keyA.privateKey);
       expect(dec2.layers).toBe(0);
-      expect(dec2.ciphertext).toBe(getCardPoint(cardId));
+      expect(dec2.ciphertext).toBe(originalPoint);
     });
   });
 
-  describe('commutative property', () => {
-    it('verifies commutative encryption with verifyCommutative', () => {
-      const result = verifyCommutative('ace-of-clubs', keyA, keyB);
+  describe("commutative property", () => {
+    it("verifies commutative encryption with verifyCommutative", async () => {
+      const result = await verifyCommutative("ace-of-clubs", keyA, keyB);
       expect(result).toBe(true);
     });
 
-    it('decryption order does not matter', () => {
-      const cardId = 'two-of-hearts';
-      const originalPoint = getCardPoint(cardId);
+    it("decryption order does not matter", async () => {
+      const cardId = "two-of-hearts";
+      const originalPoint = await getCardPoint(cardId);
 
       // Encrypt with A then B
       const encA = encrypt(cardId, keyA.privateKey);
@@ -128,10 +131,10 @@ describe('SRA Commutative Encryption', () => {
       expect(result1.ciphertext).toBe(result2.ciphertext);
     });
 
-    it('works with three players', () => {
+    it("works with three players", async () => {
       const keyC = generateKeyPair();
-      const cardId = 'jack-of-spades';
-      const originalPoint = getCardPoint(cardId);
+      const cardId = "jack-of-spades";
+      const originalPoint = await getCardPoint(cardId);
 
       // Encrypt A -> B -> C
       const encA = encrypt(cardId, keyA.privateKey);
@@ -154,24 +157,24 @@ describe('SRA Commutative Encryption', () => {
     });
   });
 
-  describe('hashToPoint', () => {
-    it('same card ID produces same point', () => {
-      const point1 = getCardPoint('ace-of-spades');
-      const point2 = getCardPoint('ace-of-spades');
+  describe("hashToPoint", () => {
+    it("same card ID produces same point", async () => {
+      const point1 = await getCardPoint("ace-of-spades");
+      const point2 = await getCardPoint("ace-of-spades");
 
       expect(point1).toBe(point2);
     });
 
-    it('different card IDs produce different points', () => {
-      const point1 = getCardPoint('ace-of-spades');
-      const point2 = getCardPoint('ace-of-hearts');
+    it("different card IDs produce different points", async () => {
+      const point1 = await getCardPoint("ace-of-spades");
+      const point2 = await getCardPoint("ace-of-hearts");
 
       expect(point1).not.toBe(point2);
     });
 
-    it('produces valid curve points', () => {
+    it("produces valid curve points", () => {
       // If the point is invalid, encryption would fail
-      const cardId = 'random-card-123';
+      const cardId = "random-card-123";
       const encrypted = encrypt(cardId, keyA.privateKey);
 
       expect(encrypted.ciphertext).toBeDefined();
@@ -179,63 +182,62 @@ describe('SRA Commutative Encryption', () => {
     });
   });
 
-  describe('buildCardPointLookup', () => {
-    it('builds lookup table for card IDs', () => {
-      const cardIds = ['card-1', 'card-2', 'card-3'];
-      const lookup = buildCardPointLookup(cardIds);
+  describe("buildCardPointLookup", () => {
+    it("builds lookup table for card IDs", async () => {
+      const cardIds = ["card-1", "card-2", "card-3"];
+      const lookup = await buildCardPointLookup(cardIds);
 
       expect(lookup.size).toBe(3);
-      expect(lookup.has('card-1')).toBe(true);
-      expect(lookup.has('card-2')).toBe(true);
-      expect(lookup.has('card-3')).toBe(true);
+      expect(lookup.has("card-1")).toBe(true);
+      expect(lookup.has("card-2")).toBe(true);
+      expect(lookup.has("card-3")).toBe(true);
     });
 
-    it('lookup values are valid points', () => {
-      const cardIds = ['ace', 'king', 'queen'];
-      const lookup = buildCardPointLookup(cardIds);
+    it("lookup values are valid points", async () => {
+      const cardIds = ["ace", "king", "queen"];
+      const lookup = await buildCardPointLookup(cardIds);
 
       for (const [cardId, point] of lookup) {
-        expect(point).toBe(getCardPoint(cardId));
+        const expected = await getCardPoint(cardId);
+        expect(point).toBe(expected);
       }
     });
   });
 
-  describe('decryptToCardId', () => {
-    it('recovers original card ID after decryption', () => {
-      const cardIds = ['ace-spades', 'king-hearts', 'queen-diamonds'];
-      const lookup = buildCardPointLookup(cardIds);
+  describe("decryptToCardId", () => {
+    it("recovers original card ID after decryption", async () => {
+      const cardIds = ["ace-spades", "king-hearts", "queen-diamonds"];
+      const lookup = await buildCardPointLookup(cardIds);
 
-      const cardId = 'king-hearts';
+      const cardId = "king-hearts";
       const encrypted = encrypt(cardId, keyA.privateKey);
       const decrypted = decrypt(encrypted, keyA.privateKey);
 
       // Re-encrypt to have 1 layer for decryptToCardId
       const reencrypted = encrypt(decrypted.ciphertext, keyA.privateKey);
 
-      // Now we need the plaintext point mapped
-      // Actually, decryptToCardId expects 1 layer
       const finalEnc = encrypt(cardId, keyA.privateKey);
       const recovered = decryptToCardId(finalEnc, keyA.privateKey, lookup);
 
       expect(recovered).toBe(cardId);
     });
 
-    it('returns null for unknown card', () => {
-      const cardIds = ['ace', 'king'];
-      const lookup = buildCardPointLookup(cardIds);
+    it("returns null for unknown card", async () => {
+      const cardIds = ["ace", "king"];
+      const lookup = await buildCardPointLookup(cardIds);
 
       // Encrypt a card not in the lookup
-      const encrypted = encrypt('unknown-card', keyA.privateKey);
+      const encrypted = encrypt("unknown-card", keyA.privateKey);
       const recovered = decryptToCardId(encrypted, keyA.privateKey, lookup);
 
       expect(recovered).toBeNull();
     });
   });
 
-  describe('deck operations', () => {
-    const testDeck = ['card-1', 'card-2', 'card-3', 'card-4'];
+  describe("deck operations", () => {
+    const testDeck = ["card-1", "card-2", "card-3", "card-4"];
 
-    it('encrypts entire deck', () => {
+    it("encrypts entire deck", () => {
       const encrypted = encryptDeck(testDeck, keyA.privateKey);
 
       expect(encrypted.length).toBe(testDeck.length);
@@ -244,7 +246,7 @@ describe('SRA Commutative Encryption', () => {
       });
     });
 
-    it('reencrypts already encrypted deck', () => {
+    it("reencrypts already encrypted deck", () => {
       const encrypted = encryptDeck(testDeck, keyA.privateKey);
       const reencrypted = reencryptDeck(encrypted, keyB.privateKey);
 
@@ -254,7 +256,7 @@ describe('SRA Commutative Encryption', () => {
       });
     });
 
-    it('decrypts deck layer', () => {
+    it("decrypts deck layer", () => {
       const encrypted = encryptDeck(testDeck, keyA.privateKey);
       const reencrypted = reencryptDeck(encrypted, keyB.privateKey);
       const decrypted = decryptDeck(reencrypted, keyA.privateKey);
@@ -265,8 +267,8 @@ describe('SRA Commutative Encryption', () => {
       });
     });
 
-    it('full encrypt/decrypt cycle preserves card points', () => {
-      const lookup = buildCardPointLookup(testDeck);
+    it("full encrypt/decrypt cycle preserves card points", async () => {
+      const lookup = await buildCardPointLookup(testDeck);
 
       // Player A encrypts
       const encA = encryptDeck(testDeck, keyA.privateKey);
@@ -286,8 +288,8 @@ describe('SRA Commutative Encryption', () => {
     });
   });
 
-  describe('performance', () => {
-    it('encrypts 52 cards in reasonable time', () => {
+  describe("performance", () => {
+    it("encrypts 52 cards in reasonable time", async () => {
       const deck = Array.from({ length: 52 }, (_, i) => `card-${i}`);
 
       const start = performance.now();
@@ -299,7 +301,7 @@ describe('SRA Commutative Encryption', () => {
       expect(duration).toBeLessThan(10000);
     });
 
-    it('reencrypts 52 cards in reasonable time', () => {
+    it("reencrypts 52 cards in reasonable time", () => {
       const deck = Array.from({ length: 52 }, (_, i) => `card-${i}`);
       const encrypted = encryptDeck(deck, keyA.privateKey);
 

@@ -11,8 +11,8 @@
  * - Commitment verification
  */
 
-import type { Ctx } from 'boardgame.io';
-import type { CoreCard } from '../../game/modules/types';
+import type { Ctx } from "boardgame.io";
+import type { CoreCard } from "../../game/modules/types";
 import {
   generateKeyPair,
   encrypt,
@@ -32,7 +32,7 @@ import {
   shuffleWithProof,
   verifyShuffleProof,
   type Permutation,
-} from '../mental-poker';
+} from "../mental-poker";
 
 // =============================================================================
 // Types
@@ -48,7 +48,14 @@ export type ZoneId = string;
  */
 export interface CryptoPluginState {
   /** Current protocol phase */
-  phase: 'init' | 'keyExchange' | 'encrypt' | 'shuffle' | 'ready' | 'playing' | 'reveal';
+  phase:
+    | "init"
+    | "keyExchange"
+    | "encrypt"
+    | "shuffle"
+    | "ready"
+    | "playing"
+    | "reveal";
 
   /** Player public keys (playerId -> publicKey hex) */
   publicKeys: Record<string, string>;
@@ -134,24 +141,28 @@ export interface CryptoPluginApi {
   allKeysSubmitted: () => boolean;
 
   /** Get current phase */
-  getPhase: () => CryptoPluginState['phase'];
+  getPhase: () => CryptoPluginState["phase"];
 
   /** Encrypt deck with player's key (call in order) */
-  encryptDeckForPlayer: (zoneId: ZoneId, playerId: string, privateKey: string) => void;
+  encryptDeckForPlayer: (
+    zoneId: ZoneId,
+    playerId: string,
+    privateKey: string,
+  ) => void;
 
   /** Shuffle deck with proof */
   shuffleDeckWithProof: (
     zoneId: ZoneId,
     playerId: string,
-    privateKey: string
+    privateKey: string,
   ) => Promise<{ proof: SerializedShuffleProof }>;
 
-  /** Submit decryption share for revealing a card */
-  submitDecryptionShare: (
+  /** Submit decrypted share for revealing a card (V2: decrypt locally, send result not key) */
+  submitDecryptedShare: (
     zoneId: ZoneId,
     cardIndex: number,
     playerId: string,
-    privateKey: string
+    decryptedCard: EncryptedCard,
   ) => void;
 
   /** Check if card is fully revealed */
@@ -170,7 +181,7 @@ export interface CryptoPluginApi {
   moveEncryptedCard: (
     fromZoneId: ZoneId,
     toZoneId: ZoneId,
-    cardIndex: number
+    cardIndex: number,
   ) => void;
 }
 
@@ -188,8 +199,8 @@ function hexToBytes(hex: string): Uint8Array {
 
 function bytesToHex(bytes: Uint8Array): string {
   return Array.from(bytes)
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 function serializeCommitment(commitment: DeckCommitment): SerializedCommitment {
@@ -200,7 +211,9 @@ function serializeCommitment(commitment: DeckCommitment): SerializedCommitment {
   };
 }
 
-function deserializeCommitment(serialized: SerializedCommitment): DeckCommitment {
+function deserializeCommitment(
+  serialized: SerializedCommitment,
+): DeckCommitment {
   return {
     hash: hexToBytes(serialized.hash),
     nonce: hexToBytes(serialized.nonce),
@@ -210,7 +223,7 @@ function deserializeCommitment(serialized: SerializedCommitment): DeckCommitment
 
 function serializeShuffleProof(
   proof: ShuffleProof,
-  nonce: Uint8Array
+  nonce: Uint8Array,
 ): SerializedShuffleProof {
   return {
     commitment: bytesToHex(proof.commitment),
@@ -226,7 +239,9 @@ function deserializeShuffleProof(serialized: SerializedShuffleProof): {
   proof: ShuffleProof;
   nonce: Uint8Array;
 } {
-  const proofBytes = Uint8Array.from(atob(serialized.proof), (c) => c.charCodeAt(0));
+  const proofBytes = Uint8Array.from(atob(serialized.proof), (c) =>
+    c.charCodeAt(0),
+  );
 
   return {
     proof: {
@@ -249,7 +264,7 @@ function deserializeShuffleProof(serialized: SerializedShuffleProof): {
  */
 function createInitialCryptoState(): CryptoPluginState {
   return {
-    phase: 'init',
+    phase: "init",
     publicKeys: {},
     commitments: {},
     shuffleProofs: {},
@@ -264,7 +279,7 @@ function createInitialCryptoState(): CryptoPluginState {
  * The Crypto Plugin for boardgame.io.
  */
 export const CryptoPlugin = {
-  name: 'crypto',
+  name: "crypto",
 
   setup: (): CryptoPluginState => createInitialCryptoState(),
 
@@ -281,14 +296,15 @@ export const CryptoPlugin = {
     }
 
     return {
-      init: (cardIds: string[], playerIds: string[]): void => {
-        // Build card point lookup table
+      init: async (cardIds: string[], playerIds: string[]): Promise<void> => {
+        // Build card point lookup table using real SHA-256
+        const lookupMap = await buildCardPointLookup(cardIds);
         const lookup: Record<string, string> = {};
-        for (const cardId of cardIds) {
-          lookup[cardId] = getCardPoint(cardId);
+        for (const [cardId, point] of lookupMap) {
+          lookup[cardId] = point;
         }
         G.crypto.cardPointLookup = lookup;
-        G.crypto.phase = 'keyExchange';
+        G.crypto.phase = "keyExchange";
       },
 
       submitPublicKey: (playerId: string, publicKey: string): void => {
@@ -301,22 +317,22 @@ export const CryptoPlugin = {
         return Object.keys(G.crypto.publicKeys).length >= 2;
       },
 
-      getPhase: (): CryptoPluginState['phase'] => {
+      getPhase: (): CryptoPluginState["phase"] => {
         return G.crypto.phase;
       },
 
       encryptDeckForPlayer: (
         zoneId: ZoneId,
         playerId: string,
-        privateKey: string
+        privateKey: string,
       ): void => {
         const existingDeck = G.crypto.encryptedZones[zoneId];
 
         if (!existingDeck) {
-          // First encryption: encrypt card IDs
-          // Need to get card IDs from plaintext zone
+          // First encryption: encrypt card IDs using pre-computed lookup
           const cardIds = Object.keys(G.crypto.cardPointLookup);
-          const encrypted = encryptDeck(cardIds, privateKey);
+          const lookupMap = new Map(Object.entries(G.crypto.cardPointLookup));
+          const encrypted = encryptDeck(cardIds, privateKey, lookupMap);
           G.crypto.encryptedZones[zoneId] = encrypted;
         } else {
           // Re-encrypt existing encrypted deck
@@ -324,13 +340,13 @@ export const CryptoPlugin = {
           G.crypto.encryptedZones[zoneId] = reencrypted;
         }
 
-        G.crypto.phase = 'encrypt';
+        G.crypto.phase = "encrypt";
       },
 
       shuffleDeckWithProof: async (
         zoneId: ZoneId,
         playerId: string,
-        privateKey: string
+        privateKey: string,
       ): Promise<{ proof: SerializedShuffleProof }> => {
         const deck = G.crypto.encryptedZones[zoneId];
         if (!deck) {
@@ -347,42 +363,38 @@ export const CryptoPlugin = {
         const serializedProof = serializeShuffleProof(proof, nonce);
         G.crypto.shuffleProofs[playerId] = serializedProof;
 
-        G.crypto.phase = 'shuffle';
+        G.crypto.phase = "shuffle";
 
         return { proof: serializedProof };
       },
 
-      submitDecryptionShare: (
+      submitDecryptedShare: (
         zoneId: ZoneId,
         cardIndex: number,
         playerId: string,
-        privateKey: string
+        decryptedCard: EncryptedCard,
       ): void => {
         const deck = G.crypto.encryptedZones[zoneId];
         if (!deck || cardIndex < 0 || cardIndex >= deck.length) {
           throw new Error(`Invalid card index ${cardIndex}`);
         }
 
-        const card = deck[cardIndex];
-
-        // Decrypt one layer
-        const decrypted = decrypt(card, privateKey);
-
-        // Store the decryption share (the partially decrypted card)
         const key = `${zoneId}:${cardIndex}`;
+
         if (!G.crypto.pendingReveals[key]) {
           G.crypto.pendingReveals[key] = {};
         }
-        G.crypto.pendingReveals[key][playerId] = decrypted.ciphertext;
+        G.crypto.pendingReveals[key][playerId] = decryptedCard.ciphertext;
 
-        // Update the encrypted card in the deck
-        deck[cardIndex] = decrypted;
+        deck[cardIndex] = decryptedCard;
 
         // Check if fully decrypted
-        if (decrypted.layers === 0) {
+        if (decryptedCard.layers === 0) {
           // Look up the card ID from the point
-          for (const [cardId, point] of Object.entries(G.crypto.cardPointLookup)) {
-            if (point === decrypted.ciphertext) {
+          for (const [cardId, point] of Object.entries(
+            G.crypto.cardPointLookup,
+          )) {
+            if (point === decryptedCard.ciphertext) {
               G.crypto.revealedCards[key] = cardId;
               break;
             }
@@ -400,7 +412,10 @@ export const CryptoPlugin = {
         return G.crypto.revealedCards[key] ?? null;
       },
 
-      getEncryptedCard: (zoneId: ZoneId, cardIndex: number): EncryptedCard | null => {
+      getEncryptedCard: (
+        zoneId: ZoneId,
+        cardIndex: number,
+      ): EncryptedCard | null => {
         const deck = G.crypto.encryptedZones[zoneId];
         if (!deck || cardIndex < 0 || cardIndex >= deck.length) {
           return null;
@@ -416,7 +431,7 @@ export const CryptoPlugin = {
       moveEncryptedCard: (
         fromZoneId: ZoneId,
         toZoneId: ZoneId,
-        cardIndex: number
+        cardIndex: number,
       ): void => {
         const fromDeck = G.crypto.encryptedZones[fromZoneId];
         if (!fromDeck || cardIndex < 0 || cardIndex >= fromDeck.length) {
@@ -460,7 +475,7 @@ export const CryptoPlugin = {
  */
 export function createPlayerCryptoContext(
   playerId: string,
-  seed?: Uint8Array
+  seed?: Uint8Array,
 ): CryptoPlayerContext {
   return {
     playerId,
@@ -479,7 +494,7 @@ export function createPlayerCryptoContext(
  */
 export function createPlayerCryptoContextFromWallet(
   playerId: string,
-  derivedKeys: { privateKey: string; publicKey: string }
+  derivedKeys: { privateKey: string; publicKey: string },
 ): CryptoPlayerContext {
   return {
     playerId,
@@ -495,8 +510,22 @@ export function createPlayerCryptoContextFromWallet(
  * Generate card IDs for a standard 52-card deck.
  */
 export function generateStandard52CardIds(): string[] {
-  const suits = ['hearts', 'diamonds', 'clubs', 'spades'];
-  const ranks = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
+  const suits = ["hearts", "diamonds", "clubs", "spades"];
+  const ranks = [
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8",
+    "9",
+    "10",
+    "J",
+    "Q",
+    "K",
+    "A",
+  ];
 
   const cardIds: string[] = [];
   for (const suit of suits) {

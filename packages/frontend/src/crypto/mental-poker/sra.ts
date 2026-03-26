@@ -8,11 +8,11 @@
  * This is achieved by using EC point multiplication: k1 * (k2 * G) = k2 * (k1 * G)
  */
 
-import { ec as EC } from 'elliptic';
-import type { CryptoKeyPair, EncryptedCard } from './types';
+import { ec as EC } from "elliptic";
+import type { CryptoKeyPair, EncryptedCard } from "./types";
 
 // Use secp256k1 curve (same as Bitcoin/Ethereum)
-const ec = new EC('secp256k1');
+const ec = new EC("secp256k1");
 
 /**
  * Generate a new SRA key pair.
@@ -34,8 +34,8 @@ export function generateKeyPair(seed?: Uint8Array): CryptoKeyPair {
   }
 
   return {
-    publicKey: keyPair.getPublic('hex'),
-    privateKey: keyPair.getPrivate('hex'),
+    publicKey: keyPair.getPublic("hex"),
+    privateKey: keyPair.getPrivate("hex"),
   };
 }
 
@@ -48,24 +48,33 @@ export function generateKeyPair(seed?: Uint8Array): CryptoKeyPair {
  *
  * @param card - Either a card ID string or an already-encrypted card
  * @param privateKey - The private key to encrypt with (hex string)
+ * @param cardPointLookup - Optional pre-computed map of card ID to curve point
  * @returns Encrypted card with incremented layer count
  */
 export function encrypt(
   card: string | EncryptedCard,
-  privateKey: string
+  privateKey: string,
+  cardPointLookup?: Map<string, string>,
 ): EncryptedCard {
-  const key = ec.keyFromPrivate(privateKey, 'hex');
+  const key = ec.keyFromPrivate(privateKey, "hex");
 
-  let point;
+  let point: InstanceType<typeof EC>["curve"]["point"];
   let currentLayers: number;
 
-  if (typeof card === 'string') {
-    // First encryption: hash card ID to a curve point
-    point = hashToPoint(card);
+  if (typeof card === "string") {
+    // First encryption: use lookup or hash card ID to a curve point
+    if (cardPointLookup && cardPointLookup.has(card)) {
+      // Use pre-computed point from lookup
+      const pointHex = cardPointLookup.get(card)!;
+      point = ec.curve.decodePoint(pointHex, "hex");
+    } else {
+      // Fallback: hash card ID (cardPointLookup should be provided)
+      point = hashToPoint(card);
+    }
     currentLayers = 0;
   } else {
     // Re-encryption: use existing ciphertext as point
-    point = ec.curve.decodePoint(card.ciphertext, 'hex');
+    point = ec.curve.decodePoint(card.ciphertext, "hex");
     currentLayers = card.layers;
   }
 
@@ -73,7 +82,7 @@ export function encrypt(
   const encrypted = point.mul(key.getPrivate());
 
   return {
-    ciphertext: encrypted.encode('hex', false),
+    ciphertext: encrypted.encode("hex", false),
     layers: currentLayers + 1,
   };
 }
@@ -88,14 +97,14 @@ export function encrypt(
  */
 export function decrypt(
   card: EncryptedCard,
-  privateKey: string
+  privateKey: string,
 ): EncryptedCard {
   if (card.layers === 0) {
-    throw new Error('Cannot decrypt a plaintext card');
+    throw new Error("Cannot decrypt a plaintext card");
   }
 
-  const key = ec.keyFromPrivate(privateKey, 'hex');
-  const point = ec.curve.decodePoint(card.ciphertext, 'hex');
+  const key = ec.keyFromPrivate(privateKey, "hex");
+  const point = ec.curve.decodePoint(card.ciphertext, "hex");
 
   // Multiply by modular inverse of private key
   // Since encrypted = k * P, then decrypted = k^(-1) * encrypted = P
@@ -103,7 +112,7 @@ export function decrypt(
   const decrypted = point.mul(inverse);
 
   return {
-    ciphertext: decrypted.encode('hex', false),
+    ciphertext: decrypted.encode("hex", false),
     layers: card.layers - 1,
   };
 }
@@ -120,7 +129,7 @@ export function decrypt(
 export function decryptToCardId(
   card: EncryptedCard,
   privateKey: string,
-  cardIdToPoint: Map<string, string>
+  cardIdToPoint: Map<string, string>,
 ): string | null {
   if (card.layers !== 1) {
     throw new Error(`Expected 1 layer, got ${card.layers}`);
@@ -146,7 +155,9 @@ export function decryptToCardId(
  * @param cardId - The card identifier
  * @returns Point on the curve (hex encoded)
  */
-export function hashToPoint(cardId: string): InstanceType<typeof EC>['curve']['point'] {
+export function hashToPoint(
+  cardId: string,
+): InstanceType<typeof EC>["curve"]["point"] {
   // Use a simple hash-to-curve approach
   // In production, use a more robust method like hash_to_curve from RFC 9380
   const encoder = new TextEncoder();
@@ -177,50 +188,29 @@ export function hashToPoint(cardId: string): InstanceType<typeof EC>['curve']['p
   throw new Error(`Failed to hash card ID to curve point: ${cardId}`);
 }
 
-/**
- * Get the curve point for a card ID (for lookup table construction).
- *
- * @param cardId - The card identifier
- * @returns Hex-encoded point
- */
-export function getCardPoint(cardId: string): string {
-  const point = hashToPoint(cardId);
-  return point.encode('hex', false);
+export async function getCardPoint(cardId: string): Promise<string> {
+  const point = await hashToPoint(cardId);
+  return point.encode("hex", false);
 }
 
-/**
- * Build a lookup table mapping card IDs to their curve points.
- * Used for recovering card IDs after decryption.
- *
- * @param cardIds - Array of all possible card IDs
- * @returns Map of card ID to hex-encoded point
- */
-export function buildCardPointLookup(cardIds: string[]): Map<string, string> {
+export async function buildCardPointLookup(
+  cardIds: string[],
+): Promise<Map<string, string>> {
   const lookup = new Map<string, string>();
 
   for (const cardId of cardIds) {
-    lookup.set(cardId, getCardPoint(cardId));
+    lookup.set(cardId, await getCardPoint(cardId));
   }
 
   return lookup;
 }
 
-/**
- * Verify that encryption is commutative by checking:
- * Dec_A(Dec_B(Enc_B(Enc_A(m)))) = m
- * Dec_B(Dec_A(Enc_A(Enc_B(m)))) = m
- *
- * @param cardId - Original card ID
- * @param keyA - First key pair
- * @param keyB - Second key pair
- * @returns True if commutative property holds
- */
-export function verifyCommutative(
+export async function verifyCommutative(
   cardId: string,
   keyA: CryptoKeyPair,
-  keyB: CryptoKeyPair
-): boolean {
-  const originalPoint = getCardPoint(cardId);
+  keyB: CryptoKeyPair,
+): Promise<boolean> {
+  const originalPoint = await getCardPoint(cardId);
 
   // Encrypt with A then B
   const encA = encrypt(cardId, keyA.privateKey);
@@ -235,7 +225,9 @@ export function verifyCommutative(
   const decBA = decrypt(decB, keyA.privateKey);
 
   // Both should equal original
-  return decAB.ciphertext === originalPoint && decBA.ciphertext === originalPoint;
+  return (
+    decAB.ciphertext === originalPoint && decBA.ciphertext === originalPoint
+  );
 }
 
 /**
@@ -243,13 +235,15 @@ export function verifyCommutative(
  *
  * @param cardIds - Array of card IDs to encrypt
  * @param privateKey - Key to encrypt with
+ * @param cardPointLookup - Pre-computed map of card ID to curve point
  * @returns Array of encrypted cards in same order
  */
 export function encryptDeck(
   cardIds: string[],
-  privateKey: string
+  privateKey: string,
+  cardPointLookup?: Map<string, string>,
 ): EncryptedCard[] {
-  return cardIds.map((cardId) => encrypt(cardId, privateKey));
+  return cardIds.map((cardId) => encrypt(cardId, privateKey, cardPointLookup));
 }
 
 /**
@@ -261,7 +255,7 @@ export function encryptDeck(
  */
 export function reencryptDeck(
   deck: EncryptedCard[],
-  privateKey: string
+  privateKey: string,
 ): EncryptedCard[] {
   return deck.map((card) => encrypt(card, privateKey));
 }
@@ -275,7 +269,7 @@ export function reencryptDeck(
  */
 export function decryptDeck(
   deck: EncryptedCard[],
-  privateKey: string
+  privateKey: string,
 ): EncryptedCard[] {
   return deck.map((card) => decrypt(card, privateKey));
 }
@@ -284,13 +278,10 @@ export function decryptDeck(
 // Internal helpers
 // ============================================================================
 
-/**
- * Convert Uint8Array to hex string (browser-compatible Buffer replacement).
- */
 function uint8ArrayToHex(bytes: Uint8Array): string {
   return Array.from(bytes)
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 /**

@@ -9,14 +9,14 @@ import {
   coordToIndex,
   isValidCoord,
   hasAllShipsSunkFromMarks,
+  claimTimeout,
+  isTimedOut,
 } from "./logic";
 import type { MerkleProofStep } from "../../../crypto";
 import { verifyMerkleProof } from "../../../crypto";
 import { leafHash } from "./commitment";
 
 type GuessReveal = {
-  // Game identifier used for the leaf hash.
-  // Must match what was used to compute the commitment root (currently matchID).
   gameId: string;
   ownerId: string;
   index: number;
@@ -81,13 +81,43 @@ export const MerkleBattleshipGame: Game<MerkleBattleshipState> = {
     },
     battle: {
       turn: {
-        // One guess per turn.
         minMoves: 1,
         maxMoves: 1,
       },
       moves: {
-        // Local player requests a proof from opponent out-of-band (UI triggers).
-        // The actual verified application happens in applyReveal.
+        recordGuess: {
+          move: ({ G, ctx, playerID, events }, target: Coord) => {
+            try {
+              if (ctx.phase !== "battle") return INVALID_MOVE;
+              if (!isValidCoord(target)) return INVALID_MOVE;
+              if (G.pendingGuess) return INVALID_MOVE;
+
+              const opponentId = Object.keys(G.players).find(
+                (id) => id !== playerID,
+              );
+              if (!opponentId) return INVALID_MOVE;
+
+              const idx = coordToIndex(target);
+              if (G.players[playerID].opponentMarks[idx] !== "unknown") {
+                return INVALID_MOVE;
+              }
+
+              G.pendingGuess = {
+                attackerId: playerID,
+                target,
+                index: idx,
+                sentAt: Date.now(),
+              };
+
+              events?.endTurn?.();
+              return G;
+            } catch (e) {
+              console.error("[merkle-battleship] recordGuess failed", e);
+              return INVALID_MOVE;
+            }
+          },
+          client: false,
+        },
         applyReveal: {
           move: (
             { G, ctx, playerID, events },
@@ -107,17 +137,13 @@ export const MerkleBattleshipGame: Game<MerkleBattleshipState> = {
               const idx = coordToIndex(target);
               if (reveal.index !== idx) return INVALID_MOVE;
 
-              // If we've already recorded this guess, ignore duplicate reveals.
               if (G.players[playerID].opponentMarks[idx] !== "unknown") {
                 return INVALID_MOVE;
               }
 
-              // Use opponent's committed root directly (don't rely on onEnd hooks
-              // being executed by the transport implementation).
               const root = G.players[opponentId].commitmentRootHex;
               if (!root) return INVALID_MOVE;
 
-              // Verify Merkle proof binds (gameId uses matchID for uniqueness)
               const leaf = leafHash(
                 reveal.gameId,
                 reveal.ownerId,
@@ -135,19 +161,46 @@ export const MerkleBattleshipGame: Game<MerkleBattleshipState> = {
                 reveal.bit === 1 ? "hit" : "miss",
               );
 
-              // Win check: if I have enough hits to sink all ships.
+              G.pendingGuess = null;
+
               if (hasAllShipsSunkFromMarks(G.players[playerID].opponentMarks)) {
                 G.winner = playerID;
                 G.phase = "gameOver";
               }
 
-              // In P2P transport we rely on explicit endTurn; in the standard
-              // boardgame.io engine this is redundant with maxMoves = 1.
               events?.endTurn?.();
-
               return G;
             } catch (e) {
               console.error("[merkle-battleship] applyReveal failed", e);
+              return INVALID_MOVE;
+            }
+          },
+          client: false,
+        },
+        claimTimeout: {
+          move: ({ G, ctx, playerID, events }) => {
+            try {
+              if (ctx.phase !== "battle") return INVALID_MOVE;
+              if (!G.pendingGuess) return INVALID_MOVE;
+              if (G.pendingGuess.attackerId !== playerID) return INVALID_MOVE;
+
+              const { timedOut, defenderForfeited } = claimTimeout(G, playerID);
+              if (!timedOut) return INVALID_MOVE;
+
+              if (!defenderForfeited) {
+                const opponentId = Object.keys(G.players).find(
+                  (id) => id !== playerID,
+                );
+                if (!opponentId) return INVALID_MOVE;
+
+                applyVerifiedGuess(G, playerID, G.pendingGuess.target, "miss");
+                G.pendingGuess = null;
+              }
+
+              events?.endTurn?.();
+              return G;
+            } catch (e) {
+              console.error("[merkle-battleship] claimTimeout failed", e);
               return INVALID_MOVE;
             }
           },

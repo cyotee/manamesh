@@ -128,6 +128,14 @@ export class DragDropManager {
   ): void {
     if (gameObject instanceof CardSprite) {
       gameObject.showName();
+      const card = gameObject.getCardState();
+      if (card.visibility !== 'encrypted' && card.visibility !== 'secret') {
+        this.config.eventBridge.emit({
+          type: 'preview',
+          cardId: card.id,
+          playerId: this.config.playerId,
+        });
+      }
     }
   }
 
@@ -137,6 +145,11 @@ export class DragDropManager {
   ): void {
     if (gameObject instanceof CardSprite) {
       gameObject.hideName();
+      this.config.eventBridge.emit({
+        type: 'preview',
+        cardId: undefined,
+        playerId: this.config.playerId,
+      });
     }
   }
 

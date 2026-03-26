@@ -182,15 +182,15 @@ export interface CardDimensions {
 
 export const CARD_SIZES = {
   /** Cards in the play area */
-  normal: { width: 80, height: 112 } as CardDimensions,
+  normal: { width: 160, height: 224 } as CardDimensions,
   /** Cards in hand (slightly smaller) */
-  hand: { width: 70, height: 98 } as CardDimensions,
+  hand: { width: 140, height: 196 } as CardDimensions,
   /** Stacked decks (only top visible) */
-  deck: { width: 80, height: 112 } as CardDimensions,
+  deck: { width: 160, height: 224 } as CardDimensions,
   /** Leader card (slightly larger) */
-  leader: { width: 90, height: 126 } as CardDimensions,
+  leader: { width: 180, height: 252 } as CardDimensions,
   /** DON!! cards (smaller) */
-  don: { width: 50, height: 70 } as CardDimensions,
+  don: { width: 100, height: 140 } as CardDimensions,
   /** Card preview on hover */
-  preview: { width: 200, height: 280 } as CardDimensions,
+  preview: { width: 400, height: 560 } as CardDimensions,
 } as const;

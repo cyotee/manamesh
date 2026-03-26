@@ -96,7 +96,7 @@ export class SlotRenderer extends Phaser.GameObjects.Container {
       : slot.slotType === 'stage' ? 'STAGE'
       : `C${slot.position + 1}`;
     const label = this.scene.add.text(centerX, cy, labelText, {
-      fontSize: '8px',
+      fontSize: '16px',
       fontFamily: 'monospace',
       color: '#445566',
     }).setOrigin(0.5);

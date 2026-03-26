@@ -17,7 +17,7 @@ import type { CryptoPluginState } from "../../../crypto/plugin/crypto-plugin";
 import {
   decrypt,
   encryptDeck as encryptDeckCrypto,
-  getCardPoint,
+  buildCardPointLookup,
   reencryptDeck,
   type EncryptedCard,
 } from "../../../crypto/mental-poker";
@@ -523,7 +523,8 @@ export function revealShuffleSeed(
   if (computed !== commit.toLowerCase()) return INVALID_MOVE;
 
   const existing = rng.reveals[playerId] ?? null;
-  if (existing && existing.toLowerCase() !== seedHex.toLowerCase()) return INVALID_MOVE;
+  if (existing && existing.toLowerCase() !== seedHex.toLowerCase())
+    return INVALID_MOVE;
   rng.reveals[playerId] = seedHex.toLowerCase();
   noteShuffleProgress(G, ctx);
 
@@ -680,9 +681,6 @@ export function submitPublicKey(
   pushLog(G, ctx, `Player ${playerId} submitted their public key.`);
 
   if (allKeysSubmitted(G)) {
-    for (const cardId of G.cardIds) {
-      G.crypto.cardPointLookup[cardId] = getCardPoint(cardId);
-    }
     G.phase = "keyEscrow";
     resetSetupPlayer(G);
     pushLog(G, ctx, "All public keys submitted. Moving to key escrow.");
@@ -1505,7 +1503,8 @@ export function submitZkVerdict(
     ),
   );
 
-  if (!ecdsaVerifyDigestHex(decisionHash, signatureHex, pk)) return INVALID_MOVE;
+  if (!ecdsaVerifyDigestHex(decisionHash, signatureHex, pk))
+    return INVALID_MOVE;
 
   pz.verdict = verdict;
   pz.verdictSig = signatureHex;
@@ -1528,20 +1527,25 @@ export function submitZkVerdict(
   }
 
   if (pz.purpose === "claimBooks") {
-    applyZkClaimBooks(G, ctx, pz.submittedBy, pz.payload as ZkClaimBooksPayload);
+    applyZkClaimBooks(
+      G,
+      ctx,
+      pz.submittedBy,
+      pz.payload as ZkClaimBooksPayload,
+    );
   }
 
   G.pendingZk = null;
   return G;
 }
 
-export function submitDecryptionShare(
+export function submitDecryptedShare(
   G: CryptoGoFishState,
   ctx: Ctx,
   zoneId: string,
   cardIndex: number,
   playerId: string,
-  privateKey: string,
+  decryptedCard: EncryptedCard,
 ): CryptoGoFishState | typeof INVALID_MOVE {
   if (G.phase !== "play") return INVALID_MOVE;
   if (G.securityMode !== "coop-reveal") return INVALID_MOVE;
@@ -1570,20 +1574,13 @@ export function submitDecryptionShare(
   if (!G.crypto.pendingReveals[key]) G.crypto.pendingReveals[key] = {};
   if (G.crypto.pendingReveals[key][playerId]) return INVALID_MOVE;
 
-  let decrypted: EncryptedCard;
-  try {
-    decrypted = decrypt(card, privateKey);
-  } catch {
-    return INVALID_MOVE;
-  }
+  zone[cardIndex] = decryptedCard;
+  G.crypto.pendingReveals[key][playerId] = decryptedCard.ciphertext;
 
-  zone[cardIndex] = decrypted;
-  G.crypto.pendingReveals[key][playerId] = decrypted.ciphertext;
-
-  if (decrypted.layers === 0) {
+  if (decryptedCard.layers === 0) {
     const cardId = lookupCardIdFromPoint(
       G.crypto.cardPointLookup,
-      decrypted.ciphertext,
+      decryptedCard.ciphertext,
     );
     if (cardId) {
       G.crypto.revealedCards[key] = cardId;
@@ -1603,12 +1600,20 @@ export function submitDecryptionShare(
 export const CryptoGoFishGame: Game<CryptoGoFishState> = {
   name: "crypto-gofish",
 
-  setup: (ctx): CryptoGoFishState => {
+  setup: async (ctx): Promise<CryptoGoFishState> => {
     const numPlayers = (ctx.numPlayers as number) ?? 2;
     const playerIDs =
       (ctx.playOrder as string[]) ??
       Array.from({ length: numPlayers }, (_, i) => String(i));
-    return createCryptoGoFishState({ numPlayers, playerIDs });
+    const state = createCryptoGoFishState({ numPlayers, playerIDs });
+
+    // Build card point lookup with real SHA-256
+    const lookup = await buildCardPointLookup(state.cardIds);
+    for (const [cardId, point] of lookup) {
+      state.crypto.cardPointLookup[cardId] = point;
+    }
+
+    return state;
   },
 
   turn: {
@@ -1636,8 +1641,11 @@ export const CryptoGoFishGame: Game<CryptoGoFishState> = {
           client: false,
         },
         submitZkSigPublicKey: {
-          move: ({ G, ctx, playerID }, playerId: string, zkSigPublicKey: string) =>
-            submitZkSigPublicKey(G, ctx, playerId, zkSigPublicKey, playerID),
+          move: (
+            { G, ctx, playerID },
+            playerId: string,
+            zkSigPublicKey: string,
+          ) => submitZkSigPublicKey(G, ctx, playerId, zkSigPublicKey, playerID),
           client: false,
         },
         distributeKeyShares: {
@@ -1655,8 +1663,11 @@ export const CryptoGoFishGame: Game<CryptoGoFishState> = {
           client: false,
         },
         commitShuffleSeed: {
-          move: ({ G, ctx, playerID }, playerId: string, commitHashHex: string) =>
-            commitShuffleSeed(G, ctx, playerId, commitHashHex, playerID),
+          move: (
+            { G, ctx, playerID },
+            playerId: string,
+            commitHashHex: string,
+          ) => commitShuffleSeed(G, ctx, playerId, commitHashHex, playerID),
           client: false,
         },
         revealShuffleSeed: {
@@ -1691,8 +1702,11 @@ export const CryptoGoFishGame: Game<CryptoGoFishState> = {
           client: false,
         },
         submitZkSigPublicKey: {
-          move: ({ G, ctx, playerID }, playerId: string, zkSigPublicKey: string) =>
-            submitZkSigPublicKey(G, ctx, playerId, zkSigPublicKey, playerID),
+          move: (
+            { G, ctx, playerID },
+            playerId: string,
+            zkSigPublicKey: string,
+          ) => submitZkSigPublicKey(G, ctx, playerId, zkSigPublicKey, playerID),
           client: false,
         },
         distributeKeyShares: {
@@ -1710,8 +1724,11 @@ export const CryptoGoFishGame: Game<CryptoGoFishState> = {
           client: false,
         },
         commitShuffleSeed: {
-          move: ({ G, ctx, playerID }, playerId: string, commitHashHex: string) =>
-            commitShuffleSeed(G, ctx, playerId, commitHashHex, playerID),
+          move: (
+            { G, ctx, playerID },
+            playerId: string,
+            commitHashHex: string,
+          ) => commitShuffleSeed(G, ctx, playerId, commitHashHex, playerID),
           client: false,
         },
         revealShuffleSeed: {
@@ -1778,7 +1795,14 @@ export const CryptoGoFishGame: Game<CryptoGoFishState> = {
             envelope: ZkProofEnvelope,
             payload: ZkClaimBooksPayload,
           ) =>
-            submitZkProofClaimBooks(G, ctx, playerId, envelope, payload, playerID),
+            submitZkProofClaimBooks(
+              G,
+              ctx,
+              playerId,
+              envelope,
+              payload,
+              playerID,
+            ),
           client: false,
         },
         submitZkVerdict: {
@@ -1787,24 +1811,25 @@ export const CryptoGoFishGame: Game<CryptoGoFishState> = {
             verifier: string,
             verdict: ZkVerdict,
             signatureHex: string,
-          ) => submitZkVerdict(G, ctx, verifier, verdict, signatureHex, playerID),
+          ) =>
+            submitZkVerdict(G, ctx, verifier, verdict, signatureHex, playerID),
           client: false,
         },
-        submitDecryptionShare: {
+        submitDecryptedShare: {
           move: (
             { G, ctx },
             zoneId: string,
             cardIndex: number,
             playerId: string,
-            privateKey: string,
+            decryptedCard: EncryptedCard,
           ) =>
-            submitDecryptionShare(
+            submitDecryptedShare(
               G,
               ctx,
               zoneId,
               cardIndex,
               playerId,
-              privateKey,
+              decryptedCard,
             ),
           client: false,
         },

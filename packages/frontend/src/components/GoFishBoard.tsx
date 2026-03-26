@@ -15,7 +15,7 @@ import type {
   GoFishCard,
   GoFishRank,
 } from "../game/modules/gofish/types";
-import { generateKeyPair } from "../crypto/mental-poker";
+import { generateKeyPair, decrypt } from "../crypto/mental-poker";
 import type { CryptoKeyPair } from "../crypto/mental-poker/types";
 import {
   ecdsaGenerateKeyPair,
@@ -130,14 +130,19 @@ const CardDisplay: React.FC<{
 /** A fan of face-down cards representing a hand count. */
 const FaceDownFan: React.FC<{ count: number }> = ({ count }) => {
   if (count === 0) {
-    return (
-      <span style={{ color: "#6b7280", fontSize: 12 }}>Empty</span>
-    );
+    return <span style={{ color: "#6b7280", fontSize: 12 }}>Empty</span>;
   }
   // Show up to 7 mini card backs, with a "+N" badge for larger hands.
   const visible = Math.min(count, 7);
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 2, flexWrap: "wrap" }}>
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 2,
+        flexWrap: "wrap",
+      }}
+    >
       {Array.from({ length: visible }).map((_, i) => (
         <CardDisplay key={i} faceDown small />
       ))}
@@ -198,7 +203,12 @@ export const GoFishBoard: React.FC<BoardProps<CryptoGoFishState>> = ({
     if (typeof window === "undefined") return "";
     try {
       const raw = window.localStorage.getItem(shuffleSeedStorageKey);
-      if (raw && typeof raw === "string" && /^[0-9a-f]+$/.test(raw) && raw.length >= 16) {
+      if (
+        raw &&
+        typeof raw === "string" &&
+        /^[0-9a-f]+$/.test(raw) &&
+        raw.length >= 16
+      ) {
         return raw;
       }
     } catch {
@@ -217,7 +227,9 @@ export const GoFishBoard: React.FC<BoardProps<CryptoGoFishState>> = ({
     } catch {
       // Fallback if crypto is unavailable.
       seed = sha256Hex(
-        new TextEncoder().encode(`${matchID ?? "no-match"}:${currentPlayerID}:shuffle-seed:v1`),
+        new TextEncoder().encode(
+          `${matchID ?? "no-match"}:${currentPlayerID}:shuffle-seed:v1`,
+        ),
       );
     }
     try {
@@ -233,14 +245,17 @@ export const GoFishBoard: React.FC<BoardProps<CryptoGoFishState>> = ({
     return `manamesh:gofish:zksig:${mid}:${currentPlayerID}`;
   }, [matchID, currentPlayerID]);
 
-  const readStoredZkSigKeyPair = (key: string):
-    | { publicKey: string; privateKey: string }
-    | null => {
+  const readStoredZkSigKeyPair = (
+    key: string,
+  ): { publicKey: string; privateKey: string } | null => {
     if (typeof window === "undefined") return null;
     try {
       const raw = window.localStorage.getItem(key);
       if (!raw) return null;
-      const parsed = JSON.parse(raw) as Partial<{ publicKey: string; privateKey: string }>;
+      const parsed = JSON.parse(raw) as Partial<{
+        publicKey: string;
+        privateKey: string;
+      }>;
       if (typeof parsed?.publicKey !== "string") return null;
       if (typeof parsed?.privateKey !== "string") return null;
       return { publicKey: parsed.publicKey, privateKey: parsed.privateKey };
@@ -249,19 +264,29 @@ export const GoFishBoard: React.FC<BoardProps<CryptoGoFishState>> = ({
     }
   };
 
-  const persistZkSigKeyPair = (key: string, kp: { publicKey: string; privateKey: string }) => {
+  const persistZkSigKeyPair = (
+    key: string,
+    kp: { publicKey: string; privateKey: string },
+  ) => {
     if (typeof window === "undefined") return;
     try {
       window.localStorage.setItem(
         key,
-        JSON.stringify({ publicKey: kp.publicKey, privateKey: kp.privateKey, createdAt: null }),
+        JSON.stringify({
+          publicKey: kp.publicKey,
+          privateKey: kp.privateKey,
+          createdAt: null,
+        }),
       );
     } catch {
       // Ignore
     }
   };
 
-  const getOrCreateZkSigKeyPair = (): { publicKey: string; privateKey: string } => {
+  const getOrCreateZkSigKeyPair = (): {
+    publicKey: string;
+    privateKey: string;
+  } => {
     const stored = readStoredZkSigKeyPair(zkSigKeyStorageKey);
     if (stored) return stored;
     const kp = ecdsaGenerateKeyPair();
@@ -348,7 +373,9 @@ export const GoFishBoard: React.FC<BoardProps<CryptoGoFishState>> = ({
   const shuffleLastProgressMove =
     shuffleRng?.lastProgressMove ?? shuffleRng?.startedAtMove ?? null;
   const shuffleMovesSinceProgress =
-    shuffleLastProgressMove === null ? null : ctx.numMoves - shuffleLastProgressMove;
+    shuffleLastProgressMove === null
+      ? null
+      : ctx.numMoves - shuffleLastProgressMove;
   const shuffleCanVoteAbort =
     G.phase === "shuffle" &&
     shuffleMovesSinceProgress !== null &&
@@ -364,7 +391,10 @@ export const GoFishBoard: React.FC<BoardProps<CryptoGoFishState>> = ({
     if (me.zkSigPublicKey) return;
     if (!(moves as any).submitZkSigPublicKey) return;
     const kp = getOrCreateZkSigKeyPair();
-    setTimeout(() => (moves as any).submitZkSigPublicKey(currentPlayerID, kp.publicKey), 50);
+    setTimeout(
+      () => (moves as any).submitZkSigPublicKey(currentPlayerID, kp.publicKey),
+      50,
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isZkMode, me?.zkSigPublicKey, currentPlayerID]);
 
@@ -640,19 +670,19 @@ export const GoFishBoard: React.FC<BoardProps<CryptoGoFishState>> = ({
   };
 
   const submitShareForKey = (key: string) => {
-    if (!isSecureMode || !moves.submitDecryptionShare) return;
+    if (!isSecureMode || !moves.submitDecryptedShare) return;
     const kp = getOrCreateKeyPair();
     const m = /^(.+):(\d+)$/.exec(key);
     if (!m) return;
     const zoneId = m[1];
     const cardIndex = Number(m[2]);
     if (!Number.isFinite(cardIndex)) return;
-    moves.submitDecryptionShare(
-      zoneId,
-      cardIndex,
-      currentPlayerID,
-      kp.privateKey,
-    );
+    const zone = G.crypto?.encryptedZones?.[zoneId];
+    if (!zone) return;
+    const card = zone[cardIndex];
+    if (!card || card.layers <= 0) return;
+    const decrypted = decrypt(card, kp.privateKey);
+    moves.submitDecryptedShare(zoneId, cardIndex, currentPlayerID, decrypted);
   };
 
   // Eagerly load persisted keypair when match/player changes.
@@ -736,18 +766,32 @@ export const GoFishBoard: React.FC<BoardProps<CryptoGoFishState>> = ({
     if (phase === "shuffle" && me) {
       const rng = G.shuffleRng ?? null;
 
-      if (moves.commitShuffleSeed && rng?.phase === "commit" && !rng?.commits?.[currentPlayerID]) {
+      if (
+        moves.commitShuffleSeed &&
+        rng?.phase === "commit" &&
+        !rng?.commits?.[currentPlayerID]
+      ) {
         setupAttemptRef.current.add(`${actionKey}:commitSeed`);
         const seedHex = getOrCreateShuffleSeedHex().toLowerCase();
         const commit = sha256Hex(new TextEncoder().encode(seedHex));
-        setTimeout(() => (moves as any).commitShuffleSeed(currentPlayerID, commit), 50);
+        setTimeout(
+          () => (moves as any).commitShuffleSeed(currentPlayerID, commit),
+          50,
+        );
         return;
       }
 
-      if (moves.revealShuffleSeed && rng?.phase === "reveal" && !rng?.reveals?.[currentPlayerID]) {
+      if (
+        moves.revealShuffleSeed &&
+        rng?.phase === "reveal" &&
+        !rng?.reveals?.[currentPlayerID]
+      ) {
         setupAttemptRef.current.add(`${actionKey}:revealSeed`);
         const seedHex = getOrCreateShuffleSeedHex().toLowerCase();
-        setTimeout(() => (moves as any).revealShuffleSeed(currentPlayerID, seedHex), 50);
+        setTimeout(
+          () => (moves as any).revealShuffleSeed(currentPlayerID, seedHex),
+          50,
+        );
         return;
       }
     }
@@ -773,7 +817,15 @@ export const GoFishBoard: React.FC<BoardProps<CryptoGoFishState>> = ({
       setTimeout(() => moves.shuffleDeck(currentPlayerID, kp.privateKey), 50);
       return;
     }
-  }, [G.phase, G.setupPlayerIndex, G.shuffleRng, currentPlayerID, me, moves, isMySetupTurn]);
+  }, [
+    G.phase,
+    G.setupPlayerIndex,
+    G.shuffleRng,
+    currentPlayerID,
+    me,
+    moves,
+    isMySetupTurn,
+  ]);
 
   if (ctx.gameover || G.phase === "gameOver") {
     const winners =
@@ -859,13 +911,13 @@ export const GoFishBoard: React.FC<BoardProps<CryptoGoFishState>> = ({
       >
         <div>
           <div style={{ fontSize: 18, fontWeight: 800 }}>Go Fish</div>
-           <div style={{ fontSize: 12, color: "#a0a0a0" }}>
-             {isZkMode
-               ? "ZK Attest mode (verifier-signed verdicts)"
-               : isSecureMode
-                 ? "Coop Reveal mode (no private keys in shared state)"
-                 : "Demo-private mental poker (keys stored in shared state)"}
-           </div>
+          <div style={{ fontSize: 12, color: "#a0a0a0" }}>
+            {isZkMode
+              ? "ZK Attest mode (verifier-signed verdicts)"
+              : isSecureMode
+                ? "Coop Reveal mode (no private keys in shared state)"
+                : "Demo-private mental poker (keys stored in shared state)"}
+          </div>
           <div style={{ fontSize: 12, color: "#a0a0a0", marginTop: 6 }}>
             Viewing as{" "}
             <span style={{ color: "#e4e4e4", fontWeight: 800 }}>
@@ -960,22 +1012,26 @@ export const GoFishBoard: React.FC<BoardProps<CryptoGoFishState>> = ({
                 iVotedAbortShuffle
                   ? "You already voted to abort."
                   : shuffleCanVoteAbort
-                  ? "Vote to abort a stalled shuffle (majority required)."
-                  : "Abort voting is only enabled after the shuffle stalls."
+                    ? "Vote to abort a stalled shuffle (majority required)."
+                    : "Abort voting is only enabled after the shuffle stalls."
               }
               style={{
                 padding: "8px 10px",
                 borderRadius: 10,
                 border: "1px solid #3a3a5c",
                 backgroundColor:
-                  shuffleCanVoteAbort && !iVotedAbortShuffle ? "#3f1d1d" : "#1f2937",
+                  shuffleCanVoteAbort && !iVotedAbortShuffle
+                    ? "#3f1d1d"
+                    : "#1f2937",
                 color: "#fecaca",
                 cursor: "pointer",
                 fontWeight: 800,
                 opacity: shuffleCanVoteAbort && !iVotedAbortShuffle ? 1 : 0.55,
               }}
             >
-              {iVotedAbortShuffle ? "Abort Vote Submitted" : "Vote Abort Shuffle"}
+              {iVotedAbortShuffle
+                ? "Abort Vote Submitted"
+                : "Vote Abort Shuffle"}
             </button>
           </div>
         </div>
@@ -1631,14 +1687,24 @@ export const GoFishBoard: React.FC<BoardProps<CryptoGoFishState>> = ({
           >
             <div style={{ fontWeight: 800, marginBottom: 6 }}>ZK Check</div>
             <div style={{ color: "#cbd5e1", fontSize: 12 }}>
-              Proof purpose: {pendingZk.purpose}; submitted by Player {pendingZk.submittedBy}
+              Proof purpose: {pendingZk.purpose}; submitted by Player{" "}
+              {pendingZk.submittedBy}
             </div>
             <div style={{ color: "#94a3b8", fontSize: 12, marginTop: 6 }}>
               Verifier: Player {pendingZk.verifier}
-              {pendingZk.payloadHash ? ` | payloadHash=${pendingZk.payloadHash.slice(0, 16)}...` : ""}
+              {pendingZk.payloadHash
+                ? ` | payloadHash=${pendingZk.payloadHash.slice(0, 16)}...`
+                : ""}
             </div>
 
-            <div style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
+            <div
+              style={{
+                display: "flex",
+                gap: 10,
+                marginTop: 10,
+                flexWrap: "wrap",
+              }}
+            >
               <button
                 onClick={() => {
                   const pz = pendingZk;
@@ -1656,7 +1722,11 @@ export const GoFishBoard: React.FC<BoardProps<CryptoGoFishState>> = ({
                     ),
                   );
                   const sig = ecdsaSignDigestHex(decisionHash, kp.privateKey);
-                  (moves as any).submitZkVerdict?.(currentPlayerID, "valid", sig);
+                  (moves as any).submitZkVerdict?.(
+                    currentPlayerID,
+                    "valid",
+                    sig,
+                  );
                 }}
                 disabled={!canSubmitZkVerdict}
                 style={{
@@ -1674,7 +1744,7 @@ export const GoFishBoard: React.FC<BoardProps<CryptoGoFishState>> = ({
                     ? `Only Player ${verifierId} can submit the verdict.`
                     : !zkMatchSalt
                       ? "Waiting for deterministic shuffle seed (commit-reveal)"
-                    : "Sign + submit a VALID verdict"
+                      : "Sign + submit a VALID verdict"
                 }
               >
                 Sign Verdict: Valid
@@ -1697,7 +1767,11 @@ export const GoFishBoard: React.FC<BoardProps<CryptoGoFishState>> = ({
                     ),
                   );
                   const sig = ecdsaSignDigestHex(decisionHash, kp.privateKey);
-                  (moves as any).submitZkVerdict?.(currentPlayerID, "invalid", sig);
+                  (moves as any).submitZkVerdict?.(
+                    currentPlayerID,
+                    "invalid",
+                    sig,
+                  );
                 }}
                 disabled={!canSubmitZkVerdict}
                 style={{
@@ -1715,14 +1789,17 @@ export const GoFishBoard: React.FC<BoardProps<CryptoGoFishState>> = ({
                     ? `Only Player ${verifierId} can submit the verdict.`
                     : !zkMatchSalt
                       ? "Waiting for deterministic shuffle seed (commit-reveal)"
-                    : "Sign + submit an INVALID verdict (voids game)"
+                      : "Sign + submit an INVALID verdict (voids game)"
                 }
               >
                 Sign Verdict: Invalid
               </button>
 
-              <div style={{ color: "#6b7280", fontSize: 12, alignSelf: "center" }}>
-                Verifier does async proof check off-chain, then signs the verdict. Everyone verifies signature in-move.
+              <div
+                style={{ color: "#6b7280", fontSize: 12, alignSelf: "center" }}
+              >
+                Verifier does async proof check off-chain, then signs the
+                verdict. Everyone verifies signature in-move.
               </div>
             </div>
           </div>

@@ -16,6 +16,7 @@
 | MM-045 | Conservation-Safe Settlement Redesign | Blocked | MM-035, MM-044 | - |
 | MM-046 | Vault Authorization Hardening & Dispute | Blocked | MM-035, MM-044, MM-045 | - |
 | MM-047 | MTG Scraper — Fix Manifest Generation & Adapter Reliability | Ready | MM-042 | - |
+| MM-048 | One Piece DON!! Card Face Scraper Sources | Ready | MM-042 | - |
 
 ## Status Legend
 
@@ -38,6 +39,7 @@ Tasks with status "Ready" (all dependencies complete):
 | MM-043 | CHIP Token Backing Model Fix | `/pm:launch MM-043` |
 | MM-044 | EIP-712 On-Chain/Off-Chain Alignment | `/pm:launch MM-044` |
 | MM-047 | MTG Scraper — Fix Manifest Generation | `/pm:launch MM-047` |
+| MM-048 | One Piece DON!! Card Face Scraper Sources | `/pm:launch MM-048` |
 
 ## Dependency Graph
 
@@ -76,7 +78,8 @@ MM-039 (In Review)
 
 MM-041 (Complete, archived) ✓
 └── MM-042 (Complete, archived) ✓
-    └── MM-047 (Ready - MTG Scraper Manifest Fix)
+    ├── MM-047 (Ready - MTG Scraper Manifest Fix)
+    └── MM-048 (Ready - DON!! Card Face Scraper Sources)
 
 MM-002 (Complete, archived) ✓
 ├── MM-003 (Complete, archived) ✓
