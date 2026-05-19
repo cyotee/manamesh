@@ -33,6 +33,7 @@ import type {
   StoredPackMetadata,
 } from './types';
 import { sourceToPackId } from './types';
+import { registerPack, unregisterPack, getRegisteredPack, getAllRegisteredPacks } from './registry';
 
 // In-memory cache of loaded packs
 const loadedPacks = new Map<string, LoadedAssetPack>();
@@ -80,7 +81,7 @@ export async function loadPack(
   // P2P sources: reconstruct from IndexedDB metadata (already cached by receiver)
   if (source.type === 'p2p') {
     const packId = sourceToPackId(source);
-    const existing = loadedPacks.get(packId);
+    const existing = getRegisteredPack(packId) ?? loadedPacks.get(packId);
     if (existing) return existing;
 
     // Try to reconstruct from stored metadata
@@ -94,6 +95,7 @@ export async function loadPack(
         loadedAt: meta.loadedAt,
       };
       loadedPacks.set(packId, pack);
+      registerPack(pack);
       return pack;
     }
 
@@ -104,7 +106,7 @@ export async function loadPack(
 
   // Local sources: check in-memory caches, then try IndexedDB reconstruction
   if (source.type === 'local') {
-    const existing = loadedPacks.get(source.packId);
+    const existing = getRegisteredPack(source.packId) ?? loadedPacks.get(source.packId);
     if (existing) return existing;
 
     // Check local-loader's in-memory cache
@@ -112,6 +114,7 @@ export async function loadPack(
     const localPack = getLocalPack(source.packId);
     if (localPack) {
       loadedPacks.set(localPack.id, localPack);
+      registerPack(localPack);
       return localPack;
     }
 
@@ -119,6 +122,7 @@ export async function loadPack(
     const reloaded = await reloadLocalPack(source.packId);
     if (reloaded) {
       loadedPacks.set(reloaded.id, reloaded);
+      registerPack(reloaded);
       return reloaded;
     }
 
@@ -130,7 +134,7 @@ export async function loadPack(
   const packId = sourceToPackId(source);
 
   // Check if already loaded
-  const existing = loadedPacks.get(packId);
+  const existing = getRegisteredPack(packId) ?? loadedPacks.get(packId);
   if (existing) {
     return existing;
   }
@@ -164,8 +168,9 @@ export async function loadPack(
     loadedAt: Date.now(),
   };
 
-  // Store in memory cache
+  // Store in memory cache and shared registry
   loadedPacks.set(packId, loadedPack);
+  registerPack(loadedPack);
 
   // Store metadata in IndexedDB
   const metadata: StoredPackMetadata = {
@@ -191,17 +196,18 @@ export async function loadPack(
 }
 
 /**
- * Get a loaded pack by ID (from memory cache).
+ * Get a loaded pack by ID.
+ * Checks the shared registry so packs loaded via local-loader or zip-loader are visible.
  */
 export function getLoadedPack(packId: string): LoadedAssetPack | undefined {
-  return loadedPacks.get(packId);
+  return getRegisteredPack(packId) ?? loadedPacks.get(packId);
 }
 
 /**
- * Get all loaded packs.
+ * Get all loaded packs across all loaders.
  */
 export function getAllLoadedPacks(): LoadedAssetPack[] {
-  return Array.from(loadedPacks.values());
+  return getAllRegisteredPacks();
 }
 
 /**
@@ -209,6 +215,7 @@ export function getAllLoadedPacks(): LoadedAssetPack[] {
  */
 export function unloadPack(packId: string): void {
   loadedPacks.delete(packId);
+  unregisterPack(packId);
 }
 
 // ============================================================================

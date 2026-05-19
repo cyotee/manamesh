@@ -8,17 +8,25 @@
  * the system prevents cheating on deck operations.
  */
 
-import type { CoreCard, ZoneDefinition } from '../types';
+import type { CoreCard, ZoneDefinition } from "../types";
+import type { CryptoPluginState } from "../../../crypto/plugin/crypto-plugin";
+import type { EncryptedCard } from "../../../crypto/mental-poker";
 
 // =============================================================================
 // Card Types
 // =============================================================================
 
-export type OnePieceColor = 'red' | 'green' | 'blue' | 'purple' | 'black' | 'yellow';
+export type OnePieceColor =
+  | "red"
+  | "green"
+  | "blue"
+  | "purple"
+  | "black"
+  | "yellow";
 
-export type OnePieceCardType = 'character' | 'leader' | 'event' | 'stage';
+export type OnePieceCardType = "character" | "leader" | "event" | "stage";
 
-export type OnePieceRarity = 'C' | 'UC' | 'R' | 'SR' | 'SEC' | 'L' | 'SP';
+export type OnePieceRarity = "C" | "UC" | "R" | "SR" | "SEC" | "L" | "SP";
 
 /**
  * Full One Piece TCG card with all fields.
@@ -45,7 +53,7 @@ export interface OnePieceCard extends CoreCard {
  * DON!! cards are generic resources, not unique cards.
  */
 export interface OnePieceDonCard extends CoreCard {
-  cardType: 'don';
+  cardType: "don";
 }
 
 /** Union type for all card types in the One Piece module */
@@ -62,12 +70,12 @@ export type AnyOnePieceCard = OnePieceCard | OnePieceDonCard;
  * and as players perform operations on them.
  */
 export type CardVisibilityState =
-  | 'encrypted'      // Unknown to all (in shuffled deck)
-  | 'public'         // Visible to all players
-  | 'secret'         // Hidden from all (rare — transitional)
-  | 'owner-known'    // Owner can see, opponent cannot
-  | 'opponent-known' // Opponent can see, owner cannot (rare)
-  | 'all-known';     // Both know but not publicly revealed
+  | "encrypted" // Unknown to all (in shuffled deck)
+  | "public" // Visible to all players
+  | "secret" // Hidden from all (rare — transitional)
+  | "owner-known" // Owner can see, opponent cannot
+  | "opponent-known" // Opponent can see, owner cannot (rare)
+  | "all-known"; // Both know but not publicly revealed
 
 /**
  * Tracks a state transition for a card's visibility.
@@ -108,7 +116,7 @@ export interface CryptographicProof {
 export interface DeckPeekRequest {
   id: string;
   playerId: string;
-  deckZone: 'mainDeck' | 'lifeDeck';
+  deckZone: "mainDeck" | "lifeDeck";
   count: number;
   requestProof: string;
   timestamp: number;
@@ -149,14 +157,14 @@ export interface DeckPeekProtocol {
   opponentAck?: DeckPeekAck;
   ownerDecrypt?: DeckPeekOwnerDecrypt;
   reorder?: DeckPeekReorder;
-  status: 'pending' | 'acked' | 'decrypted' | 'reordered' | 'complete';
+  status: "pending" | "acked" | "decrypted" | "reordered" | "complete";
 }
 
 // =============================================================================
 // Play Area Slots
 // =============================================================================
 
-export type SlotType = 'leader' | 'character' | 'stage';
+export type SlotType = "leader" | "character" | "stage";
 
 /**
  * A slot in a player's play area.
@@ -208,16 +216,26 @@ export interface OnePieceState {
 
   /** Zone mirror for deck plugin compatibility */
   zones: Record<string, Record<string, AnyOnePieceCard[]>>;
+
+  /** Tracks which players have loaded their decks in setup phase */
+  deckLoaded: Record<string, boolean>;
+
+  /** Remaining life for each player's leader (for win condition) */
+  leaderLife: Record<string, number>;
+
+  /** Optional: card id lists extracted from loaded decks for crypto games */
+  deckCardIds?: Record<string, string[]>;
+  lifeDeckIds?: Record<string, string[]>;
 }
 
 export type OnePiecePhase =
-  | 'setup'
-  | 'keyExchange'
-  | 'encrypt'
-  | 'shuffle'
-  | 'play'
-  | 'gameOver'
-  | 'voided';
+  | "setup"
+  | "keyExchange"
+  | "encrypt"
+  | "shuffle"
+  | "play"
+  | "gameOver"
+  | "voided";
 
 // =============================================================================
 // Module Configuration
@@ -232,7 +250,7 @@ export interface OnePieceModuleConfig {
   startingHand: number;
   maxCharacterSlots: number;
   allowStageCard: boolean;
-  deckEncryption: 'mental-poker';
+  deckEncryption: "mental-poker";
   proofChainEnabled: boolean;
 }
 
@@ -242,7 +260,7 @@ export const DEFAULT_CONFIG: OnePieceModuleConfig = {
   startingHand: 5,
   maxCharacterSlots: 5,
   allowStageCard: true,
-  deckEncryption: 'mental-poker',
+  deckEncryption: "mental-poker",
   proofChainEnabled: true,
 };
 
@@ -250,4 +268,101 @@ export const DEFAULT_CONFIG: OnePieceModuleConfig = {
 // Module Type
 // =============================================================================
 
-export type OnePieceGameModule = import('../types').GameModule<OnePieceCard, OnePieceState>;
+export type OnePieceGameModule = import("../types").GameModule<
+  OnePieceCard,
+  OnePieceState
+>;
+
+// =============================================================================
+// Crypto-specific Types (OnePiece mental-poker variant)
+// =============================================================================
+
+/**
+ * Per-player state for the cryptographic One Piece variant.
+ * Keeps most gameplay zones plaintext where appropriate, but
+ * includes flags for crypto progress and connectivity.
+ */
+export interface OnePieceCryptoPlayerState {
+  // Encrypted hand zone
+  hand: OnePieceCard[];
+  // Other plaintext zones (don't need encryption)
+  lifeDeck: OnePieceCard[];
+  donDeck: OnePieceDonCard[];
+  donArea: OnePieceDonCard[];
+  trash: OnePieceCard[];
+  playArea: PlayAreaSlot[];
+  activeDon: number;
+  totalDon: number;
+  // Leader slot card ID
+  leaderCardId: string | null;
+
+  // Crypto-specific
+  publicKey: string | null;
+  hasEncrypted: boolean;
+  hasShuffled: boolean;
+  isConnected: boolean;
+  lastHeartbeat: number;
+}
+
+/**
+ * Shuffle RNG commit-reveal state for deterministic multi-party shuffle.
+ */
+export interface ShuffleRngState {
+  phase: "commit" | "reveal" | "ready";
+  commits: Record<string, string>; // playerId -> SHA256(seedHex)
+  reveals: Record<string, string>; // playerId -> seedHex
+  finalSeedHex: string | null;
+  abortVotes: Record<string, boolean>;
+}
+
+/**
+ * Cooperative decryption request for revealing encrypted cards.
+ */
+export interface DecryptRequest {
+  id: string;
+  playerId: string; // who needs the reveal
+  zoneId: string; // which encrypted zone
+  cardIndex: number; // which card in the zone
+  requestedBy: string; // who requested the decrypt
+  requiredLayers: string[]; // playerIds who must decrypt (in order)
+  currentLayer: number; // how many layers have been removed
+  status: "pending" | "partial" | "complete";
+  purpose: "damage" | "face-up"; // distinguishes the two reveal paths
+}
+
+/**
+ * Full crypto-enabled One Piece game state.
+ * Extends the plaintext OnePieceState but replaces player states with crypto ones
+ * and adds encrypted zones, plugin state, escrow shares, and shuffle RNG.
+ */
+export interface OnePieceCryptoState extends Omit<OnePieceState, "players"> {
+  // Override player state for crypto
+  players: Record<string, OnePieceCryptoPlayerState>;
+
+  // Encrypted zones — replaces plaintext card arrays
+  encryptedZones: Record<string, EncryptedCard[]>;
+
+  // Crypto plugin state
+  crypto: CryptoPluginState;
+
+  // Commit-reveal shuffle state
+  shuffleRng: ShuffleRngState | null;
+
+  // Pending decryption requests (for life damage + face-up effects)
+  pendingDecryptRequests: DecryptRequest[];
+
+  // Setup player index (for sequential encryption/shuffle)
+  setupPlayerIndex: number;
+
+  // Player order
+  playerOrder: string[];
+
+  // Card IDs per player (extracted from loaded decks for encryption)
+  deckCardIds: Record<string, string[]>;
+
+  // Life deck card IDs per player (for encrypting life decks)
+  lifeDeckIds: Record<string, string[]>;
+
+  // ctx.numMoves recorded when the latest DecryptRequest was created; used for stall detection.
+  revealStallEnteredAt?: number;
+}

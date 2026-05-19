@@ -79,7 +79,14 @@ class AppErrorBoundary extends React.Component<
   }
 }
 
-type GameMode = "gameSelect" | "modeSelect" | "local" | "online" | "p2p-game" | "deck-builder" | "asset-packs";
+type GameMode =
+  | "gameSelect"
+  | "modeSelect"
+  | "local"
+  | "online"
+  | "p2p-game"
+  | "deck-builder"
+  | "asset-packs";
 
 interface ModeSelectProps {
   game: GameInfo;
@@ -233,6 +240,13 @@ function getBoardComponent(
     case "gofish-zk":
       return GoFishBoard;
     case "onepiece":
+      // Wrap OnePiecePhaserBoard to inject p2pConnection when available
+      if (p2pConnection) {
+        const WrappedOnePiece: React.FC<any> = (props) => (
+          <OnePiecePhaserBoard {...props} p2pConnection={p2pConnection} />
+        );
+        return WrappedOnePiece;
+      }
       return OnePiecePhaserBoard;
     case "simple":
     default:
@@ -897,7 +911,13 @@ const AppContent: React.FC = () => {
 
   // Game selection screen
   if (gameMode === "gameSelect") {
-    return <GameSelector onSelectGame={handleSelectGame} onDeckBuilder={handleDeckBuilder} onAssetPacks={handleAssetPacks} />;
+    return (
+      <GameSelector
+        onSelectGame={handleSelectGame}
+        onDeckBuilder={handleDeckBuilder}
+        onAssetPacks={handleAssetPacks}
+      />
+    );
   }
 
   // Mode selection screen
@@ -940,24 +960,22 @@ const AppContent: React.FC = () => {
 
   // Deck builder
   if (gameMode === "deck-builder") {
-    return (
-      <DeckBuilderPage
-        onBack={handleBackToGameSelect}
-      />
-    );
+    return <DeckBuilderPage onBack={handleBackToGameSelect} />;
   }
 
   // Asset pack management
   if (gameMode === "asset-packs") {
-    return (
-      <AssetPackManagement
-        onBack={handleBackToGameSelect}
-      />
-    );
+    return <AssetPackManagement onBack={handleBackToGameSelect} />;
   }
 
   // Fallback to game selection
-  return <GameSelector onSelectGame={handleSelectGame} onDeckBuilder={handleDeckBuilder} onAssetPacks={handleAssetPacks} />;
+  return (
+    <GameSelector
+      onSelectGame={handleSelectGame}
+      onDeckBuilder={handleDeckBuilder}
+      onAssetPacks={handleAssetPacks}
+    />
+  );
 };
 
 /**

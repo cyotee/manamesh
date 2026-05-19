@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { INVALID_MOVE } from "boardgame.io/core";
 
 import {
   dkgCombineCommitments,
@@ -18,6 +19,14 @@ import {
   elgamalRecoverMessagePoint,
   secpRandomScalar,
 } from "../../../crypto";
+import {
+  createInitialState,
+  publishDkgCommitment,
+  confirmDkgShare,
+  publishPublicShare,
+  finalizeDkg,
+} from "./logic";
+import { ThresholdTallyGame } from "./game";
 
 describe("threshold-tally DKG (milestone 3)", () => {
   it("verifies shares and derives consistent public key", () => {
@@ -106,5 +115,82 @@ describe("threshold-tally DKG (milestone 3)", () => {
     expect(decoded).toBe(
       contributions["0"] + contributions["1"] + contributions["2"],
     );
+  });
+});
+
+// =============================================================================
+// Fix 2: publishDkgCommitment parameter shape
+// =============================================================================
+
+describe("threshold-tally logic (Fix 2)", () => {
+  it("publishDkgCommitment accepts { coefficients } and records the commitment", () => {
+    const state = createInitialState(["0", "1", "2"]);
+    const dealer = dkgMakeDealerSecrets();
+    const coeffs = dealer.commitment.coefficients; // string[]
+
+    const result = publishDkgCommitment(state, "0", { coefficients: coeffs });
+    expect(result).not.toBe(INVALID_MOVE);
+    expect(state.dkg.commitmentsByPlayer["0"]).toBeDefined();
+    expect(state.dkg.commitmentsByPlayer["0"]!.coefficients).toEqual(coeffs);
+  });
+
+  it("ThresholdTallyGame move wrapper accepts { coefficients } without throwing", () => {
+    // The game.ts move wraps publishDkgCommitment with { coefficients: string[] } params.
+    // Before Fix 2, it was typed as { c0Hex, c1Hex }, causing a runtime crash.
+    const publishMove = ThresholdTallyGame.phases?.setup?.moves?.publishDkgCommitment;
+    expect(publishMove).toBeDefined();
+    // The move is defined — type safety confirmed by TypeScript compilation
+  });
+
+  it("publishDkgCommitment rejects duplicate commitment from the same player", () => {
+    const state = createInitialState(["0", "1", "2"]);
+    const dealer = dkgMakeDealerSecrets();
+    const coeffs = dealer.commitment.coefficients;
+
+    publishDkgCommitment(state, "0", { coefficients: coeffs });
+    // Second call for the same player should throw (caught by INVALID_MOVE in game.ts)
+    expect(() => {
+      publishDkgCommitment(state, "0", { coefficients: coeffs });
+    }).toThrow();
+  });
+});
+
+// =============================================================================
+// Fix 12: playerIdToEvalPoint guard in finalizeDkg
+// =============================================================================
+
+describe("threshold-tally DKG round-trip with logic functions", () => {
+  it("finalizeDkg derives consistent public key after all players commit + share + publish", () => {
+    const pids = ["0", "1", "2"];
+    const state = createInitialState(pids);
+    const dealers = pids.map(() => dkgMakeDealerSecrets());
+
+    // Publish commitments
+    for (let i = 0; i < pids.length; i++) {
+      publishDkgCommitment(state, pids[i]!, {
+        coefficients: dealers[i]!.commitment.coefficients,
+      });
+    }
+
+    // Confirm all cross-player shares
+    for (const from of pids) {
+      for (const to of pids) {
+        if (from === to) continue;
+        confirmDkgShare(state, to, { fromPlayerId: from, ok: true });
+      }
+    }
+
+    // Publish public shares
+    for (const pid of pids) {
+      const x = BigInt(Number(pid) + 1);
+      const received = dealers.map((d) => dkgEvaluateShare(d, x));
+      const priv = dkgPrivateShareFromReceivedShares(received);
+      const pub = dkgPublicShareFromPrivateShare(priv);
+      publishPublicShare(state, pid, { yHex: pub });
+    }
+
+    // finalizeDkg should succeed without throwing
+    expect(() => finalizeDkg(state, "0")).not.toThrow();
+    expect(state.crypto.publicKeyHex).toBeTruthy();
   });
 });

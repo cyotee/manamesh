@@ -22,15 +22,21 @@ import type {
   DeckPeekProtocol,
   OnePieceState,
   CardStateTransition,
-} from './types';
-import { batchTransitionVisibility } from './visibility';
-import { createProof, appendProof } from './proofChain';
+  OnePieceCryptoState,
+} from "./types";
+import type { EncryptedCard } from "../../../crypto/mental-poker";
+import { batchTransitionVisibility } from "./visibility";
+import { createProof, appendProof } from "./proofChain";
 
 // =============================================================================
 // Protocol Step 1: Request
 // =============================================================================
 
 let peekCounter = 0;
+
+function isCryptoState(state: any): state is OnePieceCryptoState {
+  return state && typeof state === "object" && "encryptedZones" in state;
+}
 
 /**
  * Create a peek request.
@@ -40,13 +46,53 @@ let peekCounter = 0;
 export function createPeekRequest(
   state: OnePieceState,
   playerId: string,
-  deckZone: 'mainDeck' | 'lifeDeck',
+  deckZone: "mainDeck" | "lifeDeck",
   count: number,
 ): DeckPeekProtocol | null {
   const player = state.players[playerId];
   if (!player) return null;
 
-  const deck = deckZone === 'mainDeck' ? player.mainDeck : player.lifeDeck;
+  // Support crypto variant where decks live in encryptedZones
+  if (isCryptoState(state)) {
+    const zoneId =
+      deckZone === "mainDeck" ? "mainDeck" : `lifeDeck:${playerId}`;
+    const encDeck: EncryptedCard[] | undefined = state.encryptedZones[zoneId];
+    if (!encDeck || encDeck.length === 0) return null;
+    // Can't peek more cards than exist in the encrypted deck
+    const actualCount = Math.min(count, encDeck.length);
+
+    const requestId = `peek-${Date.now()}-${peekCounter++}`;
+
+    const proof = createProof(
+      "peekRequest",
+      { playerId, deckZone, count: actualCount },
+      state.proofChain.length > 0
+        ? state.proofChain[state.proofChain.length - 1].hash
+        : null,
+    );
+
+    const request: DeckPeekRequest = {
+      id: requestId,
+      playerId,
+      deckZone,
+      count: actualCount,
+      requestProof: proof.hash,
+      timestamp: Date.now(),
+    };
+
+    const protocol: DeckPeekProtocol = {
+      request,
+      status: "pending",
+    };
+
+    state.activePeeks.push(protocol);
+    appendProof(state, proof);
+
+    return protocol;
+  }
+
+  // Plaintext (existing behavior)
+  const deck = deckZone === "mainDeck" ? player.mainDeck : player.lifeDeck;
   if (deck.length === 0) return null;
 
   // Can't peek more cards than exist in the deck
@@ -55,7 +101,7 @@ export function createPeekRequest(
   const requestId = `peek-${Date.now()}-${peekCounter++}`;
 
   const proof = createProof(
-    'peekRequest',
+    "peekRequest",
     { playerId, deckZone, count: actualCount },
     state.proofChain.length > 0
       ? state.proofChain[state.proofChain.length - 1].hash
@@ -73,7 +119,7 @@ export function createPeekRequest(
 
   const protocol: DeckPeekProtocol = {
     request,
-    status: 'pending',
+    status: "pending",
   };
 
   state.activePeeks.push(protocol);
@@ -99,11 +145,11 @@ export function acknowledgePeekRequest(
   opponentSignature: string,
 ): DeckPeekAck | null {
   const protocol = findPeekProtocol(state, requestId);
-  if (!protocol || protocol.status !== 'pending') return null;
+  if (!protocol || protocol.status !== "pending") return null;
 
   const proof = createProof(
-    'peekAck',
-    { requestId, decryptionShare: '***' },
+    "peekAck",
+    { requestId, decryptionShare: "***" },
     state.proofChain.length > 0
       ? state.proofChain[state.proofChain.length - 1].hash
       : null,
@@ -117,7 +163,7 @@ export function acknowledgePeekRequest(
   };
 
   protocol.opponentAck = ack;
-  protocol.status = 'acked';
+  protocol.status = "acked";
   appendProof(state, proof);
 
   return ack;
@@ -139,13 +185,78 @@ export function ownerDecryptPeek(
   requestId: string,
 ): DeckPeekOwnerDecrypt | null {
   const protocol = findPeekProtocol(state, requestId);
-  if (!protocol || protocol.status !== 'acked') return null;
+  if (!protocol) return null;
+
+  // In plaintext mode we require an ack prior to owner decryption.
+  if (!isCryptoState(state) && protocol.status !== "acked") return null;
+
+  // In crypto mode the rules are more permissive: owner decryption may proceed
+  // for certain zones even if an opponent ack is not present (owner self-peek).
+  if (
+    isCryptoState(state) &&
+    protocol.status !== "acked" &&
+    protocol.status !== "pending"
+  )
+    return null;
 
   const { playerId, deckZone, count } = protocol.request;
+
+  if (isCryptoState(state)) {
+    // Crypto mode: work against encryptedZones
+    const cs = state as OnePieceCryptoState;
+    const zoneId =
+      deckZone === "mainDeck" ? "mainDeck" : `lifeDeck:${playerId}`;
+    const encDeck = cs.encryptedZones[zoneId];
+    if (!encDeck || encDeck.length === 0) return null;
+
+    const actualCount = Math.min(count, encDeck.length);
+
+    // Attempt to derive cardIds from known mappings if available.
+    const cardIds: string[] = [];
+    const maybeDeckCardIds = (cs as any).deckCardIds?.[playerId] as
+      | string[]
+      | undefined;
+    const maybeLifeIds = (cs as any).lifeDeckIds?.[playerId] as
+      | string[]
+      | undefined;
+
+    for (let i = 0; i < actualCount; i++) {
+      let cid: string | undefined;
+      if (deckZone === "mainDeck" && maybeDeckCardIds && maybeDeckCardIds[i]) {
+        cid = maybeDeckCardIds[i];
+      } else if (deckZone === "lifeDeck" && maybeLifeIds && maybeLifeIds[i]) {
+        cid = maybeLifeIds[i];
+      } else {
+        // Fallback synthetic id so visibility tracking can record a transition.
+        cid = `${zoneId}:${i}`;
+      }
+      cardIds.push(cid);
+    }
+
+    const transitions = batchTransitionVisibility(
+      state,
+      cardIds,
+      "owner-known",
+      playerId,
+      "peekDecrypt",
+      { requestId, deckZone },
+    );
+
+    const ownerDecrypt: DeckPeekOwnerDecrypt = {
+      requestId,
+      cardStates: transitions,
+    };
+
+    protocol.ownerDecrypt = ownerDecrypt;
+    protocol.status = "decrypted";
+    return ownerDecrypt;
+  }
+
+  // Plaintext mode (existing behavior)
   const player = state.players[playerId];
   if (!player) return null;
 
-  const deck = deckZone === 'mainDeck' ? player.mainDeck : player.lifeDeck;
+  const deck = deckZone === "mainDeck" ? player.mainDeck : player.lifeDeck;
 
   // Get the top N card IDs for visibility transition
   const peekedCardIds = deck.slice(0, count).map((c) => c.id);
@@ -154,9 +265,9 @@ export function ownerDecryptPeek(
   const transitions = batchTransitionVisibility(
     state,
     peekedCardIds,
-    'owner-known',
+    "owner-known",
     playerId,
-    'peekDecrypt',
+    "peekDecrypt",
     { requestId, deckZone },
   );
 
@@ -166,7 +277,7 @@ export function ownerDecryptPeek(
   };
 
   protocol.ownerDecrypt = ownerDecrypt;
-  protocol.status = 'decrypted';
+  protocol.status = "decrypted";
 
   return ownerDecrypt;
 }
@@ -191,11 +302,9 @@ export function reorderPeekedCards(
   ownerSignature: string,
 ): DeckPeekReorder | null {
   const protocol = findPeekProtocol(state, requestId);
-  if (!protocol || protocol.status !== 'decrypted') return null;
+  if (!protocol || protocol.status !== "decrypted") return null;
 
   const { playerId, deckZone, count } = protocol.request;
-  const player = state.players[playerId];
-  if (!player) return null;
 
   // Validate the permutation
   if (newPositions.length !== count) return null;
@@ -204,14 +313,49 @@ export function reorderPeekedCards(
     if (sorted[i] !== i) return null;
   }
 
-  // Apply the reorder to the top N cards
-  const deck = deckZone === 'mainDeck' ? player.mainDeck : player.lifeDeck;
+  if (isCryptoState(state)) {
+    const cs = state as OnePieceCryptoState;
+    const zoneId =
+      deckZone === "mainDeck" ? "mainDeck" : `lifeDeck:${playerId}`;
+    const encDeck = cs.encryptedZones[zoneId];
+    if (!encDeck) return null;
+
+    const topCards = encDeck.splice(0, count);
+    const reordered = newPositions.map((pos) => topCards[pos]);
+    encDeck.unshift(...reordered);
+
+    const proof = createProof(
+      "peekReorder",
+      { requestId, newPositions },
+      state.proofChain.length > 0
+        ? state.proofChain[state.proofChain.length - 1].hash
+        : null,
+    );
+
+    const reorder: DeckPeekReorder = {
+      requestId,
+      newPositions,
+      proof: ownerSignature,
+    };
+
+    protocol.reorder = reorder;
+    protocol.status = "reordered";
+    appendProof(state, proof);
+
+    return reorder;
+  }
+
+  // Plaintext behavior
+  const player = state.players[playerId];
+  if (!player) return null;
+
+  const deck = deckZone === "mainDeck" ? player.mainDeck : player.lifeDeck;
   const topCards = deck.splice(0, count);
   const reordered = newPositions.map((pos) => topCards[pos]);
   deck.unshift(...reordered);
 
   const proof = createProof(
-    'peekReorder',
+    "peekReorder",
     { requestId, newPositions },
     state.proofChain.length > 0
       ? state.proofChain[state.proofChain.length - 1].hash
@@ -225,7 +369,7 @@ export function reorderPeekedCards(
   };
 
   protocol.reorder = reorder;
-  protocol.status = 'reordered';
+  protocol.status = "reordered";
   appendProof(state, proof);
 
   return reorder;
@@ -234,17 +378,14 @@ export function reorderPeekedCards(
 /**
  * Complete a peek protocol (mark it as done).
  */
-export function completePeek(
-  state: OnePieceState,
-  requestId: string,
-): boolean {
+export function completePeek(state: OnePieceState, requestId: string): boolean {
   const protocol = findPeekProtocol(state, requestId);
   if (!protocol) return false;
-  if (protocol.status !== 'decrypted' && protocol.status !== 'reordered') {
+  if (protocol.status !== "decrypted" && protocol.status !== "reordered") {
     return false;
   }
 
-  protocol.status = 'complete';
+  protocol.status = "complete";
 
   // Remove from active peeks
   state.activePeeks = state.activePeeks.filter(

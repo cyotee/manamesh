@@ -13,3 +13,24 @@
 [submodule "contracts/lib/crane"]
 	path = contracts/lib/crane
 	url = https://github.com/cyotee/crane
+[submodule "reference/poker-solidity"]
+	path = reference/poker-solidity
+	url = https://github.com/dxganta/poker-solidity.git
+[submodule "reference/PokerWithFhe"]
+	path = reference/PokerWithFhe
+	url = https://github.com/rafa-canseco/PokerWithFhe.git
+[submodule "reference/poker-fhe-base"]
+	path = reference/poker-fhe-base
+	url = https://github.com/yayashuxue/poker-fhe-base.git
+[submodule "reference/poker_contracts"]
+	path = reference/poker_contracts
+	url = https://github.com/nyublockchainfintech/poker_contracts.git
+[submodule "reference/pok3r"]
+	path = reference/pok3r
+	url = https://github.com/pok3rNetwork/pok3r.git
+[submodule "lib/forge-std"]
+	path = lib/forge-std
+	url = https://github.com/foundry-rs/forge-std
+[submodule "lib/crane"]
+	path = lib/crane
+	url = https://github.com/cyotee/crane

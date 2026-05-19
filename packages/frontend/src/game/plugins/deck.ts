@@ -12,8 +12,8 @@
  * Works with both shared decks (Poker) and per-player decks (War).
  */
 
-import type { Ctx } from 'boardgame.io';
-import type { CoreCard } from '../modules/types';
+import type { Ctx } from "boardgame.io";
+import type { CoreCard } from "../modules/types";
 
 // =============================================================================
 // Types
@@ -117,7 +117,7 @@ export interface DeckPluginApi<TCard extends CoreCard = CoreCard> {
     fromZoneId: ZoneId,
     toZone: string,
     count: number,
-    playerIds: string[]
+    playerIds: string[],
   ) => DealResult<TCard>;
 
   /**
@@ -136,7 +136,7 @@ export interface DeckPluginApi<TCard extends CoreCard = CoreCard> {
    */
   search: (
     zoneId: ZoneId,
-    predicate: (card: TCard) => boolean
+    predicate: (card: TCard) => boolean,
   ) => SearchResult<TCard>;
 
   /**
@@ -151,7 +151,7 @@ export interface DeckPluginApi<TCard extends CoreCard = CoreCard> {
     cardId: string,
     fromZoneId: ZoneId,
     toZoneId: ZoneId,
-    toIndex?: number
+    toIndex?: number,
   ) => MoveResult;
 
   /**
@@ -161,11 +161,7 @@ export interface DeckPluginApi<TCard extends CoreCard = CoreCard> {
    * @param count - Number of cards to move (default: 1)
    * @returns Move result with success status
    */
-  moveTop: (
-    fromZoneId: ZoneId,
-    toZoneId: ZoneId,
-    count?: number
-  ) => MoveResult;
+  moveTop: (fromZoneId: ZoneId, toZoneId: ZoneId, count?: number) => MoveResult;
 
   /**
    * Get the number of cards in a zone.
@@ -184,7 +180,7 @@ export interface DeckPluginApi<TCard extends CoreCard = CoreCard> {
  * Format: "zoneName" for shared, "zoneName:playerId" for player-specific.
  */
 export function parseZoneId(zoneId: ZoneId): ZoneRef {
-  const colonIndex = zoneId.indexOf(':');
+  const colonIndex = zoneId.indexOf(":");
   if (colonIndex === -1) {
     return { zone: zoneId };
   }
@@ -208,7 +204,7 @@ export function buildZoneId(zone: string, playerId?: string): ZoneId {
  */
 export function getZoneCards<TCard extends CoreCard>(
   G: DeckPluginGameState<TCard>,
-  zoneId: ZoneId
+  zoneId: ZoneId,
 ): TCard[] | undefined {
   const { zone, playerId } = parseZoneId(zoneId);
   const zoneData = G.zones[zone];
@@ -220,7 +216,7 @@ export function getZoneCards<TCard extends CoreCard>(
   }
 
   // For shared zone, look for 'shared' key
-  return zoneData['shared'];
+  return zoneData["shared"];
 }
 
 /**
@@ -230,7 +226,7 @@ export function getZoneCards<TCard extends CoreCard>(
 export function setZoneCards<TCard extends CoreCard>(
   G: DeckPluginGameState<TCard>,
   zoneId: ZoneId,
-  cards: TCard[]
+  cards: TCard[],
 ): void {
   const { zone, playerId } = parseZoneId(zoneId);
 
@@ -239,18 +235,16 @@ export function setZoneCards<TCard extends CoreCard>(
     G.zones[zone] = {};
   }
 
-  const key = playerId ?? 'shared';
+  const key = playerId ?? "shared";
   G.zones[zone][key] = cards;
 }
 
-/**
- * Fisher-Yates shuffle algorithm.
- * Returns a new shuffled array.
- */
 export function fisherYatesShuffle<T>(array: T[]): T[] {
   const result = array.slice();
   for (let i = result.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const randomBytes = new Uint32Array(1);
+    crypto.getRandomValues(randomBytes);
+    const j = Math.floor((randomBytes[0] / 0xffffffff) * (i + 1));
     [result[i], result[j]] = [result[j], result[i]];
   }
   return result;
@@ -297,13 +291,14 @@ export interface CtxWithDeck extends Ctx {
 /**
  * Extended API type that includes internal tracking.
  */
-interface DeckPluginApiInternal<TCard extends CoreCard = CoreCard>
-  extends DeckPluginApi<TCard> {
+interface DeckPluginApiInternal<
+  TCard extends CoreCard = CoreCard,
+> extends DeckPluginApi<TCard> {
   _pendingShuffles: number;
 }
 
 export const DeckPlugin = {
-  name: 'deck',
+  name: "deck",
 
   setup: (): DeckPluginData => ({
     shuffleCount: 0,
@@ -349,7 +344,7 @@ export const DeckPlugin = {
         fromZoneId: ZoneId,
         toZone: string,
         count: number,
-        playerIds: string[]
+        playerIds: string[],
       ): DealResult<TCard> => {
         const sourceCards = getZoneCards(G, fromZoneId);
         if (!sourceCards) {
@@ -402,7 +397,7 @@ export const DeckPlugin = {
 
       search: (
         zoneId: ZoneId,
-        predicate: (card: TCard) => boolean
+        predicate: (card: TCard) => boolean,
       ): SearchResult<TCard> => {
         const cards = getZoneCards(G, zoneId);
         if (!cards) return { cards: [], indices: [] };
@@ -424,11 +419,14 @@ export const DeckPlugin = {
         cardId: string,
         fromZoneId: ZoneId,
         toZoneId: ZoneId,
-        toIndex?: number
+        toIndex?: number,
       ): MoveResult => {
         const sourceCards = getZoneCards(G, fromZoneId);
         if (!sourceCards) {
-          return { success: false, error: `Source zone not found: ${fromZoneId}` };
+          return {
+            success: false,
+            error: `Source zone not found: ${fromZoneId}`,
+          };
         }
 
         const cardIndex = sourceCards.findIndex((c) => c.id === cardId);
@@ -446,7 +444,11 @@ export const DeckPlugin = {
           setZoneCards(G, toZoneId, destCards);
         }
 
-        if (toIndex !== undefined && toIndex >= 0 && toIndex <= destCards.length) {
+        if (
+          toIndex !== undefined &&
+          toIndex >= 0 &&
+          toIndex <= destCards.length
+        ) {
           destCards.splice(toIndex, 0, card);
         } else {
           destCards.push(card);
@@ -458,11 +460,14 @@ export const DeckPlugin = {
       moveTop: (
         fromZoneId: ZoneId,
         toZoneId: ZoneId,
-        count = 1
+        count = 1,
       ): MoveResult => {
         const sourceCards = getZoneCards(G, fromZoneId);
         if (!sourceCards || sourceCards.length === 0) {
-          return { success: false, error: `Source zone empty or not found: ${fromZoneId}` };
+          return {
+            success: false,
+            error: `Source zone empty or not found: ${fromZoneId}`,
+          };
         }
 
         const toMove = Math.min(count, sourceCards.length);

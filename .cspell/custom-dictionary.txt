@@ -2,6 +2,7 @@ bafybei
 bafybeig
 BGIOMASTERSTATE
 boardgame
+Chainlink
 chainsafe
 ciphertext
 ciphertexts
@@ -43,6 +44,7 @@ Shamir's
 shamirs
 smol
 snarkjs
+subphases
 trustlessly
 Unblind
 unixfs

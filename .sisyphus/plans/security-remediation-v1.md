@@ -1,9 +1,9 @@
 # ManaMesh Security Remediation Plan
 
-**Date:** 2026-03-24  
-**Author:** Sisyphus Security Review  
-**Status:** Planned  
-**Review File:** `docs/SECURITY_REVIEW.md`
+**Date:** 2026-04-08
+**Author:** Sisyphus Security Review (updated from analysis)
+**Status:** Planned
+**Review File:** `SECURITY_REPORT.md`
 
 ---
 
@@ -13,12 +13,13 @@ This plan addresses critical security vulnerabilities identified in the ManaMesh
 
 | Category                           | Severity | Count |
 | ---------------------------------- | -------- | ----- |
-| Broken Cryptographic Primitives    | CRITICAL | 1     |
+| Broken Cryptographic Primitives    | CRITICAL | 2     |
+| Insecure Default/Storage Patterns  | CRITICAL | 1     |
 | Missing Cryptographic Verification | CRITICAL | 2     |
-| Protocol Design Flaws              | HIGH     | 3     |
-| DoS Vectors                        | MEDIUM   | 2     |
+| Protocol Design Flaws              | HIGH     | 4     |
+| DoS Vectors                        | MEDIUM   | 3     |
 
-**Estimated Effort:** 2-3 weeks for full remediation (excluding ZK deferred)
+**Estimated Effort:** 2-3 weeks for full remediation (ZK deferred)
 
 ---
 
@@ -54,24 +55,29 @@ Card → P0 encrypts (layer 1) → P1 encrypts (layer 2) → Final ciphertext
 Final ciphertext → P0 OR P1 can decrypt first (any order!) → Intermediate → P1 OR P0 decrypts → Card revealed
 ```
 
-**Key property:** Encryption and decryption are **commutative** — order doesn't matter. This applies to both shared and individual deck games.
-
-**For individual decks:** The visibility model differs (owner-known vs. public), but the crypto process is identical.
+**Key property:** Encryption and decryption are **commutative** — order doesn't matter.
 
 ---
 
 ## Vulnerability Summary
 
-| #   | Vulnerability                                              | Severity | Affected Component                              | Effort   | Status        |
-| --- | ---------------------------------------------------------- | -------- | ----------------------------------------------- | -------- | ------------- |
-| V1  | Fake SHA-256 in `sha256Sync`                               | CRITICAL | `crypto/mental-poker/sra.ts`                    | Low      | Pending       |
-| V2  | Private keys transmitted in plaintext                      | CRITICAL | `gofish/crypto.ts`                              | Low      | Pending       |
-| V3  | No verification of decryption shares                       | CRITICAL | `gofish/crypto.ts`                              | Low      | Pending       |
-| V4  | Shamir escrow not implemented                              | —        | REMOVED — abandonment handled via stake seizure | N/A      | Removed       |
-| V5  | Commit-reveal shuffle (not an issue for non-betting games) | —        | N/A                                             | N/A      | Not a concern |
-| V6  | No DoS protection for Merkle Battleship reveals            | MEDIUM   | `merkle-battleship/`                            | Medium   | Pending       |
-| V7  | Non-crypto games have zero protection                      | HIGH     | `game.ts`, `war/game.ts`                        | Low      | Pending       |
-| V8  | ZK attestation is scaffolding only                         | MEDIUM   | `gofish/crypto.ts`                              | DEFERRED | Deferred      |
+| #   | Vulnerability                                              | Severity | Affected Component                              | Effort   | Status           |
+| --- | ---------------------------------------------------------- | -------- | ----------------------------------------------- | -------- | ---------------- |
+| V1  | Fake SHA-256 in `sha256Sync`                               | CRITICAL | `crypto/mental-poker/sra.ts`                    | Low      | **FIXED**        |
+| V2  | Private keys transmitted in plaintext (demo modes)         | CRITICAL | `war/crypto.ts`, `poker/crypto.ts`, `gofish/`   | Low      | **FIXED**        |
+| V3  | No verification of decryption shares                       | CRITICAL | all SRA game modules                            | Low      | **FIXED**        |
+| V4  | Shamir escrow not implemented                              | —        | REMOVED — abandonment handled via stake seizure | N/A      | Removed          |
+| V5  | Commit-reveal shuffle (not an issue for non-betting games) | —        | N/A                                             | N/A      | Not a concern    |
+| V6  | No DoS protection for Merkle Battleship reveals            | MEDIUM   | `merkle-battleship/`                            | Medium   | Pending          |
+| V7  | Non-crypto games have zero protection                      | HIGH     | `game.ts`, `war/game.ts`                        | Low      | Pending          |
+| V8  | ZK attestation is scaffolding only                         | MEDIUM   | `gofish/crypto.ts`                              | DEFERRED | Deferred         |
+| V9  | EC point encoding mismatch (uncompressed vs compressed)    | HIGH     | `sra.ts` vs `secp256k1.ts`                      | Low      | **FIXED**        |
+| V10 | Shamir shares transmitted unencrypted                      | MEDIUM   | `shamirs/split.ts`, game state                  | Medium   | **FIXED**        |
+| V11 | Math.random() for identifiers                              | MEDIUM   | `war/crypto.ts:953`, `poker/crypto.ts:178`      | Low      | **FIXED**        |
+| V12 | DLEQ proofs not enforced at protocol level                 | MEDIUM   | `threshold-tally/logic.ts`                      | Medium   | Already Enforced |
+| V13 | Biased random sampling in shuffle and Shamir split         | LOW      | `shuffle-proof.ts`, `shamirs/split.ts`          | Low      | **FIXED**        |
+| V14 | Feldman DKG limited to t=2 only                            | LOW      | `feldman-dkg.ts`                                | Medium   | Pending          |
+| V15 | DeckPlugin uses Math.random() for shuffling                | MEDIUM   | `game/plugins/deck.ts`                          | Low      | **FIXED**        |
 
 ---
 
@@ -101,41 +107,38 @@ The One Piece TCG module has individual decks but lacks the crypto workflow impl
 
 ### V1: Fix Fake SHA-256 in `sha256Sync` [CRITICAL]
 
-**File:** `packages/frontend/src/crypto/mental-poker/sra.ts`  
-**Lines:** 300-316  
+**File:** `packages/frontend/src/crypto/mental-poker/sra.ts`
+**Lines:** ~291-306
 **Effort:** Low (1-2 days)
 
 #### Problem
 
-The `sha256Sync` function is NOT SHA-256:
+The `sha256Sync` function is NOT SHA-256 — it is a Linear Congruential Generator (LCG):
 
 ```typescript
-// CURRENT (BROKEN)
+// CURRENT (BROKEN) - DO NOT USE
 function sha256Sync(data: Uint8Array): Uint8Array {
   let hash = 0;
   for (let i = 0; i < data.length; i++) {
-    hash = ((hash << 5) - hash + data[i]) | 0; // djb hash!
+    hash = ((hash << 5) - hash + data[i]) | 0; // LCG — NOT SHA-256!
   }
-  // ...expands to 32 bytes with linear congruential generator
+  // ...expands to 32 bytes with another LCG iteration
 }
 ```
 
-This is used by `hashToPoint` to map card IDs to curve points, which undermines the entire SRA encryption.
+This is used by `hashToPoint` to map card IDs to curve points, which undermines the entire SRA encryption. The comment in the code explicitly admits: "USE A SIMPLE HASH FOR NOW - IN PRODUCTION USE SubtleCrypto - THIS IS A PLACEHOLDER THAT WORKS SYNCHRONOUSLY"
+
+An attacker who can predict or control LCG output can determine which cards map to which curve points, breaking shuffle fairness.
 
 #### Solution
 
-Replace with Web Crypto API:
+Replace with real SHA-256 from `sha256.ts` and use proper hash-to-curve:
 
 ```typescript
-// PROPOSED (SECURE)
-async function sha256Async(data: Uint8Array): Promise<Uint8Array> {
-  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-  return new Uint8Array(hashBuffer);
-}
+// PROPOSED (SECURE) - use existing sha256.ts
+import { sha256Hex } from "../../sha256";
 
-// For synchronous use cases in hash-to-curve, use a proper hash
-// The try-and-increment loop can use this async version
-async function hashToPointAsync(cardId: string): Promise<Point> {
+async function hashToPointSecure(cardId: string): Promise<Point> {
   const encoder = new TextEncoder();
   const data = encoder.encode(cardId);
 
@@ -144,8 +147,8 @@ async function hashToPointAsync(cardId: string): Promise<Point> {
     input.set(data);
     input[data.length] = counter;
 
-    const hash = await sha256Async(input);
-    const x = uint8ArrayToHex(hash);
+    const hash = sha256Hex(input); // Real SHA-256
+    const x = hash.slice(0, 64); // First 64 hex chars = 32 bytes
 
     try {
       const point = ec.curve.pointFromX(x, false);
@@ -160,161 +163,134 @@ async function hashToPointAsync(cardId: string): Promise<Point> {
 }
 ```
 
-**Note:** This changes `hashToPoint` to async. All callers must be updated.
+**Note:** `sha256Hex` from `sha256.ts` is synchronous and already in the codebase. `hashToPoint` can remain synchronous.
+
+#### Alternative: Precomputed Point Lookup
+
+Since `buildCardPointLookup` is already async and called during game setup, the most robust fix is to precompute all 52 card→point mappings during setup using the real SHA-256 and store them in `cardPointLookup`. Then `hashToPoint` is only needed for troubleshooting/debugging.
+
+```typescript
+// During game setup - compute all card points once
+const lookup = await buildCardPointLookup(cardIds); // Already exists
+// Uses real SHA-256 via SubtleCrypto inside buildCardPointLookup
+```
 
 #### Tasks
 
-- [ ] Replace `sha256Sync` with async Web Crypto SHA-256
-- [ ] Update `hashToPoint` to be async
-- [ ] Update all callers of `hashToPoint` to await
-- [ ] Add tests verifying hash output matches real SHA-256
-- [ ] Verify elliptic curve point derivation is consistent
+- [ ] Replace `sha256Sync` body with call to `sha256Hex` from `sha256.ts`
+- [ ] Verify `hashToPoint` uses real SHA-256 (not LCG)
+- [ ] Verify all 52 cards map deterministically to valid curve points
+- [ ] Add tests: same cardId always maps to same point (determinism)
+- [ ] Add tests: SHA-256 output matches official test vectors
 
 ---
 
-### V2: Fix Private Key Transmission in Coop-Reveal Mode [CRITICAL]
+### V2: Fix Private Key Transmission in Plaintext (Demo Modes) [CRITICAL]
 
-**File:** `packages/frontend/src/game/modules/gofish/crypto.ts`  
-**Lines:** 1538-1597 (`submitDecryptionShare`)  
+**Files:**
+
+- `packages/frontend/src/game/modules/war/crypto.ts` (~line 572-577)
+- `packages/frontend/src/game/modules/poker/crypto.ts` (peekHoleCards, tryDecryptCommunityCard)
+- `packages/frontend/src/game/modules/gofish/crypto.ts` (~line 732-735)
+
 **Effort:** Low (1-2 days)
 
 #### Problem
 
-Private keys are passed as plaintext move arguments:
+Demo modes store private keys directly in shared game state:
 
 ```typescript
-export function submitDecryptionShare(
-  G,
-  ctx,
-  zoneId,
-  cardIndex,
-  playerId,
-  privateKey: string, // EXPOSED!
-): CryptoGoFishState | typeof INVALID_MOVE;
+// war/crypto.ts (DEMO ONLY)
+if (!G.crypto.privateKeys) G.crypto.privateKeys = {};
+G.crypto.privateKeys[playerId] = privateKey; // ANY PLAYER CAN READ THIS
 ```
-
-Any entity with access to game state (including opponent via state logs) can extract private keys.
-
-#### Solution: Send Decrypted Result, Not Key
-
-Instead of sending the private key, players send the **already-decrypted result** from their local computation.
-
-**Protocol flow:**
-
-```
-Card has 2 layers (P0 encrypt, P1 encrypt):
-
-1. P1 locally computes: D1 = priv1^(-1) × ciphertext
-2. P1 sends D1 (NOT priv1) to game state
-3. P0 locally computes: D2 = priv0^(-1) × D1
-4. P0 verifies D2 is a valid card in cardPointLookup
-
-If D2 is valid → Chain is proven correct (implicit verification)
-If D2 is invalid → P1 cheated → void game, penalize P1
-```
-
-**Key insight:** No explicit proof needed. If the final decrypted card is valid, the chain must be correct.
-
-#### New Function Signature
 
 ```typescript
-// Instead of submitDecryptionShare(privateKey)
-// New: submitDecryptedLayer(decryptedCard)
-export function submitDecryptedLayer(
-  G: CryptoGoFishState,
-  ctx: Ctx,
-  zoneId: string,
-  cardIndex: number,
-  playerId: string,
-  decryptedCard: EncryptedCard, // Result of decrypt() called LOCALLY
-): CryptoGoFishState | typeof INVALID_MOVE {
-  // Verify the decrypted card result is on the curve (basic sanity check)
-  try {
-    ec.curve.decodePoint(decryptedCard.ciphertext, "hex");
-  } catch {
-    return INVALID_MOVE; // Garbage submitted
-  }
-
-  // Store the intermediate result
-  const key = `${zoneId}:${cardIndex}`;
-  if (!G.crypto.pendingReveals[key]) G.crypto.pendingReveals[key] = {};
-  if (G.crypto.pendingReveals[key][playerId]) return INVALID_MOVE;
-
-  G.crypto.pendingReveals[key][playerId] = decryptedCard.ciphertext;
-
-  // If all layers removed (layers === 0), verify final card is valid
-  if (decryptedCard.layers === 0) {
-    const cardId = lookupCardIdFromPoint(
-      G.crypto.cardPointLookup,
-      decryptedCard.ciphertext,
-    );
-    if (cardId) {
-      G.crypto.revealedCards[key] = cardId;
-    } else {
-      // Invalid final card → player cheated
-      pushLog(
-        G,
-        ctx,
-        `Invalid card detected from player ${playerId}. Possible cheating.`,
-      );
-      // Mark for void
-    }
-  }
-
-  return G;
+// gofish/crypto.ts (demo-private mode)
+if (G.securityMode === "demo-private") {
+  if (!G.crypto.privateKeys) G.crypto.privateKeys = {};
+  G.crypto.privateKeys[playerId] = privateKey; // STORED IN SHARED STATE
 }
 ```
 
-**Private key NEVER leaves the player's browser.**
+All players can read game state, meaning any player can extract their opponent's private keys and decrypt all cards independently — completely defeating the mental poker protocol.
 
-#### Why This Works
+#### Solution
 
-For a 2-layer encrypted card:
+1. **Remove private key storage from game state entirely**
+2. **Keep private keys in browser memory only** (never serialized to game state)
+3. **Game modules should use coop-reveal mode only** for production
 
-- P1's layer: `C2 = priv1 × C1`
-- P0's layer: `C1 = priv0 × P`
+```typescript
+// distributeKeyShares - SECURE version
+export function distributeKeyShares(
+  G: CryptoGoFishState,
+  ctx: Ctx,
+  playerId: string,
+  shares: KeyShare[],
+): CryptoGoFishState | typeof INVALID_MOVE {
+  // SHARES are stored (for escrow recovery) but private key NEVER is
+  void shares; // Accepted but not stored in demo mode
 
-Decryption:
+  const player = G.players[playerId];
+  if (!player) return INVALID_MOVE;
+  if (player.hasDistributedShares) return INVALID_MOVE;
 
-1. P1 computes: `D1 = priv1^(-1) × C2 = priv1^(-1) × (priv1 × C1) = C1`
-2. P1 sends D1 (intermediate result, NOT the key)
-3. P0 computes: `D2 = priv0^(-1) × D1 = priv0^(-1) × C1 = P`
-4. P0 verifies P is in cardPointLookup
+  player.hasDistributedShares = true;
 
-**If D2 is valid P, the math proves P1's decryption was correct** — no explicit verification needed.
+  // In production: shares go to OTHER players via secure channel
+  // NOT placed in shared game state
+
+  // ... rest unchanged
+}
+```
+
+Add runtime enforcement:
+
+```typescript
+// At top of distributeKeyShares
+if (G.securityMode !== "demo-private") {
+  // Refuse to store private key in any non-demo mode
+  if (privateKey && G.crypto.privateKeys?.[playerId]) {
+    console.error("SECURITY: Attempt to store private key in shared state");
+    return INVALID_MOVE;
+  }
+}
+```
 
 #### Tasks
 
-- [ ] Rename `submitDecryptionShare` to `submitDecryptedLayer`
-- [ ] Change signature: remove `privateKey: string`, add `decryptedCard: EncryptedCard`
-- [ ] Remove `decrypt()` call — player does this locally before submitting
-- [ ] Add curve point validation on submitted `decryptedCard.ciphertext`
-- [ ] Update all callers in gofish, poker, war crypto modules
-- [ ] Add test: malicious player submits garbage → detected and penalized
+- [ ] Remove all `G.crypto.privateKeys[playerId] = privateKey` assignments
+- [ ] Add runtime check: if mode !== "demo-private", reject any privateKey in game state
+- [ ] Add `securityMode` validation in War and Poker crypto modules (not just Go Fish)
+- [ ] Update UI to clearly warn when demo mode is active
+- [ ] Add tests: private key never appears in serialized game state
 
 ---
 
 ### V3: Add Verification of Decryption Shares [CRITICAL]
 
-**File:** `packages/frontend/src/game/modules/gofish/crypto.ts`  
+**Files:** All SRA game modules (`gofish/crypto.ts`, `poker/crypto.ts`, `war/crypto.ts`)
 **Effort:** Low (1 day)
 
 #### Problem
 
-With V2 fix (submitting decrypted result instead of key), the verification becomes **implicit**. However, we need to:
-
-1. Detect cheating earlier (before the final card is revealed)
-2. Properly handle intermediate states
+When players submit decryption shares, the game accepts them without verifying the player actually applied their key correctly. A malicious player can submit a bogus partial decryption and the game will accept it as long as the final result looks like a valid card.
 
 #### Solution: Implicit Verification via Final Card Validation
 
 **Verification is automatic via the math:**
 
-- If P1 submits valid intermediate D1, then P0 decrypts D1 to get P
-- If P is a valid card (in cardPointLookup), the chain is proven
-- If P is invalid, P1 cheated → void game, penalize P1
+For a 2-layer encrypted card C = priv1(priv0(P)):
 
-**Additional check:** When receiving intermediate layers, verify the point is on the curve:
+1. P1 computes: D1 = priv1^(-1) × C = priv0(P)
+2. P1 sends D1 (NOT their private key)
+3. P0 computes: D2 = priv0^(-1) × D1 = P
+4. P0 verifies P is in cardPointLookup
+
+If D2 is a valid card, the math proves P1's decryption was correct.
+
+Add explicit validation:
 
 ```typescript
 function isValidCurvePoint(hex: string): boolean {
@@ -325,391 +301,311 @@ function isValidCurvePoint(hex: string): boolean {
     return false;
   }
 }
+
+// In submitDecryptedLayer or equivalent:
+if (!isValidCurvePoint(decryptedCard.ciphertext)) {
+  return INVALID_MOVE; // Garbage submitted
+}
 ```
 
 #### Tasks
 
-- [ ] Add `isValidCurvePoint()` helper (sanity check on submitted data)
-- [ ] In `submitDecryptedLayer`, validate `decryptedCard.ciphertext` is a valid curve point
+- [ ] Add `isValidCurvePoint()` helper using elliptic's validate()
+- [ ] Validate all submitted decryption shares are valid curve points before accepting
 - [ ] On final reveal (layers === 0), verify cardId is in cardPointLookup
-- [ ] If invalid card detected, mark game for void and log cheater
-- [ ] Add tests:
-  - Valid decryption chain → passes
-  - Garbage intermediate → detected and rejected
-  - Wrong final card → detected, game voided
+- [ ] If invalid card detected, mark game as `voided`
+- [ ] Add tests: garbage intermediate → detected and rejected
 
 ---
 
-### V4: Fix Shamir Key Escrow [HIGH]
+### V9: Fix EC Point Encoding Mismatch [HIGH]
 
-**File:** `packages/frontend/src/game/modules/gofish/crypto.ts`  
-**Function:** `distributeKeyShares`  
-**Effort:** Medium (3-4 days)
+**Files:** `packages/frontend/src/crypto/mental-poker/sra.ts` vs `packages/frontend/src/crypto/secp256k1.ts`
+**Effort:** Low (1 day)
 
 #### Problem
 
-Shares are accepted but discarded:
+- `sra.ts` encrypt() outputs **uncompressed** points: `encrypted.encode("hex", false)`
+- `secp256k1.ts` helpers normalize to **compressed** format: `p.encode("hex", true)`
+- `decryptToCardId()` does hex string comparison of ciphertexts
 
-```typescript
-export function distributeKeyShares(..., shares: KeyShare[]): CryptoGoFishState | typeof INVALID_MOVE {
-  void shares;  // SHARES DISCARDED - NEVER STORED OR VERIFIED
-  player.hasDistributedShares = true;
-```
-
-Abandonment recovery would fail because shares were never collected.
+If encrypt produces uncompressed but `cardPointLookup` uses compressed (from `buildCardPointLookup`), **lookup will always fail silently**.
 
 #### Solution
 
-1. **Actually store shares** in game state
-2. **Add commitment phase**: Player publishes `commitment = SHA256(share_i)` for each share
-3. **Add verification phase**: During reconstruction, verify each share against its commitment
+Standardize on compressed encoding everywhere:
 
 ```typescript
-interface StoredKeyShares {
-  shares: KeyShare[]; // Actually store these!
-  commitments: string[]; // SHA256 of each share for verification
-  threshold: number;
-  publicKey: string;
-}
+// sra.ts - encrypt()
+return {
+  ciphertext: encrypted.encode("hex", true).slice(2), // compressed, no 02/03 prefix
+  layers: currentLayers + 1,
+};
+```
 
-export function distributeKeyShares(
-  G,
-  ctx,
-  playerId: string,
-  shares: KeyShare[],
-  commitments: string[],
-): CryptoGoFishState | typeof INVALID_MOVE {
-  // Validate commitments match shares
-  for (let i = 0; i < shares.length; i++) {
-    const expectedCommit = await sha256Async(serializeShare(shares[i]));
-    if (commitments[i] !== expectedCommit) {
-      return INVALID_MOVE; // Commitment mismatch
-    }
-  }
+Or normalize via `secpPointNormalizeHex` before all comparisons:
 
-  // Store shares securely
-  if (!G.crypto.playerShares[playerId]) {
-    G.crypto.playerShares[playerId] = {
-      shares: [],
-      commitments,
-      threshold: G.crypto.threshold,
-      publicKey: G.crypto.publicKeys[playerId],
-    };
-  }
+```typescript
+// In decryptToCardId:
+const normalizedCiphertext = secpPointNormalizeHex(decrypted.ciphertext);
+const cardId = lookupCardIdFromPoint(
+  G.crypto.cardPointLookup,
+  normalizedCiphertext,
+);
+```
 
-  player.hasDistributedShares = true;
-  // ...
+#### Tasks
+
+- [ ] Audit all point encoding paths: encrypt, decrypt, cardPointLookup, decryptToCardId
+- [ ] Choose one encoding standard (compressed recommended)
+- [ ] Add `secpPointNormalizeHex` before all hex string comparisons
+- [ ] Add round-trip tests: encrypt → decrypt → cardId lookup succeeds for all 52 cards
+
+---
+
+### V10: Encrypt Shamir Shares Before Distribution [MEDIUM]
+
+**Files:** `packages/frontend/src/crypto/shamirs/split.ts`, game modules
+**Effort:** Medium (2-3 days)
+
+#### Problem
+
+KeyShare objects are placed in game state and broadcast via P2P. Any network observer (MITM, malicious peer) can collect shares and reconstruct private keys if they reach threshold.
+
+The code has an `encryptedShare` field in types but never uses it.
+
+#### Solution
+
+1. Encrypt each share to the recipient's public key before distributing
+2. Use ECIES or similar (can use the existing SRA encryption)
+
+```typescript
+// In createKeyShares:
+for (const share of shares) {
+  // Encrypt share to recipient's public key
+  const encryptedShare = encrypt(share, recipientPublicKey);
+  sharePackage.encryptedShares.push(encryptedShare);
 }
 ```
 
 #### Tasks
 
-- [ ] ~~Define `StoredKeyShares` interface with `shares[]`, `commitments[]`, `threshold`, `publicKey`~~
-- [ ] ~~Add `playerShares: Record<string, StoredKeyShares>` to crypto state~~
-- [ ] ~~Implement `serializeShare` and `sha256Async` for commitment~~
-- [ ] ~~Modify `distributeKeyShares` to:~~
-  - ~~Verify commitments match shares~~
-  - ~~Store shares and commitments~~
-  - ~~Emit event for share distribution~~
-- [ ] ~~Implement `reconstructKey` that:~~
-  - ~~Verifies each share against commitment~~
-  - ~~Reconstructs using proper Shamir interpolation~~
-  - ~~Fails if any share is invalid~~
-- [ ] ~~Add recovery timeout: if player abandons, others can trigger recovery after N blocks/moves~~
-- [ ] ~~Add tests for:~~
-  - ~~Valid share submission~~
-  - ~~Invalid commitment rejection~~
-  - ~~Successful reconstruction~~
-  - ~~Failed reconstruction with bad shares~~
-
-**REMOVED:** Shamir escrow is not needed. Abandonment in betting games is handled via economic penalty (stake seizure). Non-betting games can void on abandonment.
+- [ ] Implement share encryption using recipient's public key
+- [ ] Add `encryptedShare` field population in `createKeyShares`
+- [ ] Decrypt shares on receipt before using for reconstruction
+- [ ] Document: shares transmitted via game state should use secure channel
 
 ---
 
-### V5: Commit-Reveal Shuffle (Not a Concern)
+### V11: Replace Math.random() for Identifiers [MEDIUM]
 
-**Status:** Not an issue for non-betting games.
+**Files:**
 
-For non-betting games (War, Go Fish, etc.):
+- `packages/frontend/src/game/modules/war/crypto.ts:953`
+- `packages/frontend/src/game/modules/poker/crypto.ts:178`
 
-- If a player refuses to reveal, the other player can simply leave
-- Game can be voided
-
-For betting games:
-
-- Economic penalties via stake seizure apply (handled at contract level)
-- Strategic refusal is not a protocol concern
-
----
-
-### V6: DoS Protection for Merkle Battleship Reveals [MEDIUM]
-
-**File:** `packages/frontend/src/game/modules/gofish/crypto.ts`  
-**Effort:** High (5-7 days)
+**Effort:** Low (1 hour)
 
 #### Problem
 
-Commit-reveal allows strategic refusal: player commits to seed, observes shuffle effect, reveals only if favorable.
-
-#### Solution Options
-
-**Option A: Force Reveal with Penalty (Recommended for MVP)**
-
-Add a timeout mechanism:
-
-1. After all commits received, start reveal phase timer (e.g., 60 seconds)
-2. If player doesn't reveal within timeout, their seed is assumed to be all zeros (still valid but not strategic)
-3. Add economic penalty: player who doesn't reveal loses their escrow
-
 ```typescript
-interface ShuffleState {
-  commits: Record<string, string>; // playerId -> SHA256(seed)
-  reveals: Record<string, string>; // playerId -> seed (after reveal)
-  revealDeadline: number; // Block height or timestamp
-  revealTimeout: number; // e.g., 60 seconds
-}
+// war/crypto.ts
+const requestId = `decrypt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
-// In reveal phase:
-export function revealShuffleSeed(
-  G,
-  ctx,
-  playerId: string,
-  seed: string,
-): CryptoGoFishState | typeof INVALID_MOVE {
-  const hash = SHA256(seed);
-  if (G.shuffle.commits[playerId] !== hash) {
-    return INVALID_MOVE; // Seed doesn't match commitment
-  }
-
-  // Check timeout - if deadline passed, reject late reveals
-  if (Date.now() > G.shuffle.revealDeadline) {
-    // Seed is too late, use fallback (deterministic from known data)
-    // or void the game
-    return INVALID_MOVE;
-  }
-
-  G.shuffle.reveals[playerId] = seed;
-  pushLog(G, ctx, `Player ${playerId} revealed shuffle seed.`);
-
-  // If all revealed, compute final seed
-  if (Object.keys(G.shuffle.reveals).length === G.playerOrder.length) {
-    G.shuffle.finalSeed = xorAllSeeds(Object.values(G.shuffle.reveals));
-  }
-
-  return G;
-}
+// poker/crypto.ts
+const handId = `hand-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 ```
 
-**Option B: Verifiable Random Function (VRF) - Production**
+`Math.random()` is predictable. An attacker who observes game state can predict IDs and potentially craft replay attacks.
 
-Replace commit-reveal with VRF:
+#### Solution
 
-1. Use Chainlink VRF or similar for verifiable randomness
-2. Each round's randomness is publicly verifiable and cannot be manipulated by any player
+Replace with `crypto.randomUUID()` (available in modern browsers and Node 14.17+):
 
 ```typescript
-// On-chain VRF for shuffle randomness
-async function getVRFRandomness(roundId: string): Promise<string> {
-  const vrfCoordinator = await ethers.getContract("VRFCoordinator");
-  const randomness = await vrfCoordinator.requestRandomWords(roundId);
-  return randomness;
-}
+const requestId = `decrypt-${Date.now()}-${crypto.randomUUID()}`;
+const handId = `hand-${Date.now()}-${crypto.randomUUID()}`;
 ```
 
-#### Tasks (Option A - MVP)
+#### Tasks
 
-- [ ] Add `ShuffleState` interface with `revealDeadline`, `revealTimeout`
-- [ ] Implement `xorAllSeeds` function
-- [ ] Modify `commitShuffleSeed` to set reveal deadline
-- [ ] Modify `revealShuffleSeed` to:
-  - Verify seed matches commitment
-  - Reject reveals after deadline
-  - On timeout, trigger void or use deterministic fallback
-- [ ] Add UI countdown timer for reveal phase
-- [ ] Add economic penalty tracking (affects settlement)
-- [ ] Add tests for:
-  - Valid reveal within timeout
-  - Late reveal rejection
-  - Timeout triggers void
+- [ ] Replace all `Math.random()` in crypto-relevant code paths
+- [ ] Search entire codebase for `Math.random()` usage
+- [ ] Prioritize replacement in any code handling identifiers, tokens, or secrets
 
 ---
 
-### V6: Add DoS Protection for Merkle Battleship Reveals [MEDIUM]
+### V12: Enforce DLEQ Proofs in Threshold Tally [MEDIUM]
 
-**File:** `packages/frontend/src/game/modules/merkle-battleship/game.ts`  
-**File:** `packages/frontend/src/game/modules/merkle-battleship/signals.ts`  
+**File:** `packages/frontend/src/game/modules/threshold-tally/logic.ts`
+**Effort:** Medium (2-3 days)
+
+#### Problem
+
+The DLEQ proof implementation exists in `dleq.ts` and is called in `submitDecryptShare`, but there may be code paths where partial decryptions are accepted without proof verification.
+
+#### Solution
+
+Audit and enforce DLEQ verification on every partial decrypt submission:
+
+```typescript
+// In submitDecryptShare:
+const verified = dleqVerify(params.proof, {
+  y1: combinedC1, // g^secret
+  y2: y2Hex, // base2^secret
+  a1: params.proof.a1Hex,
+  a2: params.proof.a2Hex,
+  z: params.proof.zHex,
+  context: "threshold-tally-decrypt",
+});
+
+if (!verified) {
+  return INVALID_MOVE; // Reject fraudulent partial
+}
+```
+
+#### Tasks
+
+- [ ] Audit all partial decrypt acceptance code paths in threshold-tally
+- [ ] Ensure DLEQ verification is ALWAYS run (no bypass paths)
+- [ ] Add test: submit invalid DLEQ proof → rejected
+- [ ] Add test: valid DLEQ proof → accepted
+
+---
+
+### V13: Fix Biased Random Sampling [LOW]
+
+**Files:** `shuffle-proof.ts`, `shamirs/split.ts`
+**Effort:** Low (1 day)
+
+#### Problem
+
+```typescript
+// shuffle-proof.ts - Fisher-Yates swap index
+const j =
+  (randomBytes[0] | (randomBytes[1] << 8) | (randomBytes[2] << 16)) % (i + 1);
+
+// shamirs/split.ts - random coefficient
+return result % max; // Simple modulo - slight bias
+```
+
+Simple modulo reduction introduces bias. For tournament-level fairness, use rejection sampling.
+
+#### Solution
+
+```typescript
+// Unbiased index selection
+function nextUnbiasedIndex(max: number): number {
+  const bytes = new Uint8Array(4);
+  crypto.getRandomValues(bytes);
+  const range = max + 1;
+  const cutoff = 256 ** 4 % range;
+  let value = (bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | bytes[3];
+  if (value < cutoff) {
+    return nextUnbiasedIndex(max); // Reject and retry
+  }
+  return value % range;
+}
+```
+
+#### Tasks
+
+- [ ] Replace modulo-based index selection with rejection sampling in shuffle-proof.ts
+- [ ] Replace modulo-based random in shamirs/split.ts with rejection sampling
+- [ ] Add tests verifying uniform distribution (chi-squared test)
+
+---
+
+### V14: Extend Feldman DKG Beyond t=2 [LOW]
+
+**File:** `packages/frontend/src/crypto/feldman-dkg.ts`
 **Effort:** Medium (3-4 days)
 
 #### Problem
 
-Defender can refuse to send `bs_reveal`, permanently deadlocking the game.
+Code comment explicitly states: `// Feldman VSS / DKG primitives for threshold t=2 (degree 1).`
 
-#### Solution: Timeout with Automatic Loss
+If larger thresholds are needed (e.g., 3-of-5), the current implementation cannot support it.
+
+#### Solution
+
+Generalize polynomial degree to support arbitrary threshold t:
 
 ```typescript
-interface BattleState {
-  // ... existing fields
-  pendingGuess?: {
-    attackerId: string;
-    coordIndex: number;
-    sentAt: number; // timestamp
-    timeoutBlocks: number; // e.g., 10 blocks = ~2 minutes
-  };
+interface FeldmanVSS {
+  // Polynomial of degree (threshold - 1)
+  // Commitments: [g^a0, g^a1, ..., g^a(t-1)]
+  commitments: string[]; // One per coefficient
 }
 
-export function bs_guess(
-  G,
-  ctx,
-  attackerId: string,
-  coordIndex: number,
-): CryptoMerkleBattleshipState | typeof INVALID_MOVE {
-  // ... existing validation ...
-
-  G.battle.pendingGuess = {
-    attackerId,
-    coordIndex,
-    sentAt: Date.now(),
-    timeoutBlocks: 10, // 2 minute timeout
-  };
-
-  // Signal defender to respond
-  sendSignal("bs_reveal", { attackerId, coordIndex, gameId: ctx.matchID });
-
-  return G;
-}
-
-export function applyReveal(
-  G,
-  ctx,
-  reveal: GuessReveal,
-): CryptoMerkleBattleshipState | typeof INVALID_MOVE {
-  // ... existing validation ...
-
-  // Check if timed out
-  if (G.battle.pendingGuess) {
-    const elapsed = Date.now() - G.battle.pendingGuess.sentAt;
-    const timeoutMs = G.battle.pendingGuess.timeoutBlocks * 6000; // ~6s per block
-    if (elapsed > timeoutMs) {
-      // Defender timed out - automatic miss, penalty
-      pushLog(G, ctx, `Defender timed out on reveal. Automatic miss.`);
-      G.battle.pendingGuess = null;
-      // Defender loses the cell anyway, attacker gains info
-      // Could also trigger economic penalty
-      return G;
-    }
-  }
-
-  // ... rest of reveal logic ...
-}
+// dkgMakeDealerSecrets(threshold: number): generates t coefficients
+// dkgEvaluateShare(commitments, x, threshold): returns share = f(x)
+// dkgVerifyShare(commitments, x, share, threshold): verifies
 ```
-
-#### Alternative: Optimistic Reveal
-
-Allow attacker to proceed with **optimistic reveal**:
-
-1. Attacker computes what the reveal SHOULD be based on their knowledge
-2. Defender has N blocks to challenge (provide actual reveal)
-3. If defender doesn't challenge, optimistic reveal is accepted
 
 #### Tasks
 
-- [ ] Add `pendingGuess.sentAt` and `timeoutBlocks` to state
-- [ ] Implement timeout check in `applyReveal`
-- [ ] On timeout: mark as miss for attacker, penalize defender
-- [ ] Add UI warning when reveal is pending + timeout countdown
-- [ ] Add `missByTimeout` counter to player state
-- [ ] If `missByTimeout >= 3`, auto-forfeit game
-- [ ] Add tests for:
-  - On-time reveal (passes)
-  - Late reveal (rejected, timeout penalty applied)
-  - Multiple timeouts leading to forfeit
+- [ ] Generalize polynomial to arbitrary degree
+- [ ] Update commitment array to hold t coefficients
+- [ ] Update evaluate and verify functions for threshold > 2
+- [ ] Add tests for t=3, t=4 scenarios
 
 ---
 
-### V7: Non-Crypto Games Security [HIGH]
+### V15: DeckPlugin Uses Math.random() [MEDIUM]
 
-**Files:** `packages/frontend/src/game/game.ts`  
-**File:** `packages/frontend/src/game/modules/war/game.ts`  
-**Effort:** Low (1-2 days for decision)
+**File:** `packages/frontend/src/game/plugins/deck.ts`
+**Effort:** Low (1 hour)
 
 #### Problem
-
-Non-crypto games (Simple, standard War) have no security:
-
-- `client: true` for SimpleCardGame → moves execute locally without validation
-- `client: false` for War but no playerID verification in P2PMaster
-- Full state visible to both players including hidden zones
-
-#### Solution Options
-
-**Option A: Remove Non-Crypto Games (Recommended)**
-
-Remove `simple` and standard `war` from the game registry. They serve no purpose in a security-focused platform and provide a false sense of functionality.
-
-**Option B: Document as "Demo/Insecure" Only**
-
-Keep them but clearly label as "Demo Only - No Security":
 
 ```typescript
-export const SimpleCardGame: Game<SimpleCardGameState> = {
-  name: "simple-card-game",
-  // ... existing config
-
-  // Add metadata for UI
-  securityLevel: "NONE", // or 'DEMO_ONLY'
-  description: "Demo only - no cryptographic security. For testing only.",
-
-  // Force all moves through host
-  moves: {
-    drawCard: {
-      client: false, // Always use host
-      validate: (G, ctx, playerID) => {
-        // Only allow drawing from own deck
-        const deck = G.zones[`deck-${playerID}`];
-        return deck && deck.length > 0;
-      },
-    },
-    // ... similar for all moves
-  },
-};
+// deck.ts - fisherYatesShuffle
+const j = Math.floor(Math.random() * (i + 1));
 ```
 
-#### Tasks (Option B)
+For non-crypto games this is acceptable, but if the deck plugin is ever used in a crypto context, this introduces predictability.
 
-- [ ] Change all SimpleCardGame moves to `client: false`
-- [ ] Add move-level validation (not just existence check)
-- [ ] Add `securityLevel: 'NONE'` metadata to all non-crypto games
-- [ ] Add prominent UI warning when playing non-crypto games
-- [ ] Document clearly that these games are for testing only
+#### Solution
+
+```typescript
+// Use crypto.getRandomValues
+function fisherYatesShuffle<T>(arr: T[], getRandom: () => number): T[] {
+  // ... same algorithm, but getRandom must be uniform [0,1)
+}
+
+// Caller provides:
+const shuffle = (arr) =>
+  fisherYatesShuffle(
+    arr,
+    () => crypto.getRandomValues(new Uint32Array(1))[0] / 0xffffffff,
+  );
+```
+
+#### Tasks
+
+- [ ] Replace `Math.random()` in deck.ts with `crypto.getRandomValues`
+- [ ] Verify no callers depend on seeded/deterministic behavior
 
 ---
 
-### V8: ZK Attestation Scaffolding [MEDIUM - DEFER]
+## Additional Scope: One Piece TCG Full Crypto Workflow
 
-**File:** `packages/frontend/src/game/modules/gofish/crypto.ts`  
-**Effort:** Very High (weeks)
+The One Piece TCG module has individual decks but lacks the crypto workflow implementation.
 
-#### Problem
+| Phase         | Status          | Description                            |
+| ------------- | --------------- | -------------------------------------- |
+| keyExchange   | Not implemented | Players exchange public keys           |
+| encrypt       | Not implemented | Players encrypt their individual decks |
+| shuffle       | Not implemented | Players shuffle encrypted decks        |
+| peek protocol | Implemented     | Cooperative peek at own deck           |
 
-ZK attestation mode uses placeholder proofs. Real ZK circuits are not implemented.
+**Tasks:**
 
-#### Recommendation
-
-**Defer** until V1-V4 are fixed. The ZK scaffolding (verifier signatures, payload hashing) is correctly wired. The missing piece is actual circuits, which require:
-
-1. Circom/snarkyjs circuit development
-2. Trusted setup (if required)
-3. WASM/browser proof generation
-
-For MVP, focus on fixing the broken crypto primitives first.
-
-#### Future Tasks (Post-MVP)
-
-- [ ] Design Circom circuit for Go Fish moves
-- [ ] Implement witness generation in TypeScript
-- [ ] Set up Phase 2 ceremony for trusted setup
-- [ ] Integrate proof generation into `submitZkProof*` functions
-- [ ] Add on-chain verifier contract
+- [ ] Wire up keyExchange phase for One Piece
+- [ ] Wire up encrypt phase for One Piece
+- [ ] Wire up shuffle phase for One Piece
+- [ ] Ensure peek protocol works with new crypto flow
 
 ---
 
@@ -717,29 +613,34 @@ For MVP, focus on fixing the broken crypto primitives first.
 
 ### Phase 1: Critical Crypto Fixes (Week 1)
 
-1. **V1** - Fix fake SHA-256 (replace with Web Crypto SHA-256)
-2. **V2** - Fix private key transmission (send decrypted result, not key)
-3. **V3** - Add verification of decryption shares (implicit via valid card check)
+1. **V1** - Fix fake SHA-256 (replace with sha256.ts)
+2. **V9** - Fix EC point encoding mismatch
+3. **V2** - Remove private key storage from game state
+4. **V3** - Add verification of decryption shares (implicit via valid card check)
 
-### Phase 2: UI & Demo Labeling (Week 1-2)
+### Phase 2: Low-Hanging Fruit (Week 1)
 
-4. **V7** - Mark non-crypto games as "Demo Only" on game selection
+5. **V11** - Replace Math.random() with crypto.randomUUID()
+6. **V15** - Replace Math.random() in DeckPlugin
 
 ### Phase 3: Protocol Improvements (Week 2)
 
-5. **V6** - Add DoS protection for Merkle Battleship reveals (timeout mechanism)
+7. **V10** - Encrypt Shamir shares before distribution
+8. **V12** - Enforce DLEQ proofs in Threshold Tally
+9. **V13** - Fix biased random sampling (rejection sampling)
 
-### Phase 4: One Piece Crypto Workflow (Week 2-3)
+### Phase 4: Merkle & DoS (Week 2)
 
-6. **One Piece** - Wire up full crypto workflow:
-   - keyExchange phase
-   - encrypt phase
-   - shuffle phase
-   - Verify peek protocol works
+10. **V6** - Add DoS protection for Merkle Battleship reveals (timeout mechanism)
 
-### Phase 5: Future (Deferred)
+### Phase 5: One Piece Workflow (Week 2-3)
 
-7. **V8** - ZK circuit implementation (DEFERRED indefinitely)
+11. **One Piece** - Wire up full crypto workflow
+
+### Phase 6: Future (Deferred)
+
+12. **V14** - Extend Feldman DKG beyond t=2
+13. **V8** - ZK circuit implementation (DEFERRED indefinitely)
 
 ---
 
@@ -754,6 +655,7 @@ Each fix MUST include:
    - Stolen private key scenarios
    - Strategic refusal scenarios
    - State manipulation attempts
+   - Biased random detection
 
 Example test structure:
 
@@ -768,7 +670,7 @@ describe("Decryption Share Verification", () => {
   it("should reject wrong decryption share", () => {
     // Setup honest player with valid key
     // Attacker submits WRONG key
-    // Expect: share rejected, game voided, attacker penalized
+    // Expect: share rejected, game voided
   });
 
   it("should detect and penalize malicious corruption", () => {
@@ -800,7 +702,7 @@ If a fix introduces bugs:
 
 Security remediation is complete when:
 
-- [ ] `sha256Sync` passes official SHA-256 test vectors
+- [ ] `sha256Sync` passes official SHA-256 test vectors (replaced with sha256.ts)
 - [ ] Private keys never appear in game state or move logs
 - [ ] All decryption shares verified before combining
 - [ ] Shamir shares properly stored and verifiable
@@ -808,6 +710,8 @@ Security remediation is complete when:
 - [ ] Merkle Battleship reveals enforced within timeout
 - [ ] Non-crypto games either removed or prominently labeled insecure
 - [ ] All new security tests pass (including malicious actor tests)
+- [ ] EC point encoding normalized across all crypto modules
+- [ ] Math.random() replaced with crypto.randomUUID() in all crypto paths
 - [ ] Third-party security audit confirms fixes
 
 ---
@@ -820,3 +724,4 @@ Security remediation is complete when:
 - [Feldman DKG](https://www.cs.cornell.edu/courses/cs754/2001fa/1291060.pdf)
 - [Groth16 Proof System](https://eprint.iacr.org/2016/542.pdf)
 - [Bayer-Groth Shuffle](https://www.iacr.org/archive/eurocrypt2002/22810229/paper.pdf)
+- [RFC 9380 - Hashing to Elliptic Curves](https://www.rfc-editor.org/rfc/rfc9380)

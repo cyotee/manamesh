@@ -33,6 +33,7 @@ import type {
   StoredPackMetadata,
 } from './types';
 import { computeCidFromBlob } from './cid';
+import { registerPack, unregisterPack } from './registry';
 
 // In-memory cache of locally loaded packs
 const localPacks = new Map<string, LoadedAssetPack>();
@@ -150,7 +151,7 @@ function createZipBlob(entries: Map<string, Uint8Array>): Promise<Blob> {
         reject(err);
         return;
       }
-      resolve(new Blob([data], { type: 'application/zip' }));
+      resolve(new Blob([new Uint8Array(data)], { type: 'application/zip' }));
     });
   });
 }
@@ -279,9 +280,10 @@ async function processExtractedEntries(
       cachedCardIds.push(card.id);
     }
 
-    // Cache back image if card-specific
-    if (card.back && card.back !== sharedBackPath) {
-      const backPath = manifestBasePath + card.back;
+    // Cache back image if card-specific (compare resolved paths, not relative vs absolute)
+    const resolvedCardBack = card.back ? manifestBasePath + card.back : undefined;
+    if (resolvedCardBack && resolvedCardBack !== sharedBackPath) {
+      const backPath = resolvedCardBack;
       const backData = entries.get(backPath);
       if (backData) {
         const backBlob = entryToBlob(backData, inferMimeType(backPath));
@@ -307,6 +309,7 @@ async function processExtractedEntries(
   };
 
   localPacks.set(packId, loadedPack);
+  registerPack(loadedPack);
 
   // Store pack metadata in IndexedDB so the pack shows in "Available Packs"
   const existingMetadata = await getPackMetadata(packId);
@@ -317,7 +320,7 @@ async function processExtractedEntries(
     version: manifest.version,
     source,
     cardCount: cards.length,
-    cachedCardIds: existingMetadata?.cachedCardIds ?? cachedCardIds,
+    cachedCardIds,
     cards,
     manifest,
     ipfsCid,
@@ -366,6 +369,7 @@ export async function reloadLocalPack(
     };
 
     localPacks.set(packId, loadedPack);
+    registerPack(loadedPack);
 
     console.log(
       `[LocalLoader] Reloaded "${metadata.manifest.name}" from cached metadata — ${metadata.cards.length} cards`
@@ -426,6 +430,7 @@ export async function reloadLocalPack(
   };
 
   localPacks.set(packId, loadedPack);
+  registerPack(loadedPack);
 
   // Backfill metadata with cards + manifest so next reload is fast
   if (metadata) {
@@ -446,6 +451,7 @@ export async function reloadLocalPack(
  */
 export function unloadLocalPack(packId: string): void {
   localPacks.delete(packId);
+  unregisterPack(packId);
 }
 
 /**

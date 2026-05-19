@@ -1,7 +1,7 @@
 /**
  * Go Fish Board (Crypto Demo)
  *
- * UI for demo-private mental poker Go Fish.
+ * UI for mental poker Go Fish
  * Automates setup phases (key exchange/escrow/encrypt/shuffle) similarly to PokerBoard.
  */
 
@@ -157,7 +157,6 @@ const FaceDownFan: React.FC<{ count: number }> = ({ count }) => {
 
 const PHASE_LABEL: Record<string, string> = {
   keyExchange: "Key Exchange",
-  keyEscrow: "Key Escrow (Demo)",
   encrypt: "Encrypting Deck",
   shuffle: "Shuffling + Deal",
   play: "Play",
@@ -729,27 +728,6 @@ export const GoFishBoard: React.FC<BoardProps<CryptoGoFishState>> = ({
     }
 
     if (
-      phase === "keyEscrow" &&
-      me &&
-      !me.hasDistributedShares &&
-      moves.distributeKeyShares
-    ) {
-      setupAttemptRef.current.add(actionKey);
-      const kp = getOrCreateKeyPair();
-      // Demo: no shares needed yet.
-      setTimeout(
-        () =>
-          moves.distributeKeyShares(
-            currentPlayerID,
-            isSecureMode ? "" : kp.privateKey,
-            [],
-          ),
-        50,
-      );
-      return;
-    }
-
-    if (
       phase === "encrypt" &&
       me &&
       !me.hasEncrypted &&
@@ -916,8 +894,27 @@ export const GoFishBoard: React.FC<BoardProps<CryptoGoFishState>> = ({
               ? "ZK Attest mode (verifier-signed verdicts)"
               : isSecureMode
                 ? "Coop Reveal mode (no private keys in shared state)"
-                : "Demo-private mental poker (keys stored in shared state)"}
+                : "Demo-private mode is DISABLED (use Coop Reveal or ZK Attest)"}
           </div>
+          {/* ZK experimental warning banner */}
+          {isZkMode && (
+            <div
+              style={{
+                marginTop: 8,
+                padding: "8px 10px",
+                borderRadius: 8,
+                backgroundColor: "#78350f",
+                border: "1px solid #f59e0b",
+                color: "#ffedd5",
+                fontSize: 12,
+                fontWeight: 700,
+                display: "inline-block",
+                marginLeft: 0,
+              }}
+            >
+              ⚠️ ZK Attest mode is experimental — ZK circuits not implemented. Use Coop Reveal for production.
+            </div>
+          )}
           <div style={{ fontSize: 12, color: "#a0a0a0", marginTop: 6 }}>
             Viewing as{" "}
             <span style={{ color: "#e4e4e4", fontWeight: 800 }}>
@@ -1225,8 +1222,7 @@ export const GoFishBoard: React.FC<BoardProps<CryptoGoFishState>> = ({
               const p = G.players[pid];
               return (
                 <div key={pid}>
-                  Player {pid}: key={p.publicKey ? "ok" : "..."}, escrow=
-                  {p.hasDistributedShares ? "ok" : "..."}, encrypt=
+                  Player {pid}: key={p.publicKey ? "ok" : "..."}, encrypt=
                   {p.hasEncrypted ? "ok" : "..."}, shuffle=
                   {p.hasShuffled ? "ok" : "..."}
                 </div>

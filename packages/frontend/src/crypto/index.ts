@@ -24,3 +24,7 @@ export * from "./ecdsa";
 
 // ZK helpers (snarkjs wrapper; circuits/artifacts live under src/zk)
 export * from "../zk";
+
+// Range proof snarkjs wrappers
+export * from "./snarkjs-range";
+export { RANGE_PROOF_VKEY } from "./range-proof-vkey";

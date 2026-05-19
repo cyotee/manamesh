@@ -8,7 +8,6 @@
 import type { ZoneDefinition } from "../types";
 import type { StandardCard, CoreCard } from "../types";
 import type { CryptoPluginState } from "../../../crypto/plugin/crypto-plugin";
-import type { KeyShare } from "../../../crypto/shamirs";
 import type { EncryptedCard } from "../../../crypto/mental-poker";
 
 // ============================================================================
@@ -130,7 +129,6 @@ export type PokerPhase =
  */
 export type CryptoPokerPhase =
   | "keyExchange"
-  | "keyEscrow"
   | "encrypt"
   | "shuffle"
   | PokerPhase
@@ -186,10 +184,8 @@ export interface CryptoPokerPlayerState extends PokerPlayerState {
   hasPeeked: boolean;
   /** Decrypted hole cards (only visible to this player after peek) */
   peekedCards: PokerCard[];
-  /** Has released their key (after folding) */
-  hasReleasedKey: boolean;
-  /** Has distributed key escrow shares */
-  hasDistributedShares: boolean;
+  /** Has released decryption keys (for proving valid cards on fold) */
+  keysReleased: boolean;
   /** Is currently connected */
   isConnected: boolean;
   /** Timestamp of last heartbeat */
@@ -272,15 +268,6 @@ export interface CryptoPokerState extends Omit<BasePokerState, "players"> {
   /** Starting chip counts at hand start (for settlement verification) */
   startingChips: Record<string, number>;
 
-  // Abandonment support
-  /** Released private keys from folded players */
-  releasedKeys: Record<string, string>;
-  /** Key escrow shares: playerId -> shares of their key */
-  keyEscrowShares: Record<string, KeyShare[]>;
-  /** Threshold for key reconstruction */
-  escrowThreshold: number;
-  /** Players who disconnected without releasing keys */
-  disconnectedPlayers: string[];
   /** Peek notifications for UI */
   peekNotifications: PeekNotification[];
 
@@ -289,6 +276,32 @@ export interface CryptoPokerState extends Omit<BasePokerState, "players"> {
   decryptRequests: DecryptRequest[];
   /** Notifications for decrypt events */
   decryptNotifications: DecryptNotification[];
+
+  // Key release tracking for fold integrity
+  /** Cards released by a player (playerId -> PokerCard[]) */
+  releasedCards: Record<string, PokerCard[]>;
+  /** Recent folds with challenge window tracking */
+  recentFolds: RecentFold[];
+  /** Fold challenges indexed by folded player */
+  foldChallenges: FoldChallenge[];
+}
+
+/**
+ * Record of a player folding
+ */
+export interface RecentFold {
+  playerId: string;
+  timestamp: number;
+  challengeWindowEnd: number;
+}
+
+/**
+ * A challenge against a folded player who didn't release keys
+ */
+export interface FoldChallenge {
+  challenger: string;
+  challenged: string;
+  timestamp: number;
 }
 
 /**
@@ -416,18 +429,18 @@ export type PokerMoveType =
   | "allIn"
   // Crypto-specific moves
   | "submitPublicKey"
-  | "distributeKeyShares"
   | "encryptDeck"
   | "shuffleDeck"
   | "peekHoleCards"
   | "submitDecryptionShare"
-  | "releaseKey"
-  | "showHand"
   | "acknowledgeResult"
   // Cooperative decryption moves
   | "requestDecrypt"
   | "approveDecrypt"
-  | "dismissNotification";
+  | "dismissNotification"
+  // Key release moves
+  | "releaseKey"
+  | "challengeVoid";
 
 /**
  * Move validation result
@@ -471,10 +484,6 @@ export interface TimeoutConfig {
   disconnectThreshold: number;
   /** Action timeout in ms */
   actionTimeout: number;
-  /** Key release timeout in ms */
-  keyReleaseTimeout: number;
-  /** Key reconstruction timeout in ms */
-  reconstructionTimeout: number;
 }
 
 /**
@@ -484,8 +493,6 @@ export const DEFAULT_TIMEOUT_CONFIG: TimeoutConfig = {
   heartbeatInterval: 5000,
   disconnectThreshold: 15000,
   actionTimeout: 30000,
-  keyReleaseTimeout: 10000,
-  reconstructionTimeout: 5000,
 };
 
 /**

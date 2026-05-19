@@ -1,0 +1,38 @@
+{
+  "contracts/lib/crane": {
+    "rev": "f57c4583b50a40c23dd0bd11564eacd77d9efeac"
+  },
+  "contracts/lib/forge-std": {
+    "rev": "4f227ab1b9a9a62f587580145951c7ace5e42569"
+  },
+  "contracts/lib/openzeppelin-contracts": {
+    "rev": "fcbae5394ae8ad52d8e580a3477db99814b9d565"
+  },
+  "lib/forge-std": {
+    "tag": {
+      "name": "v1.16.1",
+      "rev": "620536fa5277db4e3fd46772d5cbc1ea0696fb43"
+    }
+  },
+  "reference/PokerWithFhe": {
+    "rev": "5cc41fd295e385537bf27310258630bc53299572"
+  },
+  "reference/pok3r": {
+    "rev": "0437e8ec4b3a63450bc070c64327dce023b8b1b1"
+  },
+  "reference/poker-fhe-base": {
+    "rev": "cdec4cea834daae9e9dd1b2f322ba839814988be"
+  },
+  "reference/poker-solidity": {
+    "rev": "ac2e55b4c061fad6329cafa95935bd86cd40e532"
+  },
+  "reference/poker_contracts": {
+    "rev": "09d273667f126c67467e4c6fd617914739bf654d"
+  },
+  "vendor/boardgame.io": {
+    "rev": "4f3c90df0d891f2e17f2bfafbed1bd4f4b804256"
+  },
+  "vendor/boardgameIO-p2p": {
+    "rev": "665a1e786d36f84e46a0fcaf9451d5b0a6ca48dc"
+  }
+}

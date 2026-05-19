@@ -5,15 +5,14 @@ import {
   CryptoWarState,
   createCryptoWarState,
   submitPublicKey,
-  distributeKeyShares,
   encryptDeck,
   shuffleDeck,
   flipCard,
+  reshuffleWonPile,
   submitDecryptedShare,
   resolveRound,
   requestDecrypt,
   approveDecrypt,
-  releaseKey,
   surrender,
   allKeysSubmitted,
   allPlayersEncrypted,
@@ -22,14 +21,12 @@ import {
   createCardIds,
   getShuffleProofs,
   verifyPlayerShuffle,
-  checkGameViability,
 } from "./crypto";
 import {
   createPlayerCryptoContext,
   buildCardPointLookup,
   type CryptoPlayerContext,
 } from "../../../crypto";
-import { createKeyShares } from "../../../crypto/shamirs";
 
 describe("CryptoWar", () => {
   let state: CryptoWarState;
@@ -102,20 +99,12 @@ describe("CryptoWar", () => {
       expect(state.players.playerA.publicKey).toBeNull();
       expect(state.players.playerA.hasEncrypted).toBe(false);
       expect(state.players.playerA.hasShuffled).toBe(false);
-      expect(state.players.playerA.hasDistributedShares).toBe(false);
       expect(state.players.playerA.isConnected).toBe(true);
     });
 
     it("initializes crypto plugin state", () => {
       expect(state.crypto).toBeDefined();
       expect(state.crypto.phase).toBe("init");
-    });
-
-    it("initializes abandonment support fields", () => {
-      expect(state.releasedKeys).toEqual({});
-      expect(state.keyEscrowShares).toEqual({});
-      expect(state.escrowThreshold).toBeGreaterThanOrEqual(1);
-      expect(state.disconnectedPlayers).toEqual([]);
     });
 
     it("initializes cooperative decryption fields", () => {
@@ -152,12 +141,12 @@ describe("CryptoWar", () => {
       expect(result).toBe("INVALID_MOVE");
     });
 
-    it("transitions to keyEscrow phase when all keys submitted", () => {
+    it("transitions to encrypt phase when all keys submitted", () => {
       submitPublicKey(state, ctx, "playerA", playerA.keyPair.publicKey);
       expect(state.phase).toBe("keyExchange");
 
       submitPublicKey(state, ctx, "playerB", playerB.keyPair.publicKey);
-      expect(state.phase).toBe("keyEscrow");
+      expect(state.phase).toBe("encrypt");
     });
 
     it("tracks all keys submitted correctly", () => {
@@ -190,150 +179,14 @@ describe("CryptoWar", () => {
     });
   });
 
-  describe("Key Escrow Phase", () => {
-    beforeEach(() => {
-      // Complete key exchange
-      submitPublicKey(state, ctx, "playerA", playerA.keyPair.publicKey);
-      submitPublicKey(state, ctx, "playerB", playerB.keyPair.publicKey);
-    });
-
-    it("starts in keyEscrow phase after key exchange", () => {
-      expect(state.phase).toBe("keyEscrow");
-    });
-
-    it("allows players to distribute key shares", () => {
-      const shares = createKeyShares(
-        playerA.keyPair.privateKey,
-        "playerA",
-        ["playerB"],
-        state.escrowThreshold,
-      );
-      const result = distributeKeyShares(
-        state,
-        ctx,
-        "playerA",
-        playerA.keyPair.privateKey,
-        shares,
-      );
-      expect(result).not.toBe("INVALID_MOVE");
-
-      const newState = result as CryptoWarState;
-      expect(newState.players.playerA.hasDistributedShares).toBe(true);
-    });
-
-    it("stores private keys in demo mode", () => {
-      const sharesA = createKeyShares(
-        playerA.keyPair.privateKey,
-        "playerA",
-        ["playerB"],
-        state.escrowThreshold,
-      );
-      distributeKeyShares(
-        state,
-        ctx,
-        "playerA",
-        playerA.keyPair.privateKey,
-        sharesA,
-      );
-
-      expect(state.crypto.privateKeys?.["playerA"]).toBe(
-        playerA.keyPair.privateKey,
-      );
-    });
-
-    it("transitions to encrypt phase when all shares distributed", () => {
-      const sharesA = createKeyShares(
-        playerA.keyPair.privateKey,
-        "playerA",
-        ["playerB"],
-        state.escrowThreshold,
-      );
-      const sharesB = createKeyShares(
-        playerB.keyPair.privateKey,
-        "playerB",
-        ["playerA"],
-        state.escrowThreshold,
-      );
-
-      distributeKeyShares(
-        state,
-        ctx,
-        "playerA",
-        playerA.keyPair.privateKey,
-        sharesA,
-      );
-      expect(state.phase).toBe("keyEscrow");
-
-      distributeKeyShares(
-        state,
-        ctx,
-        "playerB",
-        playerB.keyPair.privateKey,
-        sharesB,
-      );
-      expect(state.phase).toBe("encrypt");
-    });
-
-    it("rejects duplicate share distribution", () => {
-      const shares = createKeyShares(
-        playerA.keyPair.privateKey,
-        "playerA",
-        ["playerB"],
-        state.escrowThreshold,
-      );
-      distributeKeyShares(
-        state,
-        ctx,
-        "playerA",
-        playerA.keyPair.privateKey,
-        shares,
-      );
-      const result = distributeKeyShares(
-        state,
-        ctx,
-        "playerA",
-        playerA.keyPair.privateKey,
-        shares,
-      );
-      expect(result).toBe("INVALID_MOVE");
-    });
-  });
-
   describe("Encryption Phase", () => {
     beforeEach(() => {
-      // Complete key exchange and key escrow
+      // Complete key exchange (no key escrow in Shamir-less version)
       submitPublicKey(state, ctx, "playerA", playerA.keyPair.publicKey);
       submitPublicKey(state, ctx, "playerB", playerB.keyPair.publicKey);
-
-      const sharesA = createKeyShares(
-        playerA.keyPair.privateKey,
-        "playerA",
-        ["playerB"],
-        state.escrowThreshold,
-      );
-      const sharesB = createKeyShares(
-        playerB.keyPair.privateKey,
-        "playerB",
-        ["playerA"],
-        state.escrowThreshold,
-      );
-      distributeKeyShares(
-        state,
-        ctx,
-        "playerA",
-        playerA.keyPair.privateKey,
-        sharesA,
-      );
-      distributeKeyShares(
-        state,
-        ctx,
-        "playerB",
-        playerB.keyPair.privateKey,
-        sharesB,
-      );
     });
 
-    it("starts in encrypt phase after key escrow", () => {
+    it("starts in encrypt phase after key exchange", () => {
       expect(state.phase).toBe("encrypt");
     });
 
@@ -396,36 +249,9 @@ describe("CryptoWar", () => {
 
   describe("Shuffle Phase", () => {
     beforeEach(() => {
-      // Complete key exchange, key escrow, and encryption
+      // Complete key exchange and encryption (no key escrow)
       submitPublicKey(state, ctx, "playerA", playerA.keyPair.publicKey);
       submitPublicKey(state, ctx, "playerB", playerB.keyPair.publicKey);
-
-      const sharesA = createKeyShares(
-        playerA.keyPair.privateKey,
-        "playerA",
-        ["playerB"],
-        state.escrowThreshold,
-      );
-      const sharesB = createKeyShares(
-        playerB.keyPair.privateKey,
-        "playerB",
-        ["playerA"],
-        state.escrowThreshold,
-      );
-      distributeKeyShares(
-        state,
-        ctx,
-        "playerA",
-        playerA.keyPair.privateKey,
-        sharesA,
-      );
-      distributeKeyShares(
-        state,
-        ctx,
-        "playerB",
-        playerB.keyPair.privateKey,
-        sharesB,
-      );
 
       encryptDeck(state, ctx, "playerA", playerA.keyPair.privateKey);
       encryptDeck(state, ctx, "playerB", playerB.keyPair.privateKey);
@@ -480,36 +306,9 @@ describe("CryptoWar", () => {
 
   describe("Cooperative Decryption", () => {
     beforeEach(() => {
-      // Complete full setup to get to play phase
+      // Complete full setup to get to play phase (no key escrow)
       submitPublicKey(state, ctx, "playerA", playerA.keyPair.publicKey);
       submitPublicKey(state, ctx, "playerB", playerB.keyPair.publicKey);
-
-      const sharesA = createKeyShares(
-        playerA.keyPair.privateKey,
-        "playerA",
-        ["playerB"],
-        state.escrowThreshold,
-      );
-      const sharesB = createKeyShares(
-        playerB.keyPair.privateKey,
-        "playerB",
-        ["playerA"],
-        state.escrowThreshold,
-      );
-      distributeKeyShares(
-        state,
-        ctx,
-        "playerA",
-        playerA.keyPair.privateKey,
-        sharesA,
-      );
-      distributeKeyShares(
-        state,
-        ctx,
-        "playerB",
-        playerB.keyPair.privateKey,
-        sharesB,
-      );
 
       encryptDeck(state, ctx, "playerA", playerA.keyPair.privateKey);
       encryptDeck(state, ctx, "playerB", playerB.keyPair.privateKey);
@@ -582,36 +381,9 @@ describe("CryptoWar", () => {
 
   describe("Abandonment Support", () => {
     beforeEach(() => {
-      // Complete full setup
+      // Complete full setup (no key escrow)
       submitPublicKey(state, ctx, "playerA", playerA.keyPair.publicKey);
       submitPublicKey(state, ctx, "playerB", playerB.keyPair.publicKey);
-
-      const sharesA = createKeyShares(
-        playerA.keyPair.privateKey,
-        "playerA",
-        ["playerB"],
-        state.escrowThreshold,
-      );
-      const sharesB = createKeyShares(
-        playerB.keyPair.privateKey,
-        "playerB",
-        ["playerA"],
-        state.escrowThreshold,
-      );
-      distributeKeyShares(
-        state,
-        ctx,
-        "playerA",
-        playerA.keyPair.privateKey,
-        sharesA,
-      );
-      distributeKeyShares(
-        state,
-        ctx,
-        "playerB",
-        playerB.keyPair.privateKey,
-        sharesB,
-      );
 
       encryptDeck(state, ctx, "playerA", playerA.keyPair.privateKey);
       encryptDeck(state, ctx, "playerB", playerB.keyPair.privateKey);
@@ -620,46 +392,12 @@ describe("CryptoWar", () => {
       shuffleDeck(state, ctx, "playerB", playerB.keyPair.privateKey);
     });
 
-    it("allows players to release their key", () => {
-      const result = releaseKey(
-        state,
-        ctx,
-        "playerA",
-        playerA.keyPair.privateKey,
-      );
-      expect(result).not.toBe("INVALID_MOVE");
-
-      expect(state.releasedKeys["playerA"]).toBe(playerA.keyPair.privateKey);
-      expect(state.players.playerA.hasReleasedKey).toBe(true);
-    });
-
-    it("rejects duplicate key release", () => {
-      releaseKey(state, ctx, "playerA", playerA.keyPair.privateKey);
-      const result = releaseKey(
-        state,
-        ctx,
-        "playerA",
-        playerA.keyPair.privateKey,
-      );
-      expect(result).toBe("INVALID_MOVE");
-    });
-
     it("allows player to surrender", () => {
-      const result = surrender(
-        state,
-        ctx,
-        "playerA",
-        playerA.keyPair.privateKey,
-      );
+      const result = surrender(state, ctx, "playerA");
       expect(result).not.toBe("INVALID_MOVE");
 
       expect(state.winner).toBe("playerB");
       expect(state.phase).toBe("gameOver");
-      expect(state.releasedKeys["playerA"]).toBe(playerA.keyPair.privateKey);
-    });
-
-    it("checkGameViability returns continue when all keys available", () => {
-      expect(checkGameViability(state)).toBe("continue");
     });
   });
 
@@ -691,7 +429,6 @@ describe("CryptoWar", () => {
     it("has all required moves in setup phase", () => {
       const setupMoves = CryptoWarGame.phases?.setup?.moves;
       expect(setupMoves?.submitPublicKey).toBeDefined();
-      expect(setupMoves?.distributeKeyShares).toBeDefined();
       expect(setupMoves?.encryptDeck).toBeDefined();
       expect(setupMoves?.shuffleDeck).toBeDefined();
     });
@@ -703,7 +440,6 @@ describe("CryptoWar", () => {
       expect(playMoves?.resolveRound).toBeDefined();
       expect(playMoves?.requestDecrypt).toBeDefined();
       expect(playMoves?.approveDecrypt).toBeDefined();
-      expect(playMoves?.releaseKey).toBeDefined();
       expect(playMoves?.surrender).toBeDefined();
     });
   });
@@ -715,51 +451,244 @@ describe("CryptoWar", () => {
       submitPublicKey(state, ctx, "playerA", playerA.keyPair.publicKey);
       submitPublicKey(state, ctx, "playerB", playerB.keyPair.publicKey);
 
-      // Phase 2: Key Escrow
-      expect(state.phase).toBe("keyEscrow");
-      const sharesA = createKeyShares(
-        playerA.keyPair.privateKey,
-        "playerA",
-        ["playerB"],
-        state.escrowThreshold,
-      );
-      const sharesB = createKeyShares(
-        playerB.keyPair.privateKey,
-        "playerB",
-        ["playerA"],
-        state.escrowThreshold,
-      );
-      distributeKeyShares(
-        state,
-        ctx,
-        "playerA",
-        playerA.keyPair.privateKey,
-        sharesA,
-      );
-      distributeKeyShares(
-        state,
-        ctx,
-        "playerB",
-        playerB.keyPair.privateKey,
-        sharesB,
-      );
-
-      // Phase 3: Encryption
+      // Phase 2: Encryption (no key escrow)
       expect(state.phase).toBe("encrypt");
       encryptDeck(state, ctx, "playerA", playerA.keyPair.privateKey);
       encryptDeck(state, ctx, "playerB", playerB.keyPair.privateKey);
 
-      // Phase 4: Shuffle
+      // Phase 3: Shuffle
       expect(state.phase).toBe("shuffle");
       shuffleDeck(state, ctx, "playerA", playerA.keyPair.privateKey);
       shuffleDeck(state, ctx, "playerB", playerB.keyPair.privateKey);
 
-      // Phase 5: Ready to play
+      // Phase 4: Ready to play
       expect(state.phase).toBe("flip");
 
       // Verify crypto state
       expect(state.crypto.encryptedZones["deck_playerA"]).toBeDefined();
       expect(state.crypto.encryptedZones["deck_playerB"]).toBeDefined();
+    });
+  });
+
+  describe("Reshuffle Won Pile", () => {
+    beforeEach(() => {
+      // Complete full crypto setup
+      submitPublicKey(state, ctx, "playerA", playerA.keyPair.publicKey);
+      submitPublicKey(state, ctx, "playerB", playerB.keyPair.publicKey);
+      encryptDeck(state, ctx, "playerA", playerA.keyPair.privateKey);
+      encryptDeck(state, ctx, "playerB", playerB.keyPair.privateKey);
+      shuffleDeck(state, ctx, "playerA", playerA.keyPair.privateKey);
+      shuffleDeck(state, ctx, "playerB", playerB.keyPair.privateKey);
+    });
+
+    it("flipCard reshuffles won pile when deck is empty with reshufflePrivateKey", () => {
+      // Empty playerA's encrypted deck directly
+      state.crypto.encryptedZones["deck_playerA"] = [];
+
+      // Add cards to playerA's won pile (plain WarCard objects)
+      state.players["playerA"].won = [
+        { id: "hearts-K", name: "K of hearts", suit: "hearts", rank: "K" },
+        { id: "spades-10", name: "10 of spades", suit: "spades", rank: "10" },
+      ];
+
+      expect(state.phase).toBe("flip");
+      expect(state.players["playerA"].won.length).toBe(2);
+      expect(state.crypto.encryptedZones["deck_playerA"]?.length ?? 0).toBe(0);
+
+      // flipCard with reshufflePrivateKey should succeed
+      const result = flipCard(state, ctx, "playerA", playerA.keyPair.privateKey);
+      expect(result).not.toBe("INVALID_MOVE");
+
+      // Should transition to reveal phase
+      expect(state.phase).toBe("reveal");
+
+      // Won pile should be cleared after reshuffle
+      expect(state.players["playerA"].won.length).toBe(0);
+
+      // Deck should have cards after reshuffle (26 cards were dealt, minus any that were played)
+      const deckCount = state.crypto.encryptedZones["deck_playerA"]?.length ?? 0;
+      expect(deckCount).toBeGreaterThan(0);
+    });
+
+    it("flipCard returns INVALID_MOVE when deck is empty and no reshufflePrivateKey", () => {
+      // Empty playerA's encrypted deck
+      state.crypto.encryptedZones["deck_playerA"] = [];
+
+      // Add cards to won pile
+      state.players["playerA"].won = [
+        { id: "hearts-K", name: "K of hearts", suit: "hearts", rank: "K" },
+      ];
+
+      // flipCard without reshufflePrivateKey should fail
+      const result = flipCard(state, ctx, "playerA");
+      expect(result).toBe("INVALID_MOVE");
+    });
+
+    it("flipCard returns INVALID_MOVE when deck is empty and won pile is also empty", () => {
+      // Empty playerA's encrypted deck
+      state.crypto.encryptedZones["deck_playerA"] = [];
+
+      // Won pile is also empty
+      state.players["playerA"].won = [];
+
+      // flipCard should fail - game over
+      const result = flipCard(state, ctx, "playerA", playerA.keyPair.privateKey);
+      expect(result).toBe("INVALID_MOVE");
+    });
+  });
+
+  // =========================================================================
+  // Fix 7: submitDecryptedShare layer chaining
+  // =========================================================================
+
+  describe("submitDecryptedShare layer chaining (Fix 7)", () => {
+    beforeEach(() => {
+      submitPublicKey(state, ctx, "playerA", playerA.keyPair.publicKey);
+      submitPublicKey(state, ctx, "playerB", playerB.keyPair.publicKey);
+      encryptDeck(state, ctx, "playerA", playerA.keyPair.privateKey);
+      encryptDeck(state, ctx, "playerB", playerB.keyPair.privateKey);
+      shuffleDeck(state, ctx, "playerA", playerA.keyPair.privateKey);
+      shuffleDeck(state, ctx, "playerB", playerB.keyPair.privateKey);
+      // Now in "flip" phase; player A flips to start reveal
+      flipCard(state, ctx, "playerA");
+    });
+
+    it("writes the submitted share into the reveal zone for chaining", () => {
+      // After flipCard, zone has a 2-layer card. Player A submits a 1-layer
+      // result. Fix 7 ensures the zone is updated so player B sees 1 layer.
+      const intermediatePoint = playerA.keyPair.publicKey; // a valid secp point not in lookup
+      const card1Layer = { ciphertext: intermediatePoint, layers: 1 };
+
+      const result = submitDecryptedShare(state, ctx, "playerA", "playerA", card1Layer);
+      expect(result).not.toBe("INVALID_MOVE");
+      expect(state.crypto.encryptedZones["reveal_playerA"]?.[0]).toEqual(card1Layer);
+    });
+
+    it("second player receives the chained (layer-1) card, not the original", () => {
+      const intermediatePoint = playerA.keyPair.publicKey;
+      // Pick a card point already in the lookup so lookupCardIdFromPoint succeeds
+      const finalCardId = state.cardIds[0]!;
+      const finalPoint = state.crypto.cardPointLookup[finalCardId]!;
+
+      submitDecryptedShare(state, ctx, "playerA", "playerA", {
+        ciphertext: intermediatePoint,
+        layers: 1,
+      });
+
+      // Player B decrypts the layer-1 output and produces the naked point
+      submitDecryptedShare(state, ctx, "playerB", "playerA", {
+        ciphertext: finalPoint,
+        layers: 0,
+      });
+
+      // The card should be identified and moved to playerA's played zone
+      expect(state.players["playerA"].played).toHaveLength(1);
+      expect(state.players["playerA"].played[0]!.id).toBe(finalCardId);
+    });
+  });
+
+  // =========================================================================
+  // Fix 8: approveDecrypt layer chaining
+  // =========================================================================
+
+  describe("approveDecrypt layer chaining (Fix 8)", () => {
+    beforeEach(() => {
+      submitPublicKey(state, ctx, "playerA", playerA.keyPair.publicKey);
+      submitPublicKey(state, ctx, "playerB", playerB.keyPair.publicKey);
+      encryptDeck(state, ctx, "playerA", playerA.keyPair.privateKey);
+      encryptDeck(state, ctx, "playerB", playerB.keyPair.privateKey);
+      shuffleDeck(state, ctx, "playerA", playerA.keyPair.privateKey);
+      shuffleDeck(state, ctx, "playerB", playerB.keyPair.privateKey);
+    });
+
+    it("writes the approving player's decrypted card into the zone", () => {
+      // playerA requests → auto-approved. Only playerB needs to call approveDecrypt.
+      // Fix 8 ensures the zone is updated with playerB's card so the completion
+      // block reads the chained zone result rather than a stale reference.
+      requestDecrypt(state, ctx, "playerA", "deck_playerA", [0]);
+      const requestId = state.decryptRequests[0]!.id;
+
+      const intermediatePoint = playerB.keyPair.publicKey; // a valid secp point not in lookup
+      approveDecrypt(state, ctx, "playerB", requestId, {
+        ciphertext: intermediatePoint,
+        layers: 1,
+      });
+      // Zone should be updated with playerB's decrypted card
+      expect(state.crypto.encryptedZones["deck_playerA"]?.[0]).toEqual({
+        ciphertext: intermediatePoint,
+        layers: 1,
+      });
+    });
+
+    it("reads the zone (chained) result to identify the card on completion", () => {
+      // playerA requests; playerB approves with the final 0-layer card.
+      // Fix 8 reads from zone[idx] instead of request.decryptionShares[lastApprover].
+      requestDecrypt(state, ctx, "playerA", "deck_playerA", [0]);
+      const requestId = state.decryptRequests[0]!.id;
+
+      // Pick a card whose point is in the lookup
+      const finalCardId = state.cardIds[0]!;
+      const finalPoint = state.crypto.cardPointLookup[finalCardId]!;
+
+      approveDecrypt(state, ctx, "playerB", requestId, {
+        ciphertext: finalPoint,
+        layers: 0,
+      });
+
+      // Request is completed; the card should be identified via the zone
+      expect(state.decryptRequests[0]!.status).toBe("completed");
+      expect(state.crypto.revealedCards["deck_playerA:0"]).toBe(finalCardId);
+    });
+  });
+
+  // =========================================================================
+  // Fix 9: war-tie elimination ignores won pile
+  // =========================================================================
+
+  describe("war-tie won-pile guard (Fix 9)", () => {
+    beforeEach(() => {
+      submitPublicKey(state, ctx, "playerA", playerA.keyPair.publicKey);
+      submitPublicKey(state, ctx, "playerB", playerB.keyPair.publicKey);
+      encryptDeck(state, ctx, "playerA", playerA.keyPair.privateKey);
+      encryptDeck(state, ctx, "playerB", playerB.keyPair.privateKey);
+      shuffleDeck(state, ctx, "playerA", playerA.keyPair.privateKey);
+      shuffleDeck(state, ctx, "playerB", playerB.keyPair.privateKey);
+    });
+
+    it("player with empty deck but non-empty won pile is NOT eliminated on war tie", () => {
+      // Both players play the same rank (tie = war)
+      const sameRankCard = { id: "hearts-A", name: "A of hearts", suit: "hearts" as const, rank: "A" as const };
+      state.players["playerA"].played = [sameRankCard];
+      state.players["playerB"].played = [sameRankCard];
+      state.phase = "resolve";
+
+      // playerA's encrypted deck is empty but has a won pile
+      state.crypto.encryptedZones["deck_playerA"] = [];
+      state.players["playerA"].won = [
+        { id: "spades-2", name: "2 of spades", suit: "spades", rank: "2" },
+      ];
+
+      resolveRound(state, ctx);
+
+      // playerA should NOT be declared the loser — won pile is non-empty
+      expect(state.winner).not.toBe("playerB");
+      expect(state.phase).not.toBe("gameOver");
+    });
+
+    it("player with empty deck AND empty won pile IS eliminated on war tie", () => {
+      const sameRankCard = { id: "hearts-A", name: "A of hearts", suit: "hearts" as const, rank: "A" as const };
+      state.players["playerA"].played = [sameRankCard];
+      state.players["playerB"].played = [sameRankCard];
+      state.phase = "resolve";
+
+      // playerA has nothing
+      state.crypto.encryptedZones["deck_playerA"] = [];
+      state.players["playerA"].won = [];
+
+      resolveRound(state, ctx);
+
+      expect(state.winner).toBe("playerB");
+      expect(state.phase).toBe("gameOver");
     });
   });
 });

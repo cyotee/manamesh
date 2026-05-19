@@ -10,6 +10,8 @@
 
 import { ec as EC } from "elliptic";
 import type { CryptoKeyPair, EncryptedCard } from "./types";
+import { sha256 } from "../sha256";
+import { secpPointNormalizeHex } from "../secp256k1";
 
 // Use secp256k1 curve (same as Bitcoin/Ethereum)
 const ec = new EC("secp256k1");
@@ -82,7 +84,7 @@ export function encrypt(
   const encrypted = point.mul(key.getPrivate());
 
   return {
-    ciphertext: encrypted.encode("hex", false),
+    ciphertext: secpPointNormalizeHex(encrypted.encode("hex", false)),
     layers: currentLayers + 1,
   };
 }
@@ -112,7 +114,7 @@ export function decrypt(
   const decrypted = point.mul(inverse);
 
   return {
-    ciphertext: decrypted.encode("hex", false),
+    ciphertext: secpPointNormalizeHex(decrypted.encode("hex", false)),
     layers: card.layers - 1,
   };
 }
@@ -136,11 +138,11 @@ export function decryptToCardId(
   }
 
   const decrypted = decrypt(card, privateKey);
-  const pointHex = decrypted.ciphertext;
+  const pointHex = secpPointNormalizeHex(decrypted.ciphertext);
 
   // Look up the card ID from the point
   for (const [cardId, point] of cardIdToPoint) {
-    if (point === pointHex) {
+    if (secpPointNormalizeHex(point) === pointHex) {
       return cardId;
     }
   }
@@ -190,7 +192,7 @@ export function hashToPoint(
 
 export async function getCardPoint(cardId: string): Promise<string> {
   const point = await hashToPoint(cardId);
-  return point.encode("hex", false);
+  return secpPointNormalizeHex(point.encode("hex", false));
 }
 
 export async function buildCardPointLookup(
@@ -285,23 +287,9 @@ function uint8ArrayToHex(bytes: Uint8Array): string {
 }
 
 /**
- * Simple SHA-256 implementation for hash-to-curve.
- * In a real implementation, use SubtleCrypto or a proper library.
+ * SHA-256 for hash-to-curve.
+ * Delegates to the audited synchronous implementation in sha256.ts.
  */
 function sha256Sync(data: Uint8Array): Uint8Array {
-  // Use a simple hash for now - in production use SubtleCrypto
-  // This is a placeholder that works synchronously
-  let hash = 0;
-  for (let i = 0; i < data.length; i++) {
-    hash = ((hash << 5) - hash + data[i]) | 0;
-  }
-
-  // Expand to 32 bytes
-  const result = new Uint8Array(32);
-  for (let i = 0; i < 32; i++) {
-    hash = ((hash * 1103515245 + 12345) | 0) >>> 0;
-    result[i] = hash & 0xff;
-  }
-
-  return result;
+  return sha256(data);
 }

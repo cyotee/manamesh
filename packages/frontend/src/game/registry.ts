@@ -17,14 +17,13 @@ import {
 } from "./modules/poker";
 import { WarGame, type WarState } from "./modules/war";
 import {
-  CryptoGoFishGame,
   CryptoGoFishSecureGame,
   CryptoGoFishZkAttestGame,
   type CryptoGoFishState,
 } from "./modules/gofish";
 import { MerkleBattleshipGame } from "./modules/merkle-battleship";
 import { ThresholdTallyGame } from "./modules/threshold-tally";
-import { OnePieceGame } from "./modules/onepiece";
+import { OnePieceGame, OnePieceCryptoGame } from "./modules/onepiece";
 
 export interface GameInfo<T = unknown> {
   id: string;
@@ -57,16 +56,8 @@ export const GAMES: GameInfo[] = [
     maxPlayers: 2,
     getGame: () => MerkleBattleshipGame as Game,
   },
-  {
-    id: "gofish",
-    name: "Go Fish (Game Flow Demo)",
-    description:
-      "Go Fish game-flow demo with basic mental poker encryption. Supports 2-4 players locally.",
-    minPlayers: 2,
-    maxPlayers: 4,
-    getGame: () => CryptoGoFishGame as Game,
-    getCryptoGame: () => CryptoGoFishGame as Game,
-  },
+  // NOTE: The insecure "demo-private" Go Fish variant has been removed from
+  // the registry. Use the secure or zk variants instead.
   {
     id: "gofish-secure",
     name: "Go Fish (Coop Reveal)",
@@ -114,6 +105,7 @@ export const GAMES: GameInfo[] = [
     minPlayers: 2,
     maxPlayers: 2,
     getGame: () => OnePieceGame as Game,
+    getCryptoGame: () => OnePieceCryptoGame as Game,
   },
   {
     id: "simple",

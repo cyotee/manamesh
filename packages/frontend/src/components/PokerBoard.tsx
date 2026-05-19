@@ -13,7 +13,6 @@ import type { CryptoPokerState, CryptoPokerPlayerState } from '../game/modules/p
 import { CryptoTransparencyPanel } from './CryptoTransparencyPanel';
 import type { CryptoPluginState } from '../crypto/plugin/crypto-plugin';
 import { generateKeyPair } from '../crypto/mental-poker';
-import { createKeyShares } from '../crypto/shamirs';
 import type { CryptoKeyPair } from '../crypto/mental-poker/types';
 import { useGameKeys } from '../blockchain/wallet';
 import { useAssetPack } from '../hooks/useAssetPack';
@@ -307,7 +306,6 @@ const PHASE_LABELS: Record<PokerPhase | CryptoPokerPhase, string> = {
   gameOver: 'Hand Complete',
   // Crypto setup phases
   keyExchange: '🔐 Key Exchange',
-  keyEscrow: '🔐 Key Escrow',
   encrypt: '🔐 Encrypting Deck',
   shuffle: '🔐 Shuffling Deck',
   voided: '⚠️ Game Voided',
@@ -383,7 +381,7 @@ export const PokerBoard: React.FC<PokerBoardProps> = ({
       return;
     }
 
-    const phase = G.phase;
+    const phase = cryptoG.phase;
     const actionKey = `${phase}-${currentPlayerID}`;
 
     // Debug logging
@@ -425,34 +423,6 @@ export const PokerBoard: React.FC<PokerBoardProps> = ({
           console.error('[Crypto] Error calling submitPublicKey:', err);
         }
       }, 100); // Small delay to ensure state is ready
-
-      return;
-    }
-
-    // Key Escrow Phase - distribute key shares
-    if (phase === 'keyEscrow' && !myCryptoPlayer?.hasDistributedShares) {
-      // Get or create key pair - in P2P mode, state may sync before local keyExchange completed
-      const keyPair = cryptoKeyPairRef.current || getOrCreateKeyPair();
-      if (!keyPair) {
-        console.log('[Crypto] Waiting for key pair in escrow phase...');
-        return;
-      }
-
-      cryptoSetupInProgress.current.add(actionKey);
-
-      // Get other player IDs (everyone except current player)
-      const allPlayerIds = Object.keys(G.players);
-      const otherPlayerIds = allPlayerIds.filter(pid => pid !== currentPlayerID);
-      const threshold = Math.max(2, otherPlayerIds.length);
-
-      console.log('[Crypto] Creating key shares for escrow, other players:', otherPlayerIds, 'threshold:', threshold);
-      const shares = createKeyShares(keyPair.privateKey, currentPlayerID, otherPlayerIds, threshold);
-
-      setTimeout(() => {
-        if (moves.distributeKeyShares) {
-          moves.distributeKeyShares(currentPlayerID, keyPair.privateKey, shares);
-        }
-      }, 100);
 
       return;
     }
@@ -560,7 +530,7 @@ export const PokerBoard: React.FC<PokerBoardProps> = ({
   const canRaise = canAct && G.bettingRound.currentBet > 0 && (myPlayer?.chips || 0) >= minRaise - (myPlayer?.bet || 0);
 
   // Check if we're in a crypto setup phase
-  const cryptoSetupPhases = ['keyExchange', 'keyEscrow', 'encrypt', 'shuffle'];
+  const cryptoSetupPhases = ['keyExchange', 'encrypt', 'shuffle'];
   const isInCryptoSetup = cryptoSetupPhases.includes(G.phase);
   const cryptoState = (G as unknown as { crypto?: CryptoPluginState }).crypto;
 
@@ -845,7 +815,7 @@ export const PokerBoard: React.FC<PokerBoardProps> = ({
 
           {/* Progress Steps */}
           <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
-            {['keyExchange', 'keyEscrow', 'encrypt', 'shuffle'].map((phase, index) => {
+            {cryptoSetupPhases.map((phase, index) => {
               const currentPhaseIndex = cryptoSetupPhases.indexOf(G.phase);
               const isComplete = index < currentPhaseIndex;
               const isCurrent = phase === G.phase;
@@ -870,7 +840,6 @@ export const PokerBoard: React.FC<PokerBoardProps> = ({
                     color: isComplete ? '#86efac' : isCurrent ? '#93c5fd' : '#6b7280',
                   }}>
                     {phase === 'keyExchange' && 'Keys'}
-                    {phase === 'keyEscrow' && 'Escrow'}
                     {phase === 'encrypt' && 'Encrypt'}
                     {phase === 'shuffle' && 'Shuffle'}
                   </div>
@@ -886,7 +855,7 @@ export const PokerBoard: React.FC<PokerBoardProps> = ({
             color: '#94a3b8',
             fontSize: '14px',
           }}>
-            {G.phase === 'keyExchange' && (
+            {cryptoG.phase === 'keyExchange' && (
               <>
                 <strong style={{ color: '#60a5fa' }}>Key Exchange:</strong> Players are exchanging public keys for secure card encryption.
                 {cryptoState && (
@@ -911,28 +880,7 @@ export const PokerBoard: React.FC<PokerBoardProps> = ({
                 )}
               </>
             )}
-            {G.phase === 'keyEscrow' && (
-              <>
-                <strong style={{ color: '#60a5fa' }}>Key Escrow:</strong> Players are distributing key shares for abandonment recovery.
-                <div style={{ marginTop: '8px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                  {Object.entries(cryptoG.players || {}).map(([pid, player]) => {
-                    const p = player as CryptoPokerPlayerState;
-                    return (
-                      <span key={pid} style={{
-                        padding: '4px 8px',
-                        borderRadius: '4px',
-                        backgroundColor: p.hasDistributedShares ? '#166534' : '#374151',
-                        color: p.hasDistributedShares ? '#86efac' : '#9ca3af',
-                        fontSize: '12px',
-                      }}>
-                        Player {pid}: {p.hasDistributedShares ? '✓ Shares distributed' : '⏳ Waiting...'}
-                      </span>
-                    );
-                  })}
-                </div>
-              </>
-            )}
-            {G.phase === 'encrypt' && (
+            {cryptoG.phase === 'encrypt' && (
               <>
                 <strong style={{ color: '#60a5fa' }}>Encryption:</strong> Each player encrypts the deck in turn.
                 <div style={{ marginTop: '8px' }}>
@@ -963,7 +911,7 @@ export const PokerBoard: React.FC<PokerBoardProps> = ({
                 </div>
               </>
             )}
-            {G.phase === 'shuffle' && (
+            {cryptoG.phase === 'shuffle' && (
               <>
                 <strong style={{ color: '#60a5fa' }}>Shuffle:</strong> Each player shuffles the encrypted deck in turn.
                 <div style={{ marginTop: '8px' }}>

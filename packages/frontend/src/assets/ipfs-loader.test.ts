@@ -2,16 +2,84 @@
  * Tests for IPFS asset loader gateway fallback behavior
  * Tests the AbortController reuse fix (MM-013)
  * Tests the timeout configuration fix (MM-015)
+ * Tests fetchFromHelia timeout and path-splitting fixes
  *
  * Note: These tests verify the gateway fallback logic in isolation
  * without requiring helia, since helia dependencies are hard to mock.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { setHeliaForTest, clearHeliaTestInstance, fetchFromHelia } from './ipfs-loader';
+import type { Helia } from 'helia';
 
 // Mock fetch globally
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
+
+// A known valid CIDv1 string (content doesn't matter — we just need parse to succeed)
+const VALID_CID = 'bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi';
+
+// ---------------------------------------------------------------------------
+// fetchFromHelia — timeout + path-splitting tests
+// ---------------------------------------------------------------------------
+
+describe('fetchFromHelia', () => {
+  afterEach(() => {
+    clearHeliaTestInstance();
+    vi.restoreAllMocks();
+  });
+
+  it('returns null and clears timeout when Helia blockstore stalls past timeout', async () => {
+    const clearSpy = vi.spyOn(globalThis, 'clearTimeout');
+
+    const neverResolves = new Promise<Uint8Array>(() => {});
+    const mockHelia = {
+      blockstore: { get: () => neverResolves },
+    } as unknown as Helia;
+    setHeliaForTest(mockHelia);
+
+    const result = await fetchFromHelia(VALID_CID, 30); // 30ms timeout
+    expect(result).toBeNull();
+    expect(clearSpy).toHaveBeenCalled();
+  });
+
+  it('returns a Blob and clears the timeout on a successful bare-CID fetch', async () => {
+    const clearSpy = vi.spyOn(globalThis, 'clearTimeout');
+    const fakeBlock = new Uint8Array([1, 2, 3]);
+    const mockHelia = {
+      blockstore: { get: async () => fakeBlock },
+    } as unknown as Helia;
+    setHeliaForTest(mockHelia);
+
+    const result = await fetchFromHelia(VALID_CID, 5000);
+    expect(result).not.toBeNull();
+    expect(result).toBeInstanceOf(Blob);
+    expect(clearSpy).toHaveBeenCalled();
+  });
+
+  it('returns null when no Helia instance is available', async () => {
+    clearHeliaTestInstance();
+    // No test instance and no real helia initialized → getHelia() returns null
+    const result = await fetchFromHelia(VALID_CID, 100);
+    expect(result).toBeNull();
+  });
+
+  it('returns null (not an uncaught throw) when cidString contains a path suffix and the timeout fires', async () => {
+    // Before fix: CID.parse received the full "VALID_CID/manifest.json" string
+    // and threw synchronously. The bug made ALL path-based Helia fetches fail
+    // silently. After fix, the bare CID is parsed; UnixFS handles the path.
+    // We verify liveness: a short timeout causes the function to return null
+    // rather than hanging indefinitely.
+    const neverResolves = new Promise<Uint8Array>(() => {});
+    const mockHelia = {
+      blockstore: { get: () => neverResolves },
+    } as unknown as Helia;
+    setHeliaForTest(mockHelia);
+
+    const result = await fetchFromHelia(`${VALID_CID}/manifest.json`, 30);
+    expect(result).toBeNull();
+  });
+});
 
 describe('Gateway Fallback AbortController Behavior (MM-013)', () => {
   beforeEach(() => {

@@ -3,23 +3,42 @@
  *
  * Verifiable shuffle proofs for mental poker.
  *
- * This implementation uses a simplified approach based on hash commitments
- * rather than full ZK-SNARKs. For production, consider:
- * - Circom circuits for true zero-knowledge proofs
- * - Bayer-Groth shuffle arguments
- * - Neff shuffle proofs
+ * ===========================================================================
+ * THREAT MODEL NOTE
+ * ===========================================================================
+ * This implementation uses commit-and-reveal, NOT true ZK proofs.
  *
- * Current approach:
- * 1. Shuffler commits to permutation before shuffling
- * 2. After game, permutation is revealed and verified
- * 3. This is "commit-and-reveal" rather than true ZK
+ * After the game concludes, the full permutation is revealed and verified.
+ * This means:
+ *   - During the game (while cards are encrypted): permutation is hidden ✓
+ *   - After the game ends: permutation is fully visible ✗
  *
- * The trade-off: Opponent learns permutation at game end, but cannot
- * use this to cheat during the game (cards are still encrypted).
+ * Threat model applicability:
+ *   - Honest-but-curious (HBC): ACCEPTABLE — opponent follows protocol
+ *     but tries to learn information. Cards remain encrypted during play.
+ *   - Malicious: INSUFFICIENT — opponent may deviate from protocol
+ *     or use the revealed permutation to construct post-hoc challenges.
+ *
+ * For untrusted P2P play with malicious adversaries, a true ZK shuffle
+ * proof (Groth16/PLONK SNARK or Neff shuffle) is recommended.
+ *
+ * ===========================================================================
+ * CURRENT IMPLEMENTATION
+ * ===========================================================================
+ * 1. Shuffler commits to permutation (SHA-256) before shuffling
+ * 2. After game, permutation is revealed and verified against commitment
+ * 3. This is "commit-and-reveal" — permutation leaks after game end
+ *
+ * Production ZK upgrade options (not implemented):
+ *   - Bayer-Groth: Constant-size shuffle proofs, trusted setup (Groth16)
+ *   - Neff shuffle: Transparent (no trusted setup), larger proofs (IPA)
+ *   - PLONK: Universal trusted setup, larger proofs
+ *
+ * Estimated effort for ZK upgrade: 2-4 weeks (circuit + setup + testing)
  */
 
-import type { EncryptedCard, ShuffleProof } from './types';
-import { hashDeck, hashToHex, generateNonce } from './commitment';
+import type { EncryptedCard, ShuffleProof } from "./types";
+import { hashDeck, hashToHex, generateNonce } from "./commitment";
 
 /**
  * A permutation represented as an array of indices.
@@ -36,10 +55,16 @@ export type Permutation = number[];
 export function generatePermutation(length: number): Permutation {
   const perm: Permutation = Array.from({ length }, (_, i) => i);
 
+  function randomBelow(n: number): number {
+    const bytes = new Uint32Array(1);
+    do {
+      crypto.getRandomValues(bytes);
+    } while (bytes[0] >= 0xffffffff - (0xffffffff % n));
+    return bytes[0] % n;
+  }
+
   for (let i = length - 1; i > 0; i--) {
-    const randomBytes = new Uint8Array(4);
-    crypto.getRandomValues(randomBytes);
-    const j = (randomBytes[0] | (randomBytes[1] << 8) | (randomBytes[2] << 16)) % (i + 1);
+    const j = randomBelow(i + 1);
     [perm[i], perm[j]] = [perm[j], perm[i]];
   }
 
@@ -55,10 +80,10 @@ export function generatePermutation(length: number): Permutation {
  */
 export function applyPermutation(
   deck: EncryptedCard[],
-  permutation: Permutation
+  permutation: Permutation,
 ): EncryptedCard[] {
   if (deck.length !== permutation.length) {
-    throw new Error('Deck and permutation must have same length');
+    throw new Error("Deck and permutation must have same length");
   }
 
   const result: EncryptedCard[] = new Array(deck.length);
@@ -136,7 +161,7 @@ export function deserializePermutation(bytes: Uint8Array): Permutation {
  */
 export async function commitPermutation(
   permutation: Permutation,
-  nonce: Uint8Array
+  nonce: Uint8Array,
 ): Promise<Uint8Array> {
   const permBytes = serializePermutation(permutation);
 
@@ -144,7 +169,7 @@ export async function commitPermutation(
   input.set(permBytes);
   input.set(nonce, permBytes.length);
 
-  const hashBuffer = await crypto.subtle.digest('SHA-256', input);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", input);
   return new Uint8Array(hashBuffer);
 }
 
@@ -159,7 +184,7 @@ export async function commitPermutation(
 export async function verifyPermutationCommitment(
   commitment: Uint8Array,
   permutation: Permutation,
-  nonce: Uint8Array
+  nonce: Uint8Array,
 ): Promise<boolean> {
   const computed = await commitPermutation(permutation, nonce);
 
@@ -189,7 +214,7 @@ export async function verifyPermutationCommitment(
 export async function createShuffleProof(
   inputDeck: EncryptedCard[],
   outputDeck: EncryptedCard[],
-  permutation: Permutation
+  permutation: Permutation,
 ): Promise<{ proof: ShuffleProof; nonce: Uint8Array }> {
   const nonce = generateNonce();
   const commitment = await commitPermutation(permutation, nonce);
@@ -226,7 +251,7 @@ export async function verifyShuffleProof(
   proof: ShuffleProof,
   inputDeck: EncryptedCard[],
   outputDeck: EncryptedCard[],
-  nonce: Uint8Array
+  nonce: Uint8Array,
 ): Promise<boolean> {
   // Deserialize the permutation
   const permutation = deserializePermutation(proof.proof);
@@ -240,7 +265,7 @@ export async function verifyShuffleProof(
   const commitmentValid = await verifyPermutationCommitment(
     proof.commitment,
     permutation,
-    nonce
+    nonce,
   );
   if (!commitmentValid) {
     return false;
@@ -279,7 +304,11 @@ export async function shuffleWithProof(deck: EncryptedCard[]): Promise<{
   const permutation = generatePermutation(deck.length);
   const shuffledDeck = applyPermutation(deck, permutation);
 
-  const { proof, nonce } = await createShuffleProof(deck, shuffledDeck, permutation);
+  const { proof, nonce } = await createShuffleProof(
+    deck,
+    shuffledDeck,
+    permutation,
+  );
 
   return { shuffledDeck, proof, permutation, nonce };
 }

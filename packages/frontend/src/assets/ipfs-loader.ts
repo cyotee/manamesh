@@ -38,6 +38,26 @@ let heliaInstance: Helia | null = null;
 let heliaInitPromise: Promise<Helia | null> | null = null;
 let heliaFailed = false;
 
+// Test Helia instance - used for testing to inject a pre-configured Helia
+let testHeliaInstance: Helia | null = null;
+
+/**
+ * Set a Helia instance to use for testing
+ * This overrides the normal singleton initialization
+ * @internal For testing only
+ */
+export function setHeliaForTest(helia: Helia): void {
+  testHeliaInstance = helia;
+}
+
+/**
+ * Clear any test Helia instance
+ * @internal For testing only
+ */
+export function clearHeliaTestInstance(): void {
+  testHeliaInstance = null;
+}
+
 /**
  * Initialize or get the helia instance
  * Returns null if initialization fails (fallback to gateway)
@@ -45,6 +65,10 @@ let heliaFailed = false;
 async function getHelia(): Promise<Helia | null> {
   if (heliaFailed) {
     return null;
+  }
+
+  if (testHeliaInstance) {
+    return testHeliaInstance;
   }
 
   if (heliaInstance) {
@@ -58,7 +82,6 @@ async function getHelia(): Promise<Helia | null> {
   const config = getConfig();
 
   heliaInitPromise = (async () => {
-    // Create timeout with explicit timer so we can clean it up on success
     let timeoutId: NodeJS.Timeout | undefined;
     const timeoutPromise = new Promise<never>((_, reject) => {
       timeoutId = setTimeout(() => reject(new Error('Helia init timeout')), config.heliaInitTimeout);
@@ -67,11 +90,10 @@ async function getHelia(): Promise<Helia | null> {
     try {
       const initPromise = createHelia();
       heliaInstance = await Promise.race([initPromise, timeoutPromise]);
-      // Clear timeout on success to prevent late rejection
       if (timeoutId) clearTimeout(timeoutId);
       return heliaInstance;
     } catch (error) {
-      // Clear timeout on error as well
+      if (timeoutId) clearTimeout(timeoutId);
       if (timeoutId) clearTimeout(timeoutId);
       console.warn('Failed to initialize helia, falling back to gateway:', error);
       heliaFailed = true;
@@ -84,41 +106,58 @@ async function getHelia(): Promise<Helia | null> {
 }
 
 /**
- * Fetch content from helia by CID
+ * Fetch content from helia by CID (optionally with a sub-path for UnixFS files).
+ * cidString may be a bare CID or "CID/sub/path" — the slash is split before parsing.
+ * @internal Exported for testing only.
  */
-async function fetchFromHelia(cidString: string, timeout: number): Promise<Blob | null> {
+export async function fetchFromHelia(cidString: string, timeout: number): Promise<Blob | null> {
   const helia = await getHelia();
   if (!helia) {
     return null;
   }
 
-  // Create timeout with explicit timer so we can clean it up on success
+  // Split a path suffix from the CID string so CID.parse receives only the bare CID.
+  // Gateway URLs tolerate "CID/path" directly, but CID.parse does not.
+  const slashIndex = cidString.indexOf('/');
+  const bareCidString = slashIndex === -1 ? cidString : cidString.slice(0, slashIndex);
+  const subPath = slashIndex === -1 ? undefined : cidString.slice(slashIndex + 1);
+
   let timeoutId: NodeJS.Timeout | undefined;
   const timeoutPromise = new Promise<never>((_, reject) => {
     timeoutId = setTimeout(() => reject(new Error('Helia fetch timeout')), timeout);
   });
 
   try {
-    // Type assertion needed due to helia version type incompatibility
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const fs = unixfs(helia as any);
-    const cid = CID.parse(cidString);
+    const cid = CID.parse(bareCidString);
+    let result: Blob;
 
-    const chunks: Uint8Array[] = [];
-    const fetchPromise = (async () => {
-      for await (const chunk of fs.cat(cid)) {
-        chunks.push(chunk);
-      }
-      // Convert Uint8Array chunks to regular ArrayBuffer views for Blob constructor
-      return new Blob(chunks.map(c => new Uint8Array(c)) as BlobPart[]);
-    })();
+    if (subPath) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const fs = unixfs(helia as any);
+      const fetchPromise = (async () => {
+        const chunks: Uint8Array[] = [];
+        for await (const chunk of fs.cat(cid, { path: subPath })) {
+          chunks.push(chunk);
+        }
+        const total = chunks.reduce((sum, c) => sum + c.length, 0);
+        const combined = new Uint8Array(total);
+        let offset = 0;
+        for (const chunk of chunks) {
+          combined.set(chunk, offset);
+          offset += chunk.length;
+        }
+        return new Blob([combined]);
+      })();
+      result = await Promise.race([fetchPromise, timeoutPromise]);
+    } else {
+      // Use new Uint8Array(block) to guarantee a plain ArrayBuffer type for the Blob constructor.
+      const block = await Promise.race([helia.blockstore.get(cid), timeoutPromise]);
+      result = new Blob([new Uint8Array(block)]);
+    }
 
-    const result = await Promise.race([fetchPromise, timeoutPromise]);
-    // Clear timeout on success to prevent late rejection
     if (timeoutId) clearTimeout(timeoutId);
     return result;
   } catch (error) {
-    // Clear timeout on error as well
     if (timeoutId) clearTimeout(timeoutId);
     console.warn('Helia fetch failed:', error);
     return null;

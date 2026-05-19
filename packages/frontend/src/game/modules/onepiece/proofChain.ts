@@ -6,7 +6,13 @@
  * that both players can verify for dispute resolution.
  */
 
-import type { CryptographicProof, OnePieceState } from './types';
+import type { CryptographicProof, OnePieceState } from "./types";
+import { sha256Hex } from "../../../crypto/sha256";
+import { stableStringify } from "../../../crypto/stable-json";
+import {
+  ecdsaSignDigestHex,
+  ecdsaVerifyDigestHex,
+} from "../../../crypto/ecdsa";
 
 // =============================================================================
 // Proof Creation
@@ -30,17 +36,11 @@ function generateTransitionId(): string {
  * that can be replaced with crypto.subtle.digest later.
  */
 export function hashProofData(data: string): string {
-  // Simple deterministic hash for game state serialization.
-  // This is a placeholder that produces consistent, unique hashes.
-  // In production, replace with: await crypto.subtle.digest('SHA-256', ...)
-  let hash = 0;
-  for (let i = 0; i < data.length; i++) {
-    const char = data.charCodeAt(i);
-    hash = ((hash << 5) - hash + char) | 0;
-  }
-  // Convert to hex-like string with enough entropy for proof chain linking
-  const timestamp = Date.now();
-  return `${(hash >>> 0).toString(16).padStart(8, '0')}-${timestamp.toString(16)}`;
+  // Use SHA-256 for production-grade hashing
+  // sha256Hex takes a Uint8Array, so encode the string
+  const bytes = new TextEncoder().encode(data);
+  const hex = sha256Hex(bytes);
+  return hex; // 64-char hex string (32 bytes)
 }
 
 /**
@@ -54,7 +54,8 @@ export function createProof(
   const transitionId = generateTransitionId();
   const timestamp = Date.now();
 
-  const proofData = JSON.stringify({
+  // Use stableStringify to ensure deterministic serialization for hashing
+  const proofData = stableStringify({
     transitionId,
     previousProofHash,
     action,
@@ -82,8 +83,18 @@ export function createProof(
 export function signProof(
   proof: CryptographicProof,
   playerId: string,
-  signature: string,
+  signatureOrPrivateKeyHex: string,
 ): CryptographicProof {
+  // Backwards-compatible: if caller provided a precomputed signature (arbitrary string),
+  // store it directly. If they provided a 64-char hex private key, use it to sign the
+  // proof.hash with ECDSA and store the resulting signature.
+  let signature = signatureOrPrivateKeyHex;
+  const maybeKey = signatureOrPrivateKeyHex.replace(/^0x/, "");
+  const isLikelyPrivateKey = /^[0-9a-fA-F]{64}$/.test(maybeKey);
+  if (isLikelyPrivateKey) {
+    signature = ecdsaSignDigestHex(proof.hash, maybeKey);
+  }
+
   return {
     ...proof,
     signatures: {
@@ -91,6 +102,35 @@ export function signProof(
       [playerId]: signature,
     },
   };
+}
+
+/**
+ * Verify that the stored proof.hash matches a recomputed hash of the proof fields.
+ */
+export function verifyProofHash(proof: CryptographicProof): boolean {
+  const recomputed = hashProofData(
+    stableStringify({
+      transitionId: proof.transitionId,
+      previousProofHash: proof.previousProofHash,
+      action: proof.action,
+      data: proof.data,
+      timestamp: proof.timestamp,
+    }),
+  );
+  return recomputed === proof.hash;
+}
+
+/**
+ * Verify a single player's signature on a proof using their public key.
+ */
+export function verifyProofSignature(
+  proof: CryptographicProof,
+  playerId: string,
+  publicKeyHex: string,
+): boolean {
+  const signature = proof.signatures[playerId];
+  if (!signature) return false;
+  return ecdsaVerifyDigestHex(proof.hash, signature, publicKeyHex);
 }
 
 // =============================================================================
@@ -131,7 +171,7 @@ export function verifyProofChain(
     errors.push({
       index: 0,
       transitionId: chain[0].transitionId,
-      error: 'First proof must have null previousProofHash',
+      error: "First proof must have null previousProofHash",
     });
   }
 
@@ -154,6 +194,14 @@ export function verifyProofChain(
         index: i,
         transitionId: current.transitionId,
         error: `Timestamp regression: ${current.timestamp} < ${previous.timestamp}`,
+      });
+    }
+    // Verify the proof hash integrity
+    if (!verifyProofHash(current)) {
+      errors.push({
+        index: i,
+        transitionId: current.transitionId,
+        error: `Invalid proof hash: recomputed hash does not match stored hash`,
       });
     }
   }
@@ -194,9 +242,7 @@ export function getLatestProof(
 /**
  * Get the hash of the latest proof (for chaining).
  */
-export function getLatestProofHash(
-  state: OnePieceState,
-): string | null {
+export function getLatestProofHash(state: OnePieceState): string | null {
   const latest = getLatestProof(state);
   return latest?.hash ?? null;
 }
@@ -208,9 +254,7 @@ export function getProofsForCard(
   state: OnePieceState,
   cardId: string,
 ): CryptographicProof[] {
-  return state.proofChain.filter(
-    (proof) => proof.data.cardId === cardId,
-  );
+  return state.proofChain.filter((proof) => proof.data.cardId === cardId);
 }
 
 // =============================================================================

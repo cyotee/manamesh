@@ -33,7 +33,7 @@ export const ThresholdTallyGame: Game<ThresholdTallyState> = {
         publishDkgCommitment: {
           move: (
             { G, ctx, playerID },
-            params: { c0Hex: string; c1Hex: string },
+            params: { coefficients: string[] },
           ) => {
             try {
               if (ctx.phase !== "setup") return INVALID_MOVE;
@@ -105,20 +105,26 @@ export const ThresholdTallyGame: Game<ThresholdTallyState> = {
       turn: { activePlayers: { all: "commit" } },
       moves: {
         submitCiphertext: {
-          move: (
-            { G, ctx, playerID },
-            params: { c1Hex: string; c2Hex: string },
-          ) => {
+          move: async (
+            { G, ctx, playerID }: { G: ThresholdTallyState; ctx: any; playerID: string },
+            params: { c1Hex: string; c2Hex: string; plaintext: number; rangeProof: any },
+          ): Promise<ThresholdTallyState | typeof INVALID_MOVE> => {
             try {
               if (ctx.phase !== "commit") return INVALID_MOVE;
-              submitCiphertext(G, playerID, params);
+              const updatedState = await submitCiphertext(G, playerID, {
+                c1Hex: params.c1Hex,
+                c2Hex: params.c2Hex,
+                plaintext: params.plaintext,
+                rangeProof: params.rangeProof,
+              });
+              Object.assign(G, updatedState);
               return G;
             } catch {
               return INVALID_MOVE;
             }
           },
           client: false,
-        },
+        } as any,
       },
       endIf: ({ G }) => allCiphertextsSubmitted(G),
       next: "decrypt",

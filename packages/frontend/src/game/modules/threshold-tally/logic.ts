@@ -2,6 +2,7 @@ import type {
   ThresholdTallyRoundState,
   ThresholdTallyState,
   ThresholdTallyConfig,
+  RangeProof,
 } from "./types";
 import {
   dkgCombineCommitments,
@@ -14,10 +15,21 @@ import {
   secpIsValidPointHex,
   secpPointAddHex,
   secpPointMulHex,
+  verifyRangeProof,
+  RANGE_PROOF_VKEY,
 } from "../../../crypto";
 
 function assert(cond: unknown, msg: string): asserts cond {
   if (!cond) throw new Error(msg);
+}
+
+function playerIdToEvalPoint(pid: string): bigint {
+  const n = Number(pid);
+  assert(
+    Number.isInteger(n) && n >= 0,
+    `Player ID "${pid}" must be a non-negative integer for DKG evaluation`,
+  );
+  return BigInt(n + 1);
 }
 
 function isHex(s: string): boolean {
@@ -60,6 +72,8 @@ export function createRoundState(
   round: number,
 ): ThresholdTallyRoundState {
   const ciphertextByPlayer = makePlayerMap(playerOrder, () => null as any);
+  const plaintextByPlayer = makePlayerMap(playerOrder, () => null as number | null);
+  const rangeProofByPlayer = makePlayerMap(playerOrder, () => null as RangeProof | null);
   const partialDecryptByPlayer = makePlayerMap(playerOrder, () => null as any);
   const ackByPlayer = makePlayerMap(playerOrder, () => false);
 
@@ -67,6 +81,8 @@ export function createRoundState(
     round,
     target: computeTarget(config, round),
     ciphertextByPlayer,
+    plaintextByPlayer,
+    rangeProofByPlayer,
     aggregateCiphertext: null,
     partialDecryptByPlayer,
     decryptedTotal: null,
@@ -103,31 +119,25 @@ export function createInitialState(playerIDs: string[]): ThresholdTallyState {
 export function publishDkgCommitment(
   state: ThresholdTallyState,
   playerId: string,
-  params: { c0Hex: string; c1Hex: string },
+  params: { coefficients: string[] },
 ): ThresholdTallyState {
   assert(state.phase === "setup", "wrong phase");
-  const c0Hex = params.c0Hex.startsWith("0x")
-    ? params.c0Hex.slice(2)
-    : params.c0Hex;
-  const c1Hex = params.c1Hex.startsWith("0x")
-    ? params.c1Hex.slice(2)
-    : params.c1Hex;
-  assert(isHex(c0Hex) && c0Hex.length >= 2, "invalid c0");
-  assert(isHex(c1Hex) && c1Hex.length >= 2, "invalid c1");
+  const coefficients = params.coefficients.map((hex) => {
+    const clean = hex.startsWith("0x") ? hex.slice(2) : hex;
+    assert(isHex(clean) && clean.length >= 2, "invalid coefficient hex");
+    return clean.toLowerCase();
+  });
   assert(
     !state.dkg.commitmentsByPlayer[playerId],
     "commitment already published",
   );
 
-  state.dkg.commitmentsByPlayer[playerId] = {
-    c0Hex: c0Hex.toLowerCase(),
-    c1Hex: c1Hex.toLowerCase(),
-  };
+  state.dkg.commitmentsByPlayer[playerId] = { coefficients };
   state.transcript.push({
     type: "dkg_commit",
     by: playerId,
-    c0Hex: c0Hex.toLowerCase(),
-    c1Hex: c1Hex.toLowerCase(),
+    c0Hex: coefficients[0] ?? "",
+    c1Hex: coefficients[1] ?? "",
     at: Date.now(),
   });
 
@@ -229,10 +239,10 @@ export function finalizeDkg(
   );
   const combined = dkgCombineCommitments(commits);
   for (const pid of state.playerOrder) {
-    const x = BigInt(Number(pid) + 1);
+    const x = playerIdToEvalPoint(pid);
     const expected = secpPointAddHex(
-      combined.c0Hex,
-      secpPointMulHex(combined.c1Hex, x),
+      combined.coefficients[0]!,
+      secpPointMulHex(combined.coefficients[1]!, x),
     );
     const got = state.crypto.publicShareByPlayer[pid]!;
     assert(expected === got, "public share mismatch");
@@ -255,30 +265,46 @@ export function allAcks(state: ThresholdTallyState): boolean {
   return Object.values(state.roundState.ackByPlayer).every((v) => v);
 }
 
-export function submitCiphertext(
+export async function submitCiphertext(
   state: ThresholdTallyState,
   playerId: string,
-  params: { c1Hex: string; c2Hex: string },
-): ThresholdTallyState {
+  params: { c1Hex: string; c2Hex: string; plaintext: number; rangeProof: RangeProof },
+): Promise<ThresholdTallyState> {
   assert(!!state.crypto.publicKeyHex, "public key not published");
   assert(
     state.roundState.ciphertextByPlayer[playerId] === null,
     "ciphertext already submitted",
   );
 
-  const c1Hex = params.c1Hex.startsWith("0x")
-    ? params.c1Hex.slice(2)
-    : params.c1Hex;
-  const c2Hex = params.c2Hex.startsWith("0x")
-    ? params.c2Hex.slice(2)
-    : params.c2Hex;
+  const { c1Hex: rawC1Hex, c2Hex: rawC2Hex, plaintext, rangeProof } = params;
+
+  const c1Hex = rawC1Hex.startsWith("0x") ? rawC1Hex.slice(2) : rawC1Hex;
+  const c2Hex = rawC2Hex.startsWith("0x") ? rawC2Hex.slice(2) : rawC2Hex;
   assert(isHex(c1Hex) && c1Hex.length >= 2, "invalid c1");
   assert(isHex(c2Hex) && c2Hex.length >= 2, "invalid c2");
+
+  assert(
+    plaintext >= state.config.minContribution,
+    "plaintext below minimum",
+  );
+  assert(
+    plaintext <= state.config.maxContribution,
+    "plaintext exceeds maximum",
+  );
+
+  const isValidProof = await verifyRangeProof(
+    rangeProof,
+    RANGE_PROOF_VKEY,
+    [plaintext.toString(), state.config.maxContribution.toString()],
+  );
+  assert(isValidProof, "invalid range proof");
 
   state.roundState.ciphertextByPlayer[playerId] = {
     c1Hex: c1Hex.toLowerCase(),
     c2Hex: c2Hex.toLowerCase(),
   };
+  state.roundState.plaintextByPlayer[playerId] = plaintext;
+  state.roundState.rangeProofByPlayer[playerId] = rangeProof;
   state.transcript.push({
     type: "ciphertext",
     by: playerId,
@@ -287,7 +313,6 @@ export function submitCiphertext(
     at: Date.now(),
   });
 
-  // If all ciphertexts are in, compute the aggregate ciphertext.
   if (allCiphertextsSubmitted(state)) {
     const ciphertexts = Object.values(
       state.roundState.ciphertextByPlayer,
@@ -386,7 +411,7 @@ export function submitDecryptShare(
     .slice(0, threshold);
   if (entries.length >= threshold) {
     const partials = entries.map(([pid, pHex]) => ({
-      x: BigInt(Number(pid) + 1),
+      x: playerIdToEvalPoint(pid),
       partialHex: (pHex as any).partialHex as string,
     }));
     const combined = elgamalCombinePartials(partials);

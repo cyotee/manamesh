@@ -14,8 +14,9 @@
  */
 
 // Main module export
-export { OnePieceModule, OnePieceGame, onePieceCardSchema } from './game';
-export { default } from './game';
+export { OnePieceModule, OnePieceGame, onePieceCardSchema } from "./game";
+export { OnePieceCryptoGame, createCryptoInitialState } from "./crypto";
+export { default } from "./game";
 
 // Types
 export type {
@@ -40,12 +41,12 @@ export type {
   DeckPeekProtocol,
   PlayAreaSlot,
   SlotType,
-} from './types';
+} from "./types";
 
-export { DEFAULT_CONFIG } from './types';
+export { DEFAULT_CONFIG } from "./types";
 
 // Zones
-export { ONEPIECE_ZONES, ZONE_IDS, getZoneById } from './zones';
+export { ONEPIECE_ZONES, ZONE_IDS, getZoneById } from "./zones";
 
 // Visibility state machine
 export {
@@ -56,7 +57,7 @@ export {
   getCardVisibility,
   initializeCardVisibility,
   isCardVisibleTo,
-} from './visibility';
+} from "./visibility";
 
 // Play area
 export {
@@ -73,7 +74,7 @@ export {
   attachDon,
   detachDon,
   getTotalAttachedDon,
-} from './playArea';
+} from "./playArea";
 
 // Peek protocol
 export {
@@ -84,7 +85,7 @@ export {
   completePeek,
   findPeekProtocol,
   getPlayerActivePeeks,
-} from './peek';
+} from "./peek";
 
 // Proof chain
 export {
@@ -96,13 +97,13 @@ export {
   getLatestProof,
   getLatestProofHash,
   getProofsForCard,
-} from './proofChain';
+} from "./proofChain";
 
 export type {
   ProofChainError,
   ProofChainVerification,
   SignatureVerification,
-} from './proofChain';
+} from "./proofChain";
 
 // Game functions
 export {
@@ -110,4 +111,4 @@ export {
   shuffleDeck,
   createInitialState,
   validateMove,
-} from './game';
+} from "./game";

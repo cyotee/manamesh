@@ -3,7 +3,7 @@ export type ThresholdTallyPhase = "setup" | "commit" | "decrypt" | "resolve";
 export type SecpPointHex = string;
 export type SecpScalarHex = string;
 
-export type DkgCommitment = { c0Hex: SecpPointHex; c1Hex: SecpPointHex };
+export type DkgCommitment = { coefficients: SecpPointHex[] };
 
 export type ElGamalCiphertext = { c1Hex: SecpPointHex; c2Hex: SecpPointHex };
 
@@ -12,6 +12,24 @@ export type DleqProof = {
   a2Hex: SecpPointHex;
   zHex: SecpScalarHex;
 };
+
+/**
+ * Range proof for encrypted contributions.
+ * Proves that the plaintext value is within [0, maxContribution].
+ *
+ * The circuit uses binary decomposition to verify:
+ * - Each bit is binary (0 or 1)
+ * - The bits reconstruct to the claimed value
+ *
+ * LIMITATION: Does not strictly enforce value <= maxValue.
+ * See: src/crypto/circuits/README.md
+ */
+export interface RangeProof {
+  a: [string, string];
+  b: [[string, string], [string, string]];
+  c: [string, string];
+  publicSignals: string[];
+}
 
 export interface ThresholdTallyConfig {
   /** Inclusive min plaintext per player (UI-enforced in milestone 2). */
@@ -27,6 +45,8 @@ export interface ThresholdTallyRoundState {
   target: number;
 
   ciphertextByPlayer: Record<string, ElGamalCiphertext | null>;
+  plaintextByPlayer: Record<string, number | null>;
+  rangeProofByPlayer: Record<string, RangeProof | null>;
   aggregateCiphertext: ElGamalCiphertext | null;
 
   /** Partial decrypt shares D_i = c1^{x_i} with a DLEQ proof vs published public share. */
@@ -51,7 +71,7 @@ export interface ThresholdTallyState {
   crypto: {
     scheme: "ec-elgamal-exp";
     /** 2-player: 2-of-2; 3-player: 2-of-3 */
-    threshold: 2;
+    threshold: number;
     publicKeyHex: SecpPointHex | null;
     /** Per-player public share Y_i = g^{x_i} (published after local aggregation). */
     publicShareByPlayer: Record<string, SecpPointHex | null>;

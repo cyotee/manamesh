@@ -35,7 +35,6 @@ export interface CryptoGoFishPlayerState {
   publicKey: string | null;
   /** secp256k1 compressed public key hex for signing ZK verdicts (no 0x). */
   zkSigPublicKey: string | null;
-  hasDistributedShares: boolean;
   hasEncrypted: boolean;
   hasShuffled: boolean;
   hasPeeked: boolean;
@@ -45,7 +44,6 @@ export interface CryptoGoFishPlayerState {
 
 export type CryptoGoFishPhase =
   | "keyExchange"
-  | "keyEscrow"
   | "encrypt"
   | "shuffle"
   | "play"
@@ -135,6 +133,9 @@ export interface ShuffleRngState {
  */
 export const GOFISH_SHUFFLE_STALL_WINDOW_MOVES = 12;
 
+/** Moves either player may make before a stalled cooperative reveal can be voided. */
+export const GOFISH_REVEAL_STALL_WINDOW_MOVES = 8;
+
 export interface CryptoGoFishState {
   players: Record<string, CryptoGoFishPlayerState>;
   phase: CryptoGoFishPhase;
@@ -172,6 +173,9 @@ export interface CryptoGoFishState {
   log: { timestamp: number; message: string }[];
 
   zones: Record<string, Record<string, GoFishCard[]>>;
+
+  /** ctx.numMoves value recorded when a cooperative reveal was initiated; used for stall detection. */
+  revealStallEnteredAt?: number;
 }
 
 export const GOFISH_ZONES: ZoneDefinition[] = [

@@ -26,8 +26,7 @@ const GameCard: React.FC<{
         return "🃏"; // Playing card
       case "war":
         return "⚔️"; // Crossed swords
-      case "gofish":
-        return "🐟";
+      // "gofish" (demo-private) removed from registry — do not include icon
       case "gofish-secure":
         return "🐠";
       case "gofish-zk":

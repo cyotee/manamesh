@@ -30,6 +30,7 @@ import type {
 } from './types';
 import { sourceToPackId } from './types';
 import { computeCidFromBlob } from './cid';
+import { registerPack, unregisterPack } from './registry';
 
 // In-memory cache of loaded packs
 const zipLoadedPacks = new Map<string, LoadedAssetPack>();
@@ -343,9 +344,10 @@ async function doLoadZipPack(
       console.warn('[ZipLoader] Missing front image for card:', card.id, frontPath);
     }
 
-    // Cache back image if card has a specific back (not shared)
-    if (card.back && sharedBackPath && card.back !== sharedBackPath) {
-      const backPath = manifestBasePath + card.back;
+    // Cache back image if card has a specific back (compare resolved paths, not relative vs absolute)
+    const resolvedCardBack = card.back ? manifestBasePath + card.back : undefined;
+    if (resolvedCardBack && sharedBackPath && resolvedCardBack !== sharedBackPath) {
+      const backPath = resolvedCardBack;
       const backData = entries.get(backPath);
       if (backData) {
         const backBlob = entryToBlob(backData, inferMimeType(backPath));
@@ -371,6 +373,7 @@ async function doLoadZipPack(
   };
 
   zipLoadedPacks.set(packId, loadedPack);
+  registerPack(loadedPack);
 
   // Compute IPFS CID from the zip blob
   const ipfsCid = await computeCidFromBlob(result.blob);
@@ -383,7 +386,7 @@ async function doLoadZipPack(
     version: manifest.version,
     source: source as AssetPackSource,
     cardCount: cards.length,
-    cachedCardIds: existingMetadata?.cachedCardIds ?? cachedCardIds,
+    cachedCardIds,
     ipfsCid,
     loadedAt: loadedPack.loadedAt,
   };
@@ -406,6 +409,7 @@ export function getZipLoadedPack(packId: string): LoadedAssetPack | undefined {
  */
 export function unloadZipPack(packId: string): void {
   zipLoadedPacks.delete(packId);
+  unregisterPack(packId);
 }
 
 /**

@@ -13,24 +13,10 @@ import { noise } from '@chainsafe/libp2p-noise';
 import { yamux } from '@chainsafe/libp2p-yamux';
 import { identify } from '@libp2p/identify';
 import { ping } from '@libp2p/ping';
+import { resolveBootstrapNodes } from './bootstrap-resolver';
 
-// Protocol Labs public bootstrap nodes with WebSocket/WebRTC support
-// These are stable, long-lived nodes that help browsers discover peers
-const BOOTSTRAP_NODES = [
-  // Protocol Labs bootstrap nodes
-  '/dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN',
-  '/dnsaddr/bootstrap.libp2p.io/p2p/QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXJJ16u19uLTa',
-  '/dnsaddr/bootstrap.libp2p.io/p2p/QmbLHAnMoJPWSCR5Zhtx6BHJX9KiKNN6tpvbUcqanj75Nb',
-  '/dnsaddr/bootstrap.libp2p.io/p2p/QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt',
-];
-
-// ManaMesh namespace for DHT keys to avoid collisions with other apps
 export const DHT_NAMESPACE = '/manamesh/1.0.0';
-
-// Room code topic for publishing/discovering games
 export const ROOM_TOPIC = `${DHT_NAMESPACE}/rooms`;
-
-// Public game listing topic
 export const PUBLIC_GAMES_TOPIC = `${DHT_NAMESPACE}/public-games`;
 
 export interface Libp2pServices {
@@ -42,47 +28,28 @@ export type ManaMeshLibp2p = Libp2p<Libp2pServices>;
 
 let libp2pInstance: ManaMeshLibp2p | null = null;
 
-/**
- * Create and start a libp2p node configured for browser P2P
- * Returns a singleton instance
- */
 export async function createNode(): Promise<ManaMeshLibp2p> {
   if (libp2pInstance) {
     return libp2pInstance;
   }
 
   console.log('[libp2p] Creating node...');
+  const bootstrapNodes = await resolveBootstrapNodes();
+  console.log('[libp2p] Using bootstrap nodes:', bootstrapNodes.length);
 
   const node = await createLibp2p({
-    // Listen on circuit relay and WebRTC addresses
     addresses: {
-      listen: [
-        '/p2p-circuit',  // Listen via relays
-        '/webrtc',       // Direct WebRTC connections
-      ],
+      listen: ['/p2p-circuit', '/webrtc'],
     },
-
-    // Transports available in browser
     transports: [
-      // WebSocket for connecting to relay nodes
       webSockets(),
-      // WebRTC for direct peer connections
       webRTC(),
-      // Circuit relay for NAT traversal
       circuitRelayTransport(),
     ],
-
-    // Connection security
     connectionEncrypters: [noise()],
-
-    // Stream multiplexing
     streamMuxers: [yamux()],
-
-    // Peer discovery via bootstrap nodes
     peerDiscovery: [
-      bootstrap({
-        list: BOOTSTRAP_NODES,
-      }),
+      bootstrap({ list: [...bootstrapNodes] }),
     ],
 
     // Services

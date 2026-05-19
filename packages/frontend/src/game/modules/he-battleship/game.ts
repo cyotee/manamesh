@@ -9,6 +9,7 @@ import {
   publishHomomorphicCommitment,
   publishPublicKey,
   applyVerifiedGuess,
+  applyDefenderReveal,
   hasAllShipsSunkFromMarks,
 } from "./logic";
 import type { Coord } from "../merkle-battleship";
@@ -66,7 +67,7 @@ export const HEBattleshipGame: Game<HEBattleshipState> = {
         publishHomomorphicCommitment: {
           move: (
             { G, ctx, playerID },
-            params: { encShipCountForOpponentHex: string },
+            params: { encShipCountForOpponentHex: string; encCellHexes: string[] },
           ) => {
             try {
               if (ctx.phase !== "placement") return INVALID_MOVE;
@@ -114,15 +115,26 @@ export const HEBattleshipGame: Game<HEBattleshipState> = {
                 (id) => id !== playerID,
               );
               if (!opponentId) return INVALID_MOVE;
-              const opponent = G.players[opponentId];
-              if (!opponent?.boardBits) return INVALID_MOVE;
+              const defender = G.players[opponentId];
+              if (!defender?.boardBits) return INVALID_MOVE;
 
               const idx = target.y * GRID_SIZE + target.x;
               if (idx < 0 || idx >= CELL_COUNT) return INVALID_MOVE;
               if (G.players[playerID].opponentMarks[idx] !== "unknown")
                 return INVALID_MOVE;
 
-              const bit = opponent.boardBits[idx];
+              // Paillier-based reveal path:
+              // The defender's encCellHexes[idx] is the Paillier encryption of boardBits[idx]
+              // In HBC model, defender self-reports isShip correctly.
+              // The aggregate will be verified at game end via verifyAggregateAtGameEnd().
+              // NOTE: A malicious defender can lie here - this is a known limitation of HBC.
+              // Proper fix requires ZK proofs (PLONK with range constraints).
+              const encCellHex = defender.encCellHexes?.[idx];
+              // HBC demo: fallback to boardBits since threshold decryption not wired
+              // Malicious defender can lie - known HBC limitation, requires ZK proofs to fix
+              const bit = defender.boardBits![idx];
+              applyDefenderReveal(G, opponentId, playerID, idx, bit === 1);
+
               applyVerifiedGuess(
                 G,
                 playerID,

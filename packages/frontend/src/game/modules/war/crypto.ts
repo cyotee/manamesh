@@ -3,13 +3,11 @@
  *
  * Mental poker integration for cryptographically fair War gameplay.
  * Provides encrypted deck management, collaborative reveals, shuffle proofs,
- * key escrow for abandonment support, and cooperative decryption workflow.
+ * and cooperative decryption workflow.
  *
  * Security Features:
  * - SRA commutative encryption for fair dealing
- * - Shamir's Secret Sharing for key escrow (N-1 threshold)
  * - Cooperative decryption requiring approval from all players
- * - Key release protocol for folded/disconnected players
  * - Verifiable shuffle proofs
  */
 
@@ -39,11 +37,13 @@ import {
   quickShuffle,
   buildCardPointLookup,
 } from "../../../crypto/mental-poker";
+import { secpIsValidPointHex } from "../../../crypto/secp256k1";
 import {
-  createKeyShares,
-  reconstructKeyFromShares,
-  type KeyShare,
-} from "../../../crypto/shamirs";
+  getCurrentSetupPlayer,
+  advanceSetupPlayer,
+  resetSetupPlayer,
+  lookupCardIdFromPoint,
+} from "../crypto-utils";
 
 // =============================================================================
 // Types
@@ -100,10 +100,6 @@ export interface CryptoWarPlayerState extends WarPlayerState {
   hasEncrypted: boolean;
   /** Whether this player has shuffled the deck */
   hasShuffled: boolean;
-  /** Has distributed key escrow shares */
-  hasDistributedShares: boolean;
-  /** Has released their key (after surrender/disconnect) */
-  hasReleasedKey: boolean;
   /** Is currently connected */
   isConnected: boolean;
   /** Timestamp of last heartbeat */
@@ -115,12 +111,12 @@ export interface CryptoWarPlayerState extends WarPlayerState {
  */
 export type CryptoWarPhase =
   | "keyExchange"
-  | "keyEscrow"
   | "encrypt"
   | "shuffle"
   | "flip"
   | "reveal"
   | "resolve"
+  | "reshuffling"
   | "gameOver"
   | "voided";
 
@@ -154,16 +150,6 @@ export interface CryptoWarState extends Omit<WarState, "players" | "phase"> {
   /** Current player index for setup phases */
   setupPlayerIndex: number;
 
-  // Abandonment support
-  /** Released private keys from surrendered/disconnected players */
-  releasedKeys: Record<string, string>;
-  /** Key escrow shares: playerId -> shares of their key */
-  keyEscrowShares: Record<string, KeyShare[]>;
-  /** Threshold for key reconstruction */
-  escrowThreshold: number;
-  /** Players who disconnected without releasing keys */
-  disconnectedPlayers: string[];
-
   // Notification support
   /** Reveal notifications for UI */
   revealNotifications: RevealNotification[];
@@ -173,11 +159,18 @@ export interface CryptoWarState extends Omit<WarState, "players" | "phase"> {
   decryptRequests: DecryptRequest[];
   /** Notifications for decrypt events */
   decryptNotifications: DecryptNotification[];
+
+  pendingReshuffle: ReshuffleInfo | null;
+
+  /** ctx.numMoves value recorded when the reveal phase was entered; used for stall detection. */
+  revealPhaseEnteredAt?: number;
 }
 
-/**
- * Configuration for crypto War game.
- */
+export interface ReshuffleInfo {
+  playerId: string;
+  step: "encrypt" | "shuffle";
+}
+
 export interface CryptoWarConfig extends GameConfig {
   /** Whether to use crypto (for backward compat testing) */
   useCrypto?: boolean;
@@ -206,6 +199,9 @@ const RANKS: WarCard["rank"][] = [
 
 /** Number of cards to place face-down during war */
 const WAR_FACE_DOWN_COUNT = 3;
+
+/** Moves either player may make before a stalled reveal can be voided. */
+export const WAR_REVEAL_STALL_WINDOW_MOVES = 8;
 
 // =============================================================================
 // Card Utilities
@@ -264,8 +260,6 @@ export function createCryptoWarState(config: CryptoWarConfig): CryptoWarState {
       publicKey: null,
       hasEncrypted: false,
       hasShuffled: false,
-      hasDistributedShares: false,
-      hasReleasedKey: false,
       isConnected: true,
       lastHeartbeat: Date.now(),
     };
@@ -298,40 +292,17 @@ export function createCryptoWarState(config: CryptoWarConfig): CryptoWarState {
     cardsToReveal: [],
     playerOrder,
     setupPlayerIndex: 0,
-    // Abandonment support
-    releasedKeys: {},
-    keyEscrowShares: {},
-    escrowThreshold: Math.max(2, playerOrder.length - 1), // N-1 threshold
-    disconnectedPlayers: [],
     // Notifications
     revealNotifications: [],
     // Cooperative decryption
     decryptRequests: [],
     decryptNotifications: [],
+    pendingReshuffle: null,
+    revealPhaseEnteredAt: undefined,
   };
 }
 
-/**
- * Get the current setup player (for sequential encryption/shuffle).
- */
-export function getCurrentSetupPlayer(state: CryptoWarState): string {
-  return state.playerOrder[state.setupPlayerIndex];
-}
-
-/**
- * Advance to next setup player, returning true if all done.
- */
-export function advanceSetupPlayer(state: CryptoWarState): boolean {
-  state.setupPlayerIndex++;
-  return state.setupPlayerIndex >= state.playerOrder.length;
-}
-
-/**
- * Reset setup player index for new phase.
- */
-export function resetSetupPlayer(state: CryptoWarState): void {
-  state.setupPlayerIndex = 0;
-}
+// getCurrentSetupPlayer, advanceSetupPlayer, resetSetupPlayer imported from ../crypto-utils
 
 /**
  * Check if all players have submitted public keys.
@@ -387,106 +358,7 @@ export function checkGameOver(state: CryptoWarState): string | null {
   return null;
 }
 
-// =============================================================================
-// Abandonment Support Helpers
-// =============================================================================
-
-/**
- * Check if player has released their key or is still active.
- */
-export function hasAvailableKey(
-  state: CryptoWarState,
-  playerId: string,
-): boolean {
-  return (
-    playerId in state.releasedKeys ||
-    (state.players[playerId]?.isConnected ?? false)
-  );
-}
-
-/**
- * Get all available keys (released + active players).
- */
-export function getAllAvailableKeys(state: CryptoWarState): Set<string> {
-  const keys = new Set<string>(Object.keys(state.releasedKeys));
-  for (const [playerId, player] of Object.entries(state.players)) {
-    if (player.isConnected) {
-      keys.add(playerId);
-    }
-  }
-  return keys;
-}
-
-/**
- * Check game viability - can we still complete reveals?
- */
-export function checkGameViability(state: CryptoWarState): "continue" | "void" {
-  const availableKeys = getAllAvailableKeys(state);
-
-  // For reveals, we need ALL player keys
-  for (const playerId of state.playerOrder) {
-    if (!availableKeys.has(playerId)) {
-      // Try to check escrow shares
-      const shares = state.keyEscrowShares[playerId] || [];
-      if (shares.length < state.escrowThreshold) {
-        return "void";
-      }
-    }
-  }
-
-  return "continue";
-}
-
-/**
- * Attempt key reconstruction from escrow shares.
- */
-export function attemptKeyReconstruction(
-  G: CryptoWarState,
-  playerId: string,
-): string | null {
-  const shares = G.keyEscrowShares[playerId];
-  if (!shares || shares.length < G.escrowThreshold) {
-    return null;
-  }
-
-  const reconstructed = reconstructKeyFromShares(shares, G.escrowThreshold);
-  if (reconstructed) {
-    G.releasedKeys[playerId] = reconstructed;
-  }
-
-  return reconstructed;
-}
-
-/**
- * Handle player disconnect.
- */
-export function handleDisconnect(G: CryptoWarState, playerId: string): void {
-  const player = G.players[playerId];
-  if (!player) return;
-
-  player.isConnected = false;
-  G.disconnectedPlayers.push(playerId);
-
-  // Check viability
-  if (checkGameViability(G) === "void") {
-    G.phase = "voided";
-  }
-}
-
-/**
- * Look up a card ID from its curve point.
- */
-function lookupCardIdFromPoint(
-  cardPointLookup: Record<string, string>,
-  point: string,
-): string | null {
-  for (const [cardId, cardPoint] of Object.entries(cardPointLookup)) {
-    if (cardPoint === point) {
-      return cardId;
-    }
-  }
-  return null;
-}
+// lookupCardIdFromPoint imported from ../crypto-utils
 
 // =============================================================================
 // Crypto Moves
@@ -529,61 +401,7 @@ export function submitPublicKey(
 
   // Check if all keys submitted
   if (allKeysSubmitted(G)) {
-    // Transition to key escrow phase (for abandonment support)
-    G.phase = "keyEscrow";
-    resetSetupPlayer(G);
-  }
-
-  return G;
-}
-
-/**
- * Distribute key escrow shares during key escrow phase.
- * Uses Shamir's Secret Sharing for threshold-based key recovery.
- */
-export function distributeKeyShares(
-  G: CryptoWarState,
-  ctx: Ctx,
-  playerId: string,
-  privateKey: string,
-  shares: KeyShare[],
-): CryptoWarState | typeof INVALID_MOVE {
-  console.log(
-    "[CryptoWar] distributeKeyShares called for player",
-    playerId,
-    "phase:",
-    G.phase,
-  );
-  if (G.phase !== "keyEscrow") {
-    console.log(
-      "[CryptoWar] distributeKeyShares INVALID_MOVE: not in keyEscrow phase",
-    );
-    return INVALID_MOVE;
-  }
-
-  const player = G.players[playerId];
-  if (!player) return INVALID_MOVE;
-  if (player.hasDistributedShares) return INVALID_MOVE;
-
-  // Store shares for this player's key
-  G.keyEscrowShares[playerId] = shares;
-  player.hasDistributedShares = true;
-
-  // DEMO ONLY: Store private key for decryption (NOT SECURE - for demo purposes only)
-  // In real implementation, keys would never be shared; only decryption shares would be exchanged
-  if (!G.crypto.privateKeys) {
-    G.crypto.privateKeys = {};
-  }
-  G.crypto.privateKeys[playerId] = privateKey;
-
-  // Check if all players have distributed
-  const allDistributed = G.playerOrder.every(
-    (pid) => G.players[pid].hasDistributedShares,
-  );
-  if (allDistributed) {
-    console.log(
-      "[CryptoWar] All players distributed key shares, transitioning to encrypt phase",
-    );
+    // Transition to encrypt phase
     G.phase = "encrypt";
     resetSetupPlayer(G);
   }
@@ -743,18 +561,10 @@ export function shuffleEncryptedDeck(
     dealEncryptedCards(G, ctx);
     G.phase = "flip";
 
-    // Only end the setup phase if we're actually in setup (first hand)
-    const isInSetupPhase = ctx.phase === "setup";
-    console.log(
-      "[CryptoWar] Shuffle complete. ctx.phase:",
-      ctx.phase,
-      "isInSetupPhase:",
-      isInSetupPhase,
-    );
-    if (isInSetupPhase && events?.endPhase) {
-      console.log("[CryptoWar] Ending setup phase, transitioning to play");
-      events.endPhase();
-    }
+    // Always signal boardgame.io to end the setup phase when G.phase advances.
+    // Guarding on ctx.phase === "setup" caused the two to diverge on reconnect.
+    console.log("[CryptoWar] Shuffle complete, ending setup phase.");
+    events?.endPhase?.();
   }
 
   return G;
@@ -783,13 +593,93 @@ function dealEncryptedCards(G: CryptoWarState, ctx: Ctx): void {
   }
 }
 
+export function reshuffleWonPile(
+  G: CryptoWarState,
+  ctx: Ctx,
+  playerId: string,
+  privateKey: string,
+): CryptoWarState | typeof INVALID_MOVE {
+  if (G.phase !== "flip" && G.phase !== "reshuffling") {
+    return INVALID_MOVE;
+  }
+
+  const player = G.players[playerId];
+  if (!player) return INVALID_MOVE;
+
+  const cryptoApi = CryptoPlugin.api({ G: G as any, ctx, data: G.crypto });
+  const playerZone = `deck_${playerId}`;
+
+  const pending = G.pendingReshuffle;
+  if (!pending) {
+    const cardCount = cryptoApi.getEncryptedCardCount(playerZone);
+    if (cardCount > 0) return INVALID_MOVE;
+    if (player.won.length === 0) return INVALID_MOVE;
+
+    G.pendingReshuffle = { playerId, step: "encrypt" };
+    G.phase = "reshuffling";
+  }
+
+  if (G.pendingReshuffle?.playerId !== playerId) return INVALID_MOVE;
+
+  const reshuffleZone = `reshuffle_${playerId}`;
+
+  if (G.pendingReshuffle.step === "encrypt") {
+    const wonCards = player.won;
+    if (wonCards.length === 0) {
+      G.pendingReshuffle = null;
+      G.phase = "flip";
+      return G;
+    }
+
+    const wonCardIds = wonCards.map((c) => c.id);
+    const existing = G.crypto.encryptedZones[reshuffleZone];
+
+    if (!existing || existing.length === 0) {
+      const encrypted = encryptDeckCrypto(wonCardIds, privateKey);
+      G.crypto.encryptedZones[reshuffleZone] = encrypted;
+      player.won = [];
+    } else {
+      const reencrypted = reencryptDeck(existing, privateKey);
+      G.crypto.encryptedZones[reshuffleZone] = reencrypted;
+    }
+
+    G.pendingReshuffle.step = "shuffle";
+    return G;
+  }
+
+  if (G.pendingReshuffle.step === "shuffle") {
+    const zone = G.crypto.encryptedZones[reshuffleZone];
+    if (!zone || zone.length === 0) {
+      G.pendingReshuffle = null;
+      G.phase = "flip";
+      return G;
+    }
+
+    const shuffled = quickShuffle(zone);
+    G.crypto.encryptedZones[reshuffleZone] = shuffled;
+
+    G.pendingReshuffle = null;
+    G.phase = "flip";
+
+    for (const card of zone) {
+      cryptoApi.moveEncryptedCard(reshuffleZone, playerZone, 0);
+    }
+
+    return G;
+  }
+
+  return G;
+}
+
 /**
  * Request to flip a card (starts reveal process).
+ * Optional reshufflePrivateKey enables atomic reshuffle of won pile when deck is empty.
  */
 export function flipCard(
   G: CryptoWarState,
   ctx: Ctx,
   playerId: string,
+  reshufflePrivateKey?: string,
 ): CryptoWarState | typeof INVALID_MOVE {
   if (G.phase !== "flip") {
     return INVALID_MOVE;
@@ -807,12 +697,31 @@ export function flipCard(
 
   const cryptoApi = CryptoPlugin.api({ G: G as any, ctx, data: G.crypto });
   const playerZone = `deck_${playerId}`;
-  const cardCount = cryptoApi.getEncryptedCardCount(playerZone);
+  let cardCount = cryptoApi.getEncryptedCardCount(playerZone);
 
+  // Handle empty deck with non-empty won pile: attempt reshuffle
   if (cardCount === 0) {
-    // Try to reshuffle won pile
-    // TODO: Handle reshuffle with new encryption
-    return INVALID_MOVE;
+    if (player.won.length === 0) {
+      // No cards anywhere - game over case
+      return INVALID_MOVE;
+    }
+
+    if (reshufflePrivateKey) {
+      // Atomic reshuffle: loop until reshuffle is complete (encrypt + shuffle)
+      while (G.pendingReshuffle || player.won.length > 0) {
+        const result = reshuffleWonPile(G, ctx, playerId, reshufflePrivateKey);
+        if (result === INVALID_MOVE) return INVALID_MOVE;
+        if (!G.pendingReshuffle) break;
+      }
+
+      cardCount = cryptoApi.getEncryptedCardCount(playerZone);
+      if (cardCount === 0) {
+        return INVALID_MOVE;
+      }
+    } else {
+      // No private key provided - board should retry with privateKey
+      return INVALID_MOVE;
+    }
   }
 
   // Move top card to pending reveal zone
@@ -828,6 +737,7 @@ export function flipCard(
 
   // Transition to reveal phase
   G.phase = "reveal";
+  G.revealPhaseEnteredAt = Number((ctx as any).numMoves ?? 0);
   G.cardsToReveal.push(G.playerOrder.indexOf(playerId));
 
   return G;
@@ -853,6 +763,12 @@ export function submitDecryptedShare(
   if (G.phase !== "reveal") {
     return INVALID_MOVE;
   }
+  if (!secpIsValidPointHex(decryptedCard.ciphertext)) {
+    return INVALID_MOVE;
+  }
+  if (ctx.playerID !== undefined && playerId !== ctx.playerID) {
+    return INVALID_MOVE;
+  }
 
   const revealKey = `${targetPlayerId}:0`;
   const pending = G.pendingReveals[revealKey];
@@ -867,10 +783,13 @@ export function submitDecryptedShare(
 
   pending[playerId] = true;
 
-  if (!G.decryptedCards) {
-    G.decryptedCards = {};
+  // Write back to the reveal zone so the next player decrypts the
+  // progressively stripped ciphertext rather than the original.
+  const revealZone = `reveal_${targetPlayerId}`;
+  if (!G.crypto.encryptedZones[revealZone]) {
+    G.crypto.encryptedZones[revealZone] = [];
   }
-  G.decryptedCards[playerId] = decryptedCard;
+  G.crypto.encryptedZones[revealZone][0] = decryptedCard;
 
   // Check if all shares submitted
   const allSubmitted = G.playerOrder.every((pid) => pending[pid]);
@@ -878,12 +797,12 @@ export function submitDecryptedShare(
   if (allSubmitted) {
     console.log("[CryptoWar] All decryption shares submitted, revealing card");
 
-    const revealZone = `reveal_${targetPlayerId}`;
+    const finalCard = G.crypto.encryptedZones[revealZone]?.[0];
 
-    if (decryptedCard.layers === 0) {
+    if (finalCard && finalCard.layers === 0) {
       const cardId = lookupCardIdFromPoint(
         G.crypto.cardPointLookup,
-        decryptedCard.ciphertext,
+        finalCard.ciphertext,
       );
       if (cardId) {
         const card = parseCardId(cardId);
@@ -895,6 +814,9 @@ export function submitDecryptedShare(
           targetPlayerId,
         );
         G.crypto.revealedCards[`${revealZone}:0`] = cardId;
+      } else {
+        G.phase = "voided";
+        return G;
       }
     }
 
@@ -917,6 +839,36 @@ export function submitDecryptedShare(
     }
   }
 
+  return G;
+}
+
+// =============================================================================
+// Reveal Stall Timeout
+// =============================================================================
+
+function canAbortRevealNow(G: CryptoWarState, ctx: Ctx): boolean {
+  if (G.revealPhaseEnteredAt === undefined) return false;
+  const now = Number((ctx as any).numMoves ?? 0);
+  return now - G.revealPhaseEnteredAt >= WAR_REVEAL_STALL_WINDOW_MOVES;
+}
+
+/**
+ * Vote to void a stalled reveal phase.
+ * Either player may call this once WAR_REVEAL_STALL_WINDOW_MOVES moves have
+ * elapsed since the reveal phase was entered without all shares being submitted.
+ */
+export function voteAbortReveal(
+  G: CryptoWarState,
+  ctx: Ctx,
+  playerId: string,
+): CryptoWarState | typeof INVALID_MOVE {
+  if (G.phase !== "reveal") return INVALID_MOVE;
+  if (ctx.playerID !== undefined && playerId !== ctx.playerID) {
+    return INVALID_MOVE;
+  }
+  if (!canAbortRevealNow(G, ctx)) return INVALID_MOVE;
+
+  G.phase = "voided";
   return G;
 }
 
@@ -949,8 +901,7 @@ export function requestDecrypt(
   );
   if (existingRequest) return INVALID_MOVE;
 
-  // Create the decrypt request
-  const requestId = `decrypt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const requestId = `decrypt-${crypto.randomUUID()}`;
 
   // Initialize approvals - requesting player auto-approves
   const approvals: Record<string, boolean> = {};
@@ -1040,6 +991,16 @@ export function approveDecrypt(
   }
   request.decryptionShares[playerId] = decryptedCard;
 
+  // Chain the decryption into the zone so the next approver receives the
+  // progressively stripped ciphertext rather than the original.
+  const encryptedZone = G.crypto.encryptedZones[request.zoneId];
+  if (encryptedZone && request.cardIndices.length > 0) {
+    const idx = request.cardIndices[0];
+    if (idx !== undefined) {
+      encryptedZone[idx] = decryptedCard;
+    }
+  }
+
   const notification: DecryptNotification = {
     type: "approval",
     requestId,
@@ -1069,7 +1030,8 @@ export function approveDecrypt(
       for (let i = 0; i < encryptedCards.length; i++) {
         if (!request.cardIndices.includes(i)) continue;
 
-        const decrypted = request.decryptionShares[playerId];
+        // Read the fully-chained result from the zone (written by the last approver).
+        const decrypted = encryptedCards[i];
         if (decrypted && decrypted.layers === 0) {
           const cardId = lookupCardIdFromPoint(
             G.crypto.cardPointLookup,
@@ -1122,42 +1084,17 @@ export function dismissNotification(
 }
 
 // =============================================================================
-// Key Release and Abandonment Moves
+// Surrender Move
 // =============================================================================
 
 /**
- * Release key after surrendering (required for abandonment support).
- * In War, a player might surrender if they can't continue.
- */
-export function releaseKey(
-  G: CryptoWarState,
-  ctx: Ctx,
-  playerId: string,
-  privateKey: string,
-): CryptoWarState | typeof INVALID_MOVE {
-  console.log("[CryptoWar] releaseKey called for player", playerId);
-
-  const player = G.players[playerId];
-  if (!player) return INVALID_MOVE;
-  if (player.hasReleasedKey) return INVALID_MOVE;
-
-  G.releasedKeys[playerId] = privateKey;
-  player.hasReleasedKey = true;
-
-  console.log("[CryptoWar] Player", playerId, "released their key");
-
-  return G;
-}
-
-/**
  * Surrender the game (forfeit).
- * Player must release their key when surrendering.
+ * Opponent wins immediately - no key recovery without Shamir.
  */
 export function surrender(
   G: CryptoWarState,
   ctx: Ctx,
   playerId: string,
-  privateKey: string,
 ): CryptoWarState | typeof INVALID_MOVE {
   console.log("[CryptoWar] surrender called for player", playerId);
 
@@ -1165,11 +1102,7 @@ export function surrender(
   if (!player) return INVALID_MOVE;
   if (G.phase === "gameOver" || G.phase === "voided") return INVALID_MOVE;
 
-  // Release the key
-  G.releasedKeys[playerId] = privateKey;
-  player.hasReleasedKey = true;
-
-  // Opponent wins
+  // Opponent wins - void hand (no key recovery without Shamir)
   const opponent = G.playerOrder.find((pid) => pid !== playerId);
   if (opponent) {
     G.winner = opponent;
@@ -1222,10 +1155,10 @@ export function resolveRound(
     const p1Cards = cryptoApi.getEncryptedCardCount(`deck_${p1Id}`);
     const p2Cards = cryptoApi.getEncryptedCardCount(`deck_${p2Id}`);
 
-    if (p1Cards === 0) {
+    if (p1Cards === 0 && G.players[p1Id].won.length === 0) {
       G.winner = p2Id;
       G.phase = "gameOver";
-    } else if (p2Cards === 0) {
+    } else if (p2Cards === 0 && G.players[p2Id].won.length === 0) {
       G.winner = p1Id;
       G.phase = "gameOver";
     }
@@ -1313,6 +1246,10 @@ export function verifyPlayerShuffle(
 export const CryptoWarGame: Game<CryptoWarState> = {
   name: "crypto-war",
 
+  // Stub: wire to a real session-token validator when a relay server is deployed.
+  // In pure P2P mode, ctx.playerID is enforced by the libp2p transport instead.
+  authenticateCredentials: () => true,
+
   setup: async (ctx): Promise<CryptoWarState> => {
     const state = createCryptoWarState({
       numPlayers: (ctx.numPlayers as number) ?? 2,
@@ -1334,7 +1271,7 @@ export const CryptoWarGame: Game<CryptoWarState> = {
       next: ({ G }) => {
         // During setup phases, use setupPlayerIndex
         if (
-          ["keyExchange", "keyEscrow", "encrypt", "shuffle"].includes(G.phase)
+          ["keyExchange", "encrypt", "shuffle"].includes(G.phase)
         ) {
           return G.setupPlayerIndex % G.playerOrder.length;
         }
@@ -1353,15 +1290,6 @@ export const CryptoWarGame: Game<CryptoWarState> = {
         submitPublicKey: {
           move: ({ G, ctx }, playerId: string, publicKey: string) =>
             submitPublicKey(G, ctx, playerId, publicKey),
-          client: false,
-        },
-        distributeKeyShares: {
-          move: (
-            { G, ctx },
-            playerId: string,
-            privateKey: string,
-            shares: KeyShare[],
-          ) => distributeKeyShares(G, ctx, playerId, privateKey, shares),
           client: false,
         },
         encryptDeck: {
@@ -1390,15 +1318,6 @@ export const CryptoWarGame: Game<CryptoWarState> = {
             submitPublicKey(G, ctx, playerId, publicKey),
           client: false,
         },
-        distributeKeyShares: {
-          move: (
-            { G, ctx },
-            playerId: string,
-            privateKey: string,
-            shares: KeyShare[],
-          ) => distributeKeyShares(G, ctx, playerId, privateKey, shares),
-          client: false,
-        },
         encryptDeck: {
           move: ({ G, ctx }, playerId: string, privateKey: string) =>
             encryptDeck(G, ctx, playerId, privateKey),
@@ -1412,7 +1331,11 @@ export const CryptoWarGame: Game<CryptoWarState> = {
 
         // Core game moves
         flipCard: {
-          move: ({ G, ctx }, playerId: string) => flipCard(G, ctx, playerId),
+          move: (
+            { G, ctx },
+            playerId: string,
+            reshufflePrivateKey?: string,
+          ) => flipCard(G, ctx, playerId, reshufflePrivateKey),
           client: false,
         },
         submitDecryptedShare: {
@@ -1429,6 +1352,11 @@ export const CryptoWarGame: Game<CryptoWarState> = {
               targetPlayerId,
               decryptedCard,
             ),
+          client: false,
+        },
+        voteAbortReveal: {
+          move: ({ G, ctx }, playerId: string) =>
+            voteAbortReveal(G, ctx, playerId),
           client: false,
         },
         resolveRound: {
@@ -1461,15 +1389,10 @@ export const CryptoWarGame: Game<CryptoWarState> = {
           client: false,
         },
 
-        // Key release and abandonment
-        releaseKey: {
-          move: ({ G, ctx }, playerId: string, privateKey: string) =>
-            releaseKey(G, ctx, playerId, privateKey),
-          client: false,
-        },
+        // Surrender
         surrender: {
-          move: ({ G, ctx }, playerId: string, privateKey: string) =>
-            surrender(G, ctx, playerId, privateKey),
+          move: ({ G, ctx }, playerId: string) =>
+            surrender(G, ctx, playerId),
           client: false,
         },
       },
@@ -1511,15 +1434,6 @@ export function validateCryptoMove(
       }
       if (state.players[playerId]?.publicKey) {
         return { valid: false, error: "Key already submitted" };
-      }
-      return { valid: true };
-
-    case "distributeKeyShares":
-      if (state.phase !== "keyEscrow") {
-        return { valid: false, error: "Not in key escrow phase" };
-      }
-      if (state.players[playerId]?.hasDistributedShares) {
-        return { valid: false, error: "Shares already distributed" };
       }
       return { valid: true };
 
@@ -1576,12 +1490,6 @@ export function validateCryptoMove(
     case "dismissNotification":
       return { valid: true };
 
-    case "releaseKey":
-      if (state.players[playerId]?.hasReleasedKey) {
-        return { valid: false, error: "Key already released" };
-      }
-      return { valid: true };
-
     case "surrender":
       if (state.phase === "gameOver" || state.phase === "voided") {
         return { valid: false, error: "Game already ended" };
@@ -1602,7 +1510,7 @@ export const CryptoWarModule = {
   name: "Crypto War",
   version: "2.0.0",
   description:
-    "War card game with mental poker cryptographic fairness, key escrow, and cooperative decryption",
+    "War card game with mental poker cryptographic fairness and cooperative decryption",
 
   zones: WAR_ZONES,
 
@@ -1619,11 +1527,6 @@ export const CryptoWarModule = {
   // Crypto-specific exports
   getShuffleProofs,
   verifyPlayerShuffle,
-
-  // Abandonment support exports
-  attemptKeyReconstruction,
-  checkGameViability,
-  handleDisconnect,
 };
 
 export default CryptoWarModule;

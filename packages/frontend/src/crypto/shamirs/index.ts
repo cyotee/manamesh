@@ -22,19 +22,20 @@
  * ```
  */
 
-export type {
-  SecretShare,
-  KeyShare,
-  SplitResult,
-  ShamirConfig,
-} from './types';
+export type { SecretShare, KeyShare, SplitResult, ShamirConfig } from "./types";
+
+export { PRIME, ReconstructionError, ShareValidationError } from "./types";
 
 export {
-  PRIME,
-  ReconstructionError,
-  ShareValidationError,
-} from './types';
+  splitSecret,
+  validateShare,
+  createKeyShares,
+  encryptShare,
+  decryptShare,
+} from "./split";
 
-export { splitSecret, validateShare, createKeyShares } from './split';
-
-export { reconstructSecret, canReconstruct, reconstructKeyFromShares } from './reconstruct';
+export {
+  reconstructSecret,
+  canReconstruct,
+  reconstructKeyFromShares,
+} from "./reconstruct";

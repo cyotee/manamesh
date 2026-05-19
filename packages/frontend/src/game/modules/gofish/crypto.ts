@@ -2,11 +2,13 @@
  * Crypto Go Fish Game Module
  *
  * Demo-private mental poker setup:
- * - keyExchange -> keyEscrow -> encrypt -> shuffle -> play
+ * - keyExchange -> encrypt -> shuffle -> play
  * - deck + hands stored as encryptedZones
  *
  * Security note:
- * - This module stores private keys in G.crypto.privateKeys (demo only).
+ * - Private keys are NEVER stored in shared game state.
+ * - In demo-private mode, peekHand uses only the caller's own key.
+ * - Cooperative decryption requires all players to submit decryption shares.
  */
 
 import type { Ctx, Game } from "boardgame.io";
@@ -26,9 +28,19 @@ import {
   stableStringify,
   ecdsaVerifyDigestHex,
 } from "../../../crypto";
-import type { KeyShare } from "../../../crypto/shamirs";
+import { secpIsValidPointHex } from "../../../crypto/secp256k1";
+import {
+  getCurrentSetupPlayer,
+  advanceSetupPlayer,
+  resetSetupPlayer,
+  lookupCardIdFromPoint,
+  deterministicShuffle,
+} from "../crypto-utils";
 
-import { GOFISH_SHUFFLE_STALL_WINDOW_MOVES } from "./types";
+import {
+  GOFISH_SHUFFLE_STALL_WINDOW_MOVES,
+  GOFISH_REVEAL_STALL_WINDOW_MOVES,
+} from "./types";
 import type {
   CryptoGoFishPhase,
   CryptoGoFishPlayerState,
@@ -83,26 +95,7 @@ function isHex(s: string): boolean {
   return typeof s === "string" && /^[0-9a-fA-F]+$/.test(s);
 }
 
-function deterministicShuffle<T>(arr: T[], seedHex: string): T[] {
-  const out = arr.slice();
-  const len = out.length;
-  if (len <= 1) return out;
-  if (!isHex(seedHex) || seedHex.length === 0) return out;
-
-  let counter = 0;
-  const nextU32 = (): number => {
-    const bytes = new TextEncoder().encode(`${seedHex}:${counter++}`);
-    const hex = sha256Hex(bytes);
-    return parseInt(hex.slice(0, 8), 16) >>> 0;
-  };
-
-  for (let i = len - 1; i > 0; i--) {
-    const j = nextU32() % (i + 1);
-    [out[i], out[j]] = [out[j], out[i]];
-  }
-
-  return out;
-}
+// deterministicShuffle imported from ../crypto-utils
 
 function ensureShuffleRng(G: CryptoGoFishState): ShuffleRngState {
   const existing = (G as any).shuffleRng as ShuffleRngState | undefined;
@@ -197,56 +190,26 @@ export function handSizeForPlayers(numPlayers: number): number {
   return numPlayers <= 2 ? 7 : 5;
 }
 
-export function getCurrentSetupPlayer(state: CryptoGoFishState): string {
-  return state.playerOrder[state.setupPlayerIndex];
-}
-
-export function advanceSetupPlayer(state: CryptoGoFishState): boolean {
-  state.setupPlayerIndex++;
-  return state.setupPlayerIndex >= state.playerOrder.length;
-}
-
-export function resetSetupPlayer(state: CryptoGoFishState): void {
-  state.setupPlayerIndex = 0;
-}
+// getCurrentSetupPlayer, advanceSetupPlayer, resetSetupPlayer imported from ../crypto-utils
+export { getCurrentSetupPlayer, advanceSetupPlayer, resetSetupPlayer } from "../crypto-utils";
 
 export function allKeysSubmitted(state: CryptoGoFishState): boolean {
   return state.playerOrder.every((id) => state.players[id].publicKey !== null);
 }
 
-function lookupCardIdFromPoint(
-  cardPointLookup: Record<string, string>,
-  point: string,
-): string | null {
-  for (const [cardId, cardPoint] of Object.entries(cardPointLookup)) {
-    if (cardPoint === point) return cardId;
-  }
-  return null;
-}
+// lookupCardIdFromPoint imported from ../crypto-utils
 
 function decryptToCardId(
-  G: CryptoGoFishState,
-  encryptedCard: EncryptedCard,
+  _G: CryptoGoFishState,
+  _encryptedCard: EncryptedCard,
 ): string | null {
-  if (G.securityMode !== "demo-private") return null;
-  // In demo-private mode we can decrypt by applying *all* private keys.
-  // NOTE: Object iteration order matters here; use playerOrder to keep it stable.
-  const keys = G.playerOrder
-    .map((pid) => G.crypto.privateKeys?.[pid])
-    .filter(Boolean) as string[];
-  if (keys.length === 0) return null;
-
-  let decrypted = { ...encryptedCard };
-  for (const key of keys) {
-    if (decrypted.layers <= 0) break;
-    try {
-      decrypted = decrypt(decrypted, key);
-    } catch {
-      // ignore and keep trying; demo mode
-    }
-  }
-  if (decrypted.layers !== 0) return null;
-  return lookupCardIdFromPoint(G.crypto.cardPointLookup, decrypted.ciphertext);
+  // demo-private mode is now disabled — private keys must never be in shared state.
+  // Use 'coop-reveal' (cooperative decryption) or 'zk-attest' (ZK proofs) instead.
+  throw new Error(
+    "demo-private security mode is disabled. " +
+    "Private keys can no longer be stored in shared game state. " +
+    "Use securityMode='coop-reveal' or securityMode='zk-attest' instead.",
+  );
 }
 
 function ensureZone(G: CryptoGoFishState, zoneId: string): EncryptedCard[] {
@@ -290,6 +253,7 @@ function ensurePendingReveal(
     indices: unique,
     timestamp: deterministicStamp(ctx),
   };
+  G.revealStallEnteredAt = ctxNumMoves(ctx);
 }
 
 function isPendingRevealComplete(G: CryptoGoFishState): boolean {
@@ -330,9 +294,11 @@ function handHasRank(
   playerId: string,
   rank: GoFishRank,
 ): boolean {
+  // decryptToCardId is disabled — cannot validate hand contents in demo-private mode.
+  if (G.securityMode !== "demo-private") return false;
   const hand = ensureZone(G, `hand:${playerId}`);
   for (const encryptedCard of hand) {
-    const cardId = decryptToCardId(G, encryptedCard);
+    const cardId: string | null = null; // was: decryptToCardId(G, encryptedCard)
     if (!cardId) continue;
     if (parseCardId(cardId).rank === rank) return true;
   }
@@ -411,7 +377,6 @@ export function createCryptoGoFishState(config: GameConfig): CryptoGoFishState {
     players[playerId] = {
       publicKey: null,
       zkSigPublicKey: null,
-      hasDistributedShares: false,
       hasEncrypted: false,
       hasShuffled: false,
       hasPeeked: false,
@@ -452,7 +417,7 @@ export function createCryptoGoFishState(config: GameConfig): CryptoGoFishState {
   return {
     players,
     phase: "keyExchange",
-    securityMode: "demo-private",
+    securityMode: "coop-reveal",
     crypto: cryptoState,
     cardIds,
     playerOrder,
@@ -681,9 +646,9 @@ export function submitPublicKey(
   pushLog(G, ctx, `Player ${playerId} submitted their public key.`);
 
   if (allKeysSubmitted(G)) {
-    G.phase = "keyEscrow";
+    G.phase = "encrypt";
     resetSetupPlayer(G);
-    pushLog(G, ctx, "All public keys submitted. Moving to key escrow.");
+    pushLog(G, ctx, "All public keys submitted. Starting deck encryption.");
   }
 
   return G;
@@ -709,46 +674,6 @@ export function submitZkSigPublicKey(
     return INVALID_MOVE;
   }
   player.zkSigPublicKey = zkSigPublicKey;
-  return G;
-}
-
-export function distributeKeyShares(
-  G: CryptoGoFishState,
-  ctx: Ctx,
-  playerId: string,
-  privateKey: string,
-  shares: KeyShare[],
-): CryptoGoFishState | typeof INVALID_MOVE {
-  if (G.phase !== "keyEscrow") return INVALID_MOVE;
-  const player = G.players[playerId];
-  if (!player) return INVALID_MOVE;
-  if (player.hasDistributedShares) return INVALID_MOVE;
-
-  // Shares are accepted for future abandonment support (not used yet).
-  void shares;
-
-  player.hasDistributedShares = true;
-
-  if (G.securityMode === "demo-private") {
-    // DEMO ONLY: store private key in shared state.
-    if (!G.crypto.privateKeys) G.crypto.privateKeys = {};
-    G.crypto.privateKeys[playerId] = privateKey;
-    pushLog(G, ctx, `Player ${playerId} escrowed their key (demo).`);
-  } else {
-    // In coop-reveal mode, never store private keys in shared state.
-    void privateKey;
-    pushLog(G, ctx, `Player ${playerId} completed key escrow.`);
-  }
-
-  const allDistributed = G.playerOrder.every(
-    (pid) => G.players[pid].hasDistributedShares,
-  );
-  if (allDistributed) {
-    G.phase = "encrypt";
-    resetSetupPlayer(G);
-    pushLog(G, ctx, "All keys escrowed. Starting deck encryption.");
-  }
-
   return G;
 }
 
@@ -821,10 +746,9 @@ export function shuffleDeck(
     G.phase = "play";
     pushLog(G, ctx, "Hands dealt. Play begins.");
 
-    const isInSetupPhase = ctx.phase === "setup";
-    if (isInSetupPhase && events?.endPhase) {
-      events.endPhase();
-    }
+    // Always signal boardgame.io to end the setup phase when G.phase advances.
+    // Guarding on ctx.phase === "setup" caused the two to diverge on reconnect.
+    events?.endPhase?.();
   }
 
   return G;
@@ -879,11 +803,8 @@ export function peekHand(
     return G;
   }
 
-  // Demo: decrypt with player's key + all others in shared state.
+  // Decrypt with player's own key only — private keys are never in shared state.
   const allPrivateKeys: string[] = [privateKey];
-  for (const [pid, key] of Object.entries(G.crypto.privateKeys ?? {})) {
-    if (pid !== playerId && key) allPrivateKeys.push(key);
-  }
 
   const peeked: GoFishCard[] = [];
   for (const encryptedCard of handZone) {
@@ -1111,9 +1032,11 @@ export function respondToAsk(
   const askerHand = ensureZone(G, `hand:${ask.asker}`);
 
   // Determine which cards match the asked rank (demo: decrypt in move).
+  // decryptToCardId is disabled — conservatively treat every card as a non-match
+  // so the asker must Go Fish. Re-enable when demo-private decryption is restored.
   const indicesToGive: number[] = [];
   for (let i = 0; i < targetHand.length; i++) {
-    const cardId = decryptToCardId(G, targetHand[i]);
+    const cardId: string | null = null; // was: decryptToCardId(G, targetHand[i])
     if (!cardId) continue;
     const card = parseCardId(cardId);
     if (card.rank === ask.rank) indicesToGive.push(i);
@@ -1215,9 +1138,11 @@ export function goFish(
     G.awaitingGoFishRank = null;
     G.awaitingGoFishDrawCardKey = drawnKey;
 
+    // decryptToCardId is disabled — conservatively treat drawn card as no match
+    // so the turn passes. Re-enable when demo-private decryption is restored.
     let drewMatch = false;
     if (card && askedRank) {
-      const cardId = decryptToCardId(G, card);
+      const cardId: string | null = null; // was: decryptToCardId(G, card)
       if (cardId && parseCardId(cardId).rank === askedRank) {
         drewMatch = true;
       }
@@ -1549,6 +1474,9 @@ export function submitDecryptedShare(
 ): CryptoGoFishState | typeof INVALID_MOVE {
   if (G.phase !== "play") return INVALID_MOVE;
   if (G.securityMode !== "coop-reveal") return INVALID_MOVE;
+  if (ctx.playerID !== undefined && playerId !== ctx.playerID) {
+    return INVALID_MOVE;
+  }
 
   const key = `${zoneId}:${cardIndex}`;
   if (G.awaitingGoFishDrawCardKey && G.awaitingGoFishDrawCardKey !== key) {
@@ -1574,6 +1502,16 @@ export function submitDecryptedShare(
   if (!G.crypto.pendingReveals[key]) G.crypto.pendingReveals[key] = {};
   if (G.crypto.pendingReveals[key][playerId]) return INVALID_MOVE;
 
+  // Reject malformed ciphertext — must be a valid curve point
+  if (!secpIsValidPointHex(decryptedCard.ciphertext)) {
+    pushLog(
+      G,
+      ctx,
+      `Invalid ciphertext from ${playerId} — not a valid curve point.`,
+    );
+    return INVALID_MOVE;
+  }
+
   zone[cardIndex] = decryptedCard;
   G.crypto.pendingReveals[key][playerId] = decryptedCard.ciphertext;
 
@@ -1594,11 +1532,46 @@ export function submitDecryptedShare(
 }
 
 // =============================================================================
+// Reveal Stall Timeout
+// =============================================================================
+
+function canAbortRevealNow(G: CryptoGoFishState, ctx: Ctx): boolean {
+  if (G.revealStallEnteredAt === undefined) return false;
+  return ctxNumMoves(ctx) - G.revealStallEnteredAt >= GOFISH_REVEAL_STALL_WINDOW_MOVES;
+}
+
+/**
+ * Vote to void a stalled cooperative card reveal.
+ * Either player may call this once GOFISH_REVEAL_STALL_WINDOW_MOVES moves have
+ * elapsed since the reveal was initiated without all shares being submitted.
+ */
+export function voteAbortReveal(
+  G: CryptoGoFishState,
+  ctx: Ctx,
+  playerId: string,
+): CryptoGoFishState | typeof INVALID_MOVE {
+  if (G.phase !== "play") return INVALID_MOVE;
+  if (G.securityMode !== "coop-reveal") return INVALID_MOVE;
+  if (ctx.playerID !== undefined && playerId !== ctx.playerID) {
+    return INVALID_MOVE;
+  }
+  if (!G.pendingReveal) return INVALID_MOVE;
+  if (!canAbortRevealNow(G, ctx)) return INVALID_MOVE;
+
+  G.phase = "voided";
+  return G;
+}
+
+// =============================================================================
 // boardgame.io Game Definition
 // =============================================================================
 
 export const CryptoGoFishGame: Game<CryptoGoFishState> = {
   name: "crypto-gofish",
+
+  // Stub: wire to a real session-token validator when a relay server is deployed.
+  // In pure P2P mode, ctx.playerID is enforced by the libp2p transport instead.
+  authenticateCredentials: () => true,
 
   setup: async (ctx): Promise<CryptoGoFishState> => {
     const numPlayers = (ctx.numPlayers as number) ?? 2;
@@ -1621,7 +1594,7 @@ export const CryptoGoFishGame: Game<CryptoGoFishState> = {
       first: () => 0,
       next: ({ G }) => {
         if (
-          ["keyExchange", "keyEscrow", "encrypt", "shuffle"].includes(G.phase)
+          ["keyExchange", "encrypt", "shuffle"].includes(G.phase)
         ) {
           return G.setupPlayerIndex % G.playerOrder.length;
         }
@@ -1646,15 +1619,6 @@ export const CryptoGoFishGame: Game<CryptoGoFishState> = {
             playerId: string,
             zkSigPublicKey: string,
           ) => submitZkSigPublicKey(G, ctx, playerId, zkSigPublicKey, playerID),
-          client: false,
-        },
-        distributeKeyShares: {
-          move: (
-            { G, ctx },
-            playerId: string,
-            privateKey: string,
-            shares: KeyShare[],
-          ) => distributeKeyShares(G, ctx, playerId, privateKey, shares),
           client: false,
         },
         encryptDeck: {
@@ -1707,15 +1671,6 @@ export const CryptoGoFishGame: Game<CryptoGoFishState> = {
             playerId: string,
             zkSigPublicKey: string,
           ) => submitZkSigPublicKey(G, ctx, playerId, zkSigPublicKey, playerID),
-          client: false,
-        },
-        distributeKeyShares: {
-          move: (
-            { G, ctx },
-            playerId: string,
-            privateKey: string,
-            shares: KeyShare[],
-          ) => distributeKeyShares(G, ctx, playerId, privateKey, shares),
           client: false,
         },
         encryptDeck: {
@@ -1833,6 +1788,11 @@ export const CryptoGoFishGame: Game<CryptoGoFishState> = {
             ),
           client: false,
         },
+        voteAbortReveal: {
+          move: ({ G, ctx }, playerId: string) =>
+            voteAbortReveal(G, ctx, playerId),
+          client: false,
+        },
       },
     },
   },
@@ -1854,8 +1814,6 @@ export const CryptoGoFishSecureGame: Game<CryptoGoFishState> = {
       Array.from({ length: numPlayers }, (_, i) => String(i));
     const state = createCryptoGoFishState({ numPlayers, playerIDs });
     state.securityMode = "coop-reveal";
-    // In secure mode, do not rely on demo-private key storage.
-    delete (state.crypto as any).privateKeys;
     return state;
   },
 };
@@ -1863,6 +1821,8 @@ export const CryptoGoFishSecureGame: Game<CryptoGoFishState> = {
 export const CryptoGoFishZkAttestGame: Game<CryptoGoFishState> = {
   ...CryptoGoFishGame,
   name: "crypto-gofish-zk-attest",
+  // EXPERIMENTAL: ZK Attest mode relies on placeholder proofs; circuits are
+  // not implemented yet. Keep this flag to warn developers at runtime.
   setup: (ctx): CryptoGoFishState => {
     const numPlayers = (ctx.numPlayers as number) ?? 2;
     const playerIDs =
@@ -1870,8 +1830,11 @@ export const CryptoGoFishZkAttestGame: Game<CryptoGoFishState> = {
       Array.from({ length: numPlayers }, (_, i) => String(i));
     const state = createCryptoGoFishState({ numPlayers, playerIDs });
     state.securityMode = "zk-attest";
-    // In ZK mode, do not rely on demo-private key storage.
-    delete (state.crypto as any).privateKeys;
+    // Runtime warning for developers / testers.
+    // ZK circuits and real proof generation are not implemented yet.
+    // This mode is experimental and should not be used in production.
+    // eslint-disable-next-line no-console
+    console.warn("[CryptoGoFish] ZK Attest mode: ZK circuits are not yet implemented. This mode is experimental.");
     return state;
   },
 };

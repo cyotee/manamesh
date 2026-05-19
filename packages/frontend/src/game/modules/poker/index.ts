@@ -94,9 +94,6 @@ export {
   getCurrentSetupPlayer,
   advanceSetupPlayer,
   resetSetupPlayer,
-  hasAvailableKey,
-  getAllAvailableKeys,
-  checkGameViability,
 } from './crypto';
 
 // Default export is standard poker

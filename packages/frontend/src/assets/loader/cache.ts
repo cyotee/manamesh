@@ -127,16 +127,16 @@ export async function getCardImage(
 
 /**
  * Check if a card image is cached.
+ * Uses the pack metadata's cachedCardIds list to avoid loading the full Blob.
  */
 export async function isCardImageCached(
   packId: string,
   cardId: string,
   side: 'front' | 'back'
 ): Promise<boolean> {
-  initStores();
-  const key = makeCardImageKey(packId, cardId, side);
-  const blob = await get<Blob>(key, cardImageStore);
-  return blob !== undefined;
+  const metadata = await getPackMetadata(packId);
+  if (!metadata) return false;
+  return metadata.cachedCardIds.includes(`${cardId}:${side}`);
 }
 
 /**

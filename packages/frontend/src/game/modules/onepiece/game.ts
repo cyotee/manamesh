@@ -15,8 +15,8 @@
  * - voided: Unrecoverable failure
  */
 
-import type { Game, Ctx } from 'boardgame.io';
-import { INVALID_MOVE } from 'boardgame.io/core';
+import type { Game, Ctx } from "boardgame.io";
+import { INVALID_MOVE } from "boardgame.io/core";
 import type {
   OnePieceCard,
   OnePieceDonCard,
@@ -25,14 +25,41 @@ import type {
   OnePieceModuleConfig,
   AnyOnePieceCard,
   PlayAreaSlot,
-} from './types';
-import { DEFAULT_CONFIG } from './types';
-import type { CardSchema, GameConfig, MoveValidation } from '../types';
-import { ONEPIECE_ZONES } from './zones';
-import { createPlayArea, attachDon, detachDon, placeCardInSlot, removeCardFromSlot } from './playArea';
-import { transitionCardVisibility, initializeCardVisibility } from './visibility';
-import { createPeekRequest, acknowledgePeekRequest, ownerDecryptPeek, reorderPeekedCards, completePeek } from './peek';
-import { createProof, appendProof, verifyProofChain } from './proofChain';
+} from "./types";
+import { DEFAULT_CONFIG } from "./types";
+import type { CardSchema, GameConfig, MoveValidation } from "../types";
+import { ONEPIECE_ZONES } from "./zones";
+import {
+  createPlayArea,
+  attachDon,
+  detachDon,
+  placeCardInSlot,
+  removeCardFromSlot,
+} from "./playArea";
+import {
+  transitionCardVisibility,
+  initializeCardVisibility,
+} from "./visibility";
+import {
+  createPeekRequest,
+  acknowledgePeekRequest,
+  ownerDecryptPeek,
+  reorderPeekedCards,
+  completePeek,
+} from "./peek";
+import { createProof, appendProof } from "./proofChain";
+import {
+  OnePieceCryptoGame,
+  createCryptoInitialState,
+  submitPublicKey,
+  encryptDeck,
+  commitShuffleSeed,
+  revealShuffleSeed,
+  shuffleEncryptedDeck,
+  submitDecryptionShare,
+  releaseKey,
+  voteAbortReveal,
+} from "./crypto";
 
 // =============================================================================
 // Card Creation Helpers
@@ -41,13 +68,16 @@ import { createProof, appendProof, verifyProofChain } from './proofChain';
 /**
  * Create DON!! cards for a player.
  */
-export function createDonCards(count: number, playerId: string): OnePieceDonCard[] {
+export function createDonCards(
+  count: number,
+  playerId: string,
+): OnePieceDonCard[] {
   const cards: OnePieceDonCard[] = [];
   for (let i = 0; i < count; i++) {
     cards.push({
       id: `don-${playerId}-${i}`,
-      name: 'DON!!',
-      cardType: 'don',
+      name: "DON!!",
+      cardType: "don",
     });
   }
   return cards;
@@ -114,16 +144,25 @@ export function createInitialState(
     zones.donArea[playerId] = [];
   }
 
+  const deckLoaded: Record<string, boolean> = {};
+  const leaderLife: Record<string, number> = {};
+  for (const playerId of config.playerIDs) {
+    deckLoaded[playerId] = false;
+    leaderLife[playerId] = moduleConfig.startingLife;
+  }
+
   return {
     players,
     config: moduleConfig,
-    phase: 'setup',
+    phase: "setup",
     winner: null,
     turnCount: 0,
     cardVisibility: {},
     activePeeks: [],
     proofChain: [],
     zones,
+    deckLoaded,
+    leaderLife,
   };
 }
 
@@ -151,35 +190,43 @@ function syncZones(state: OnePieceState): void {
  * Load a player's deck into the game.
  * Called during setup phase. Each player submits their deck list.
  */
-function loadDeck(
+export function loadDeck(
   G: OnePieceState,
   ctx: Ctx,
   playerId: string,
   cards: OnePieceCard[],
 ): OnePieceState | typeof INVALID_MOVE {
+  if (G.phase !== "setup") return INVALID_MOVE;
+
   const player = G.players[playerId];
   if (!player) return INVALID_MOVE;
+  if (G.deckLoaded[playerId]) return INVALID_MOVE;
 
-  // Find the leader card
-  const leaderIndex = cards.findIndex((c) => c.cardType === 'leader');
+  const leaderIndex = cards.findIndex((c) => c.cardType === "leader");
   if (leaderIndex === -1) return INVALID_MOVE;
 
   const leader = cards[leaderIndex];
   const mainDeckCards = cards.filter((_, i) => i !== leaderIndex);
 
-  // Place leader in the leader slot
-  const leaderSlot = player.playArea.find((s) => s.slotType === 'leader');
+  const leaderSlot = player.playArea.find((s) => s.slotType === "leader");
   if (!leaderSlot) return INVALID_MOVE;
   leaderSlot.cardId = leader.id;
 
-  // Set up main deck
   player.mainDeck = shuffleDeck(mainDeckCards);
 
-  // Set up life deck (top N cards from main deck)
-  const lifeCards = player.mainDeck.splice(0, leader.life ?? G.config.startingLife);
+  const lifeCards = player.mainDeck.splice(
+    0,
+    leader.life ?? G.config.startingLife,
+  );
   player.lifeDeck = lifeCards;
 
-  // Initialize visibility for all cards
+  // Store card IDs for crypto mode
+  if (!G.deckCardIds) G.deckCardIds = {};
+  if (!G.lifeDeckIds) G.lifeDeckIds = {};
+  // Record IDs from the shuffled deck, not the pre-shuffle input list.
+  G.deckCardIds[playerId] = player.mainDeck.map((c) => c.id);
+  G.lifeDeckIds[playerId] = player.lifeDeck.map((c) => c.id);
+
   const allCardIds = [
     leader.id,
     ...mainDeckCards.map((c) => c.id),
@@ -187,8 +234,14 @@ function loadDeck(
   ];
   initializeCardVisibility(G, allCardIds);
 
-  // Leader is public
-  G.cardVisibility[leader.id] = 'public';
+  G.cardVisibility[leader.id] = "public";
+  G.deckLoaded[playerId] = true;
+  G.leaderLife[playerId] = leader.life ?? G.config.startingLife;
+
+  const allLoaded = Object.keys(G.players).every((pid) => G.deckLoaded[pid]);
+  if (allLoaded) {
+    G.phase = "keyExchange";
+  }
 
   syncZones(G);
   return G;
@@ -206,6 +259,7 @@ function drawCard(
   ctx: Ctx,
   playerId?: string,
 ): OnePieceState | typeof INVALID_MOVE {
+  if (G.phase !== "play") return INVALID_MOVE;
   const pid = playerId ?? ctx.currentPlayer;
   const player = G.players[pid];
   if (!player || player.mainDeck.length === 0) return INVALID_MOVE;
@@ -214,7 +268,7 @@ function drawCard(
   player.hand.push(card);
 
   // Transition visibility: encrypted → owner-known
-  transitionCardVisibility(G, card.id, 'owner-known', pid, 'draw');
+  transitionCardVisibility(G, card.id, "owner-known", pid, "draw");
 
   syncZones(G);
   return G;
@@ -229,6 +283,7 @@ function drawDon(
   playerId?: string,
   count: number = 1,
 ): OnePieceState | typeof INVALID_MOVE {
+  if (G.phase !== "play") return INVALID_MOVE;
   const pid = playerId ?? ctx.currentPlayer;
   const player = G.players[pid];
   if (!player) return INVALID_MOVE;
@@ -240,7 +295,7 @@ function drawDon(
     const don = player.donDeck.shift()!;
     player.donArea.push(don);
     player.activeDon++;
-    G.cardVisibility[don.id] = 'public';
+    G.cardVisibility[don.id] = "public";
   }
 
   syncZones(G);
@@ -257,6 +312,8 @@ function playCard(
   cardId: string,
   slotPosition: number,
 ): OnePieceState | typeof INVALID_MOVE {
+  if (G.phase !== "play") return INVALID_MOVE;
+  if (ctx.currentPlayer !== playerId) return INVALID_MOVE;
   const player = G.players[playerId];
   if (!player) return INVALID_MOVE;
 
@@ -265,20 +322,28 @@ function playCard(
 
   const card = player.hand[cardIndex];
 
-  // Check slot compatibility
+  if (typeof card.cost === "number" && card.cost > player.activeDon) {
+    return INVALID_MOVE;
+  }
+
   const slot = player.playArea.find((s) => s.position === slotPosition);
   if (!slot || slot.cardId !== null) return INVALID_MOVE;
 
-  if (card.cardType === 'leader' && slot.slotType !== 'leader') return INVALID_MOVE;
-  if (card.cardType === 'character' && slot.slotType !== 'character') return INVALID_MOVE;
-  if (card.cardType === 'stage' && slot.slotType !== 'stage') return INVALID_MOVE;
+  if (card.cardType === "leader" && slot.slotType !== "leader")
+    return INVALID_MOVE;
+  if (card.cardType === "character" && slot.slotType !== "character")
+    return INVALID_MOVE;
+  if (card.cardType === "stage" && slot.slotType !== "stage")
+    return INVALID_MOVE;
 
-  // Move card from hand to play area
   player.hand.splice(cardIndex, 1);
   placeCardInSlot(player.playArea, slotPosition, cardId);
 
-  // Transition visibility: owner-known → public
-  transitionCardVisibility(G, cardId, 'public', playerId, 'playCard');
+  if (typeof card.cost === "number") {
+    player.activeDon -= card.cost;
+  }
+
+  transitionCardVisibility(G, cardId, "public", playerId, "playCard");
 
   syncZones(G);
   return G;
@@ -293,6 +358,8 @@ function playEvent(
   playerId: string,
   cardId: string,
 ): OnePieceState | typeof INVALID_MOVE {
+  if (G.phase !== "play") return INVALID_MOVE;
+  if (ctx.currentPlayer !== playerId) return INVALID_MOVE;
   const player = G.players[playerId];
   if (!player) return INVALID_MOVE;
 
@@ -300,14 +367,14 @@ function playEvent(
   if (cardIndex === -1) return INVALID_MOVE;
 
   const card = player.hand[cardIndex];
-  if (card.cardType !== 'event') return INVALID_MOVE;
+  if (card.cardType !== "event") return INVALID_MOVE;
 
   // Move to trash
   player.hand.splice(cardIndex, 1);
   player.trash.push(card);
 
   // Transition to public (visible in trash)
-  transitionCardVisibility(G, cardId, 'public', playerId, 'playEvent');
+  transitionCardVisibility(G, cardId, "public", playerId, "playEvent");
 
   syncZones(G);
   return G;
@@ -322,6 +389,8 @@ function trashFromPlay(
   playerId: string,
   slotPosition: number,
 ): OnePieceState | typeof INVALID_MOVE {
+  if (G.phase !== "play") return INVALID_MOVE;
+  if (ctx.currentPlayer !== playerId) return INVALID_MOVE;
   const player = G.players[playerId];
   if (!player) return INVALID_MOVE;
 
@@ -340,7 +409,7 @@ function trashFromPlay(
 
   // Card data might be stored separately — for now, create a reference
   const proof = createProof(
-    'trashFromPlay',
+    "trashFromPlay",
     { cardId, slotPosition },
     G.proofChain.length > 0 ? G.proofChain[G.proofChain.length - 1].hash : null,
   );
@@ -360,6 +429,8 @@ function attachDonToSlot(
   slotPosition: number,
   count: number,
 ): OnePieceState | typeof INVALID_MOVE {
+  if (G.phase !== "play") return INVALID_MOVE;
+  if (ctx.currentPlayer !== playerId) return INVALID_MOVE;
   const player = G.players[playerId];
   if (!player) return INVALID_MOVE;
 
@@ -388,6 +459,8 @@ function detachDonFromSlot(
   slotPosition: number,
   count: number,
 ): OnePieceState | typeof INVALID_MOVE {
+  if (G.phase !== "play") return INVALID_MOVE;
+  if (ctx.currentPlayer !== playerId) return INVALID_MOVE;
   const player = G.players[playerId];
   if (!player) return INVALID_MOVE;
 
@@ -396,8 +469,8 @@ function detachDonFromSlot(
 
   // Return DON!! cards to area
   for (let i = 0; i < detached; i++) {
-    const donId = `don-${playerId}-return-${Date.now()}-${i}`;
-    player.donArea.push({ id: donId, name: 'DON!!', cardType: 'don' });
+    const donId = `don-${playerId}-return-${ctx.turn}-${i}`;
+    player.donArea.push({ id: donId, name: "DON!!", cardType: "don" });
   }
 
   syncZones(G);
@@ -412,19 +485,24 @@ function takeLifeDamage(
   ctx: Ctx,
   playerId: string,
 ): OnePieceState | typeof INVALID_MOVE {
+  if (G.phase !== "play") return INVALID_MOVE;
+  if (ctx.currentPlayer !== playerId) return INVALID_MOVE;
   const player = G.players[playerId];
   if (!player || player.lifeDeck.length === 0) return INVALID_MOVE;
 
   const card = player.lifeDeck.shift()!;
   player.hand.push(card);
 
-  // Life card revealed then added to hand
-  transitionCardVisibility(G, card.id, 'owner-known', playerId, 'lifeDamage');
+  transitionCardVisibility(G, card.id, "owner-known", playerId, "lifeDamage");
 
-  // Check for game over (0 life AND receiving damage)
-  if (player.lifeDeck.length === 0) {
-    // In One Piece TCG, you lose when you take damage with 0 life
-    // This is tracked but the game module doesn't enforce it (rules-agnostic)
+  G.leaderLife[playerId] = Math.max(0, (G.leaderLife[playerId] ?? 1) - 1);
+
+  if (G.leaderLife[playerId] === 0) {
+    const opponent = Object.keys(G.players).find((id) => id !== playerId);
+    if (opponent) {
+      G.winner = opponent;
+      G.phase = "gameOver";
+    }
   }
 
   syncZones(G);
@@ -439,9 +517,11 @@ function requestPeek(
   G: OnePieceState,
   ctx: Ctx,
   playerId: string,
-  deckZone: 'mainDeck' | 'lifeDeck',
+  deckZone: "mainDeck" | "lifeDeck",
   count: number,
 ): OnePieceState | typeof INVALID_MOVE {
+  if (G.phase !== "play") return INVALID_MOVE;
+  if (ctx.currentPlayer !== playerId) return INVALID_MOVE;
   const result = createPeekRequest(G, playerId, deckZone, count);
   if (!result) return INVALID_MOVE;
   return G;
@@ -450,11 +530,19 @@ function requestPeek(
 function ackPeek(
   G: OnePieceState,
   ctx: Ctx,
+  playerId: string,
   requestId: string,
   decryptionShare: string,
   signature: string,
 ): OnePieceState | typeof INVALID_MOVE {
-  const result = acknowledgePeekRequest(G, requestId, decryptionShare, signature);
+  if (G.phase !== "play") return INVALID_MOVE;
+  if (ctx.currentPlayer !== playerId) return INVALID_MOVE;
+  const result = acknowledgePeekRequest(
+    G,
+    requestId,
+    decryptionShare,
+    signature,
+  );
   if (!result) return INVALID_MOVE;
   return G;
 }
@@ -462,8 +550,11 @@ function ackPeek(
 function decryptPeek(
   G: OnePieceState,
   ctx: Ctx,
+  playerId: string,
   requestId: string,
 ): OnePieceState | typeof INVALID_MOVE {
+  if (G.phase !== "play") return INVALID_MOVE;
+  if (ctx.currentPlayer !== playerId) return INVALID_MOVE;
   const result = ownerDecryptPeek(G, requestId);
   if (!result) return INVALID_MOVE;
   return G;
@@ -472,10 +563,13 @@ function decryptPeek(
 function reorderPeek(
   G: OnePieceState,
   ctx: Ctx,
+  playerId: string,
   requestId: string,
   newPositions: number[],
   signature: string,
 ): OnePieceState | typeof INVALID_MOVE {
+  if (G.phase !== "play") return INVALID_MOVE;
+  if (ctx.currentPlayer !== playerId) return INVALID_MOVE;
   const result = reorderPeekedCards(G, requestId, newPositions, signature);
   if (!result) return INVALID_MOVE;
   return G;
@@ -484,8 +578,11 @@ function reorderPeek(
 function finishPeek(
   G: OnePieceState,
   ctx: Ctx,
+  playerId: string,
   requestId: string,
 ): OnePieceState | typeof INVALID_MOVE {
+  if (G.phase !== "play") return INVALID_MOVE;
+  if (ctx.currentPlayer !== playerId) return INVALID_MOVE;
   const success = completePeek(G, requestId);
   if (!success) return INVALID_MOVE;
   return G;
@@ -500,9 +597,10 @@ function declareWinner(
   ctx: Ctx,
   winnerId: string,
 ): OnePieceState | typeof INVALID_MOVE {
+  if (G.phase !== "play") return INVALID_MOVE;
   if (!G.players[winnerId]) return INVALID_MOVE;
   G.winner = winnerId;
-  G.phase = 'gameOver';
+  G.phase = "gameOver";
   return G;
 }
 
@@ -511,6 +609,7 @@ function surrender(
   ctx: Ctx,
   playerId?: string,
 ): OnePieceState | typeof INVALID_MOVE {
+  if (G.phase !== "play") return INVALID_MOVE;
   const pid = playerId ?? ctx.currentPlayer;
   if (!G.players[pid]) return INVALID_MOVE;
 
@@ -519,7 +618,7 @@ function surrender(
   if (otherPlayer) {
     G.winner = otherPlayer;
   }
-  G.phase = 'gameOver';
+  G.phase = "gameOver";
   return G;
 }
 
@@ -530,16 +629,16 @@ function surrender(
 export const onePieceCardSchema: CardSchema<OnePieceCard> = {
   validate: (card): card is OnePieceCard => {
     return (
-      typeof card === 'object' &&
+      typeof card === "object" &&
       card !== null &&
-      'id' in card &&
-      'name' in card &&
-      'cardType' in card &&
-      'color' in card &&
-      'set' in card &&
-      'cardNumber' in card &&
-      'rarity' in card &&
-      ['character', 'leader', 'event', 'stage'].includes(
+      "id" in card &&
+      "name" in card &&
+      "cardType" in card &&
+      "color" in card &&
+      "set" in card &&
+      "cardNumber" in card &&
+      "rarity" in card &&
+      ["character", "leader", "event", "stage"].includes(
         (card as OnePieceCard).cardType,
       )
     );
@@ -548,17 +647,17 @@ export const onePieceCardSchema: CardSchema<OnePieceCard> = {
   create: (data) => ({
     id: data.id,
     name: data.name,
-    cardType: (data as Partial<OnePieceCard>).cardType ?? 'character',
+    cardType: (data as Partial<OnePieceCard>).cardType ?? "character",
     cost: (data as Partial<OnePieceCard>).cost,
     power: (data as Partial<OnePieceCard>).power,
     counter: (data as Partial<OnePieceCard>).counter,
-    color: (data as Partial<OnePieceCard>).color ?? ['red'],
+    color: (data as Partial<OnePieceCard>).color ?? ["red"],
     attributes: (data as Partial<OnePieceCard>).attributes,
     trigger: (data as Partial<OnePieceCard>).trigger,
     effectText: (data as Partial<OnePieceCard>).effectText,
-    set: (data as Partial<OnePieceCard>).set ?? 'OP01',
-    cardNumber: (data as Partial<OnePieceCard>).cardNumber ?? '001',
-    rarity: (data as Partial<OnePieceCard>).rarity ?? 'C',
+    set: (data as Partial<OnePieceCard>).set ?? "OP01",
+    cardNumber: (data as Partial<OnePieceCard>).cardNumber ?? "001",
+    rarity: (data as Partial<OnePieceCard>).rarity ?? "C",
     life: (data as Partial<OnePieceCard>).life,
   }),
 
@@ -576,29 +675,29 @@ export function validateMove(
 ): MoveValidation {
   const player = state.players[playerId];
   if (!player) {
-    return { valid: false, error: 'Invalid player' };
+    return { valid: false, error: "Invalid player" };
   }
 
   switch (move) {
-    case 'drawCard':
+    case "drawCard":
       if (player.mainDeck.length === 0) {
-        return { valid: false, error: 'Main deck is empty' };
+        return { valid: false, error: "Main deck is empty" };
       }
       return { valid: true };
 
-    case 'drawDon':
+    case "drawDon":
       if (player.donDeck.length === 0) {
-        return { valid: false, error: 'DON!! deck is empty' };
+        return { valid: false, error: "DON!! deck is empty" };
       }
       return { valid: true };
 
-    case 'playCard':
+    case "playCard":
       if (player.hand.length === 0) {
-        return { valid: false, error: 'No cards in hand' };
+        return { valid: false, error: "No cards in hand" };
       }
       return { valid: true };
 
-    case 'surrender':
+    case "surrender":
       return { valid: true };
 
     default:
@@ -611,26 +710,168 @@ export function validateMove(
 // =============================================================================
 
 export const OnePieceGame: Game<OnePieceState> = {
-  name: 'onepiece',
+  name: "onepiece",
+
+  // Stub: wire to a real session-token validator when a relay server is deployed.
+  // In pure P2P mode, ctx.playerID is enforced by the libp2p transport instead.
+  authenticateCredentials: () => true,
 
   setup: (ctx): OnePieceState => {
-    return createInitialState({
+    const state = createInitialState({
       numPlayers: ctx.numPlayers ?? 2,
-      playerIDs: ctx.playOrder ?? ['0', '1'],
+      playerIDs: ctx.playOrder ?? ["0", "1"],
     });
+    return state;
   },
 
   turn: {
-    activePlayers: { all: 'play' },
+    order: {
+      first: ({ G }) => 0,
+      next: ({ G, ctx }) => {
+        const phase = G.phase as string;
+        if (["keyExchange", "encrypt", "shuffle"].includes(phase)) {
+          const playerOrder = ctx.playOrder ?? ["0", "1"];
+          const idx = (G as any).setupPlayerIndex ?? 0;
+          return idx % playerOrder.length;
+        }
+        return (parseInt(ctx.currentPlayer) + 1) % (ctx.numPlayers ?? 2);
+      },
+    },
+    activePlayers: {
+      setup: { all: "setup" },
+      keyExchange: { all: "keyExchange" },
+      encrypt: { all: "encrypt" },
+      shuffle: { all: "shuffle" },
+      play: { all: "play" },
+    },
   },
 
   phases: {
-    play: {
+    setup: {
       start: true,
+      next: "keyExchange",
+      endIf: ({ G }) => {
+        if (G.phase !== "setup") return true;
+        return undefined;
+      },
       moves: {
         loadDeck: {
           move: ({ G, ctx }, playerId: string, cards: OnePieceCard[]) =>
             loadDeck(G, ctx, playerId, cards),
+          client: false,
+        },
+      },
+    },
+    keyExchange: {
+      next: "encrypt",
+      endIf: ({ G }) => {
+        if (G.phase !== "keyExchange") return true;
+        return undefined;
+      },
+      moves: {
+        submitPublicKey: {
+          move: ({ G, ctx }, playerId: string, publicKey: string) =>
+            submitPublicKey(G, ctx, playerId, publicKey),
+          client: false,
+        },
+      },
+    },
+    encrypt: {
+      next: "shuffle",
+      endIf: ({ G }) => {
+        if (G.phase !== "encrypt") return true;
+        return undefined;
+      },
+      moves: {
+        encryptDeck: {
+          move: ({ G, ctx }, playerId: string, privateKey: string) =>
+            encryptDeck(G, ctx, playerId, privateKey),
+          client: false,
+        },
+      },
+    },
+    shuffle: {
+      next: "play",
+      endIf: ({ G }) => {
+        if (G.phase !== "shuffle") return true;
+        return undefined;
+      },
+      // NOTE: onEnd removed — crypto.shuffleEncryptedDeck() deals starting hands
+      moves: {
+        commitShuffleSeed: {
+          move: (
+            { G, ctx },
+            playerId: string,
+            commitHashHex: string,
+            callerId?: string,
+          ) => commitShuffleSeed(G, ctx, playerId, commitHashHex, callerId),
+          client: false,
+        },
+        revealShuffleSeed: {
+          move: (
+            { G, ctx },
+            playerId: string,
+            seedHex: string,
+            callerId?: string,
+          ) => revealShuffleSeed(G, ctx, playerId, seedHex, callerId),
+          client: false,
+        },
+        shuffleEncryptedDeck: {
+          move: ({ G, ctx, events }, playerId: string) =>
+            shuffleEncryptedDeck(G, ctx, playerId, events),
+          client: false,
+        },
+      },
+    },
+    play: {
+      turn: {
+        order: {
+          first: () => 0,
+          next: ({ G, ctx }) => {
+            const playerOrder = ctx.playOrder ?? ["0", "1"];
+            return (parseInt(ctx.currentPlayer) + 1) % playerOrder.length;
+          },
+        },
+        onTurnBegin: ({ G, ctx }) => {
+          const pid = ctx.currentPlayer;
+          const player = G.players[pid];
+          if (!player) return;
+          let attachedDon = 0;
+          for (const slot of player.playArea) {
+            if (slot.attachedDon > 0) {
+              attachedDon += slot.attachedDon;
+              slot.attachedDon = 0;
+            }
+          }
+          for (let i = 0; i < attachedDon; i++) {
+            player.donArea.push({
+              id: `don-${pid}-refresh-${ctx.turn}-begin-${i}`,
+              name: "DON!!",
+              cardType: "don",
+            });
+          }
+          player.activeDon = 0;
+          if (player.mainDeck.length > 0) {
+            const card = player.mainDeck.shift()!;
+            player.hand.push(card);
+            transitionCardVisibility(
+              G,
+              card.id,
+              "owner-known",
+              pid,
+              "turnStartDraw",
+            );
+          }
+          G.turnCount++;
+          syncZones(G);
+        },
+      },
+      moves: {
+        endTurn: {
+          move: ({ G, ctx }) => {
+            if (G.phase !== "play") return INVALID_MOVE;
+            return G;
+          },
           client: false,
         },
         drawCard: {
@@ -643,8 +884,12 @@ export const OnePieceGame: Game<OnePieceState> = {
           client: false,
         },
         playCard: {
-          move: ({ G, ctx }, playerId: string, cardId: string, slotPosition: number) =>
-            playCard(G, ctx, playerId, cardId, slotPosition),
+          move: (
+            { G, ctx },
+            playerId: string,
+            cardId: string,
+            slotPosition: number,
+          ) => playCard(G, ctx, playerId, cardId, slotPosition),
           client: false,
         },
         playEvent: {
@@ -658,13 +903,21 @@ export const OnePieceGame: Game<OnePieceState> = {
           client: false,
         },
         attachDon: {
-          move: ({ G, ctx }, playerId: string, slotPosition: number, count: number) =>
-            attachDonToSlot(G, ctx, playerId, slotPosition, count),
+          move: (
+            { G, ctx },
+            playerId: string,
+            slotPosition: number,
+            count: number,
+          ) => attachDonToSlot(G, ctx, playerId, slotPosition, count),
           client: false,
         },
         detachDon: {
-          move: ({ G, ctx }, playerId: string, slotPosition: number, count: number) =>
-            detachDonFromSlot(G, ctx, playerId, slotPosition, count),
+          move: (
+            { G, ctx },
+            playerId: string,
+            slotPosition: number,
+            count: number,
+          ) => detachDonFromSlot(G, ctx, playerId, slotPosition, count),
           client: false,
         },
         takeLifeDamage: {
@@ -673,28 +926,57 @@ export const OnePieceGame: Game<OnePieceState> = {
           client: false,
         },
         requestPeek: {
-          move: ({ G, ctx }, playerId: string, deckZone: 'mainDeck' | 'lifeDeck', count: number) =>
-            requestPeek(G, ctx, playerId, deckZone, count),
+          move: (
+            { G, ctx },
+            playerId: string,
+            deckZone: "mainDeck" | "lifeDeck",
+            count: number,
+          ) => requestPeek(G, ctx, playerId, deckZone, count),
           client: false,
         },
         ackPeek: {
-          move: ({ G, ctx }, requestId: string, decryptionShare: string, signature: string) =>
-            ackPeek(G, ctx, requestId, decryptionShare, signature),
+          move: (
+            { G, ctx },
+            playerId: string,
+            requestId: string,
+            decryptionShare: string,
+            signature: string,
+          ) => ackPeek(G, ctx, playerId, requestId, decryptionShare, signature),
           client: false,
         },
         decryptPeek: {
-          move: ({ G, ctx }, requestId: string) =>
-            decryptPeek(G, ctx, requestId),
+          move: ({ G, ctx }, playerId: string, requestId: string) =>
+            decryptPeek(G, ctx, playerId, requestId),
           client: false,
         },
         reorderPeek: {
-          move: ({ G, ctx }, requestId: string, newPositions: number[], signature: string) =>
-            reorderPeek(G, ctx, requestId, newPositions, signature),
+          move: (
+            { G, ctx },
+            playerId: string,
+            requestId: string,
+            newPositions: number[],
+            signature: string,
+          ) =>
+            reorderPeek(G, ctx, playerId, requestId, newPositions, signature),
           client: false,
         },
         finishPeek: {
-          move: ({ G, ctx }, requestId: string) =>
-            finishPeek(G, ctx, requestId),
+          move: ({ G, ctx }, playerId: string, requestId: string) =>
+            finishPeek(G, ctx, playerId, requestId),
+          client: false,
+        },
+        submitDecryptionShare: {
+          move: (
+            { G, ctx },
+            playerId: string,
+            requestId: string,
+            decryptionShare: string,
+          ) =>
+            submitDecryptionShare(G, ctx, playerId, requestId, decryptionShare),
+          client: false,
+        },
+        releaseKey: {
+          move: ({ G, ctx }, playerId: string) => releaseKey(G, ctx, playerId),
           client: false,
         },
         declareWinner: {
@@ -703,17 +985,38 @@ export const OnePieceGame: Game<OnePieceState> = {
           client: false,
         },
         surrender: {
-          move: ({ G, ctx }, playerId?: string) =>
-            surrender(G, ctx, playerId),
+          move: ({ G, ctx }, playerId?: string) => surrender(G, ctx, playerId),
+          client: false,
+        },
+        voteAbortReveal: {
+          move: ({ G, ctx }, playerId: string) =>
+            voteAbortReveal(G as any, ctx, playerId),
           client: false,
         },
       },
     },
+    gameOver: {
+      moves: {},
+    },
+    voided: {
+      moves: {},
+    },
   },
 
   endIf: ({ G }) => {
+    if (G.phase === "voided") {
+      return { draw: true, reason: "voided" };
+    }
     if (G.winner) {
       return { winner: G.winner };
+    }
+    for (const [playerId, life] of Object.entries(G.leaderLife)) {
+      if (life !== undefined && life <= 0) {
+        const opponent = Object.keys(G.players).find((id) => id !== playerId);
+        if (opponent) {
+          return { winner: opponent };
+        }
+      }
     }
     return undefined;
   },
@@ -724,18 +1027,19 @@ export const OnePieceGame: Game<OnePieceState> = {
 // =============================================================================
 
 export const OnePieceModule = {
-  id: 'onepiece',
-  name: 'One Piece TCG',
-  version: '1.0.0',
-  description: 'One Piece Trading Card Game — rules-agnostic state manager with cooperative decryption',
+  id: "onepiece",
+  name: "One Piece TCG",
+  version: "1.0.0",
+  description:
+    "One Piece Trading Card Game — rules-agnostic state manager with cooperative decryption",
 
   cardSchema: onePieceCardSchema,
   zones: ONEPIECE_ZONES,
 
   assetRequirements: {
-    required: ['card_face'] as const,
-    optional: ['card_back', 'playmat'] as const,
-    idFormat: 'set_collector' as const,
+    required: ["card_face"] as const,
+    optional: ["card_back", "playmat"] as const,
+    idFormat: "set_collector" as const,
   },
 
   initialState: createInitialState,
@@ -744,13 +1048,55 @@ export const OnePieceModule = {
 
   zoneLayout: {
     zones: {
-      mainDeck: { x: 85, y: 70, width: 10, height: 15, cardArrangement: 'stack' as const },
-      lifeDeck: { x: 85, y: 30, width: 10, height: 15, cardArrangement: 'stack' as const },
-      donDeck: { x: 5, y: 70, width: 10, height: 15, cardArrangement: 'stack' as const },
-      trash: { x: 85, y: 50, width: 10, height: 15, cardArrangement: 'stack' as const },
-      hand: { x: 25, y: 85, width: 50, height: 12, cardArrangement: 'fan' as const },
-      playArea: { x: 25, y: 45, width: 60, height: 25, cardArrangement: 'row' as const },
-      donArea: { x: 5, y: 50, width: 15, height: 15, cardArrangement: 'row' as const },
+      mainDeck: {
+        x: 85,
+        y: 70,
+        width: 10,
+        height: 15,
+        cardArrangement: "stack" as const,
+      },
+      lifeDeck: {
+        x: 85,
+        y: 30,
+        width: 10,
+        height: 15,
+        cardArrangement: "stack" as const,
+      },
+      donDeck: {
+        x: 5,
+        y: 70,
+        width: 10,
+        height: 15,
+        cardArrangement: "stack" as const,
+      },
+      trash: {
+        x: 85,
+        y: 50,
+        width: 10,
+        height: 15,
+        cardArrangement: "stack" as const,
+      },
+      hand: {
+        x: 25,
+        y: 85,
+        width: 50,
+        height: 12,
+        cardArrangement: "fan" as const,
+      },
+      playArea: {
+        x: 25,
+        y: 45,
+        width: 60,
+        height: 25,
+        cardArrangement: "row" as const,
+      },
+      donArea: {
+        x: 5,
+        y: 50,
+        width: 15,
+        height: 15,
+        cardArrangement: "row" as const,
+      },
     },
     defaultCardSize: { width: 63, height: 88 },
   },
