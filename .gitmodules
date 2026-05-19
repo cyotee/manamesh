@@ -4,9 +4,6 @@
 [submodule "vendor/boardgameIO-p2p"]
 	path = vendor/boardgameIO-p2p
 	url = https://github.com/cyotee/boardgameIO-p2p
-[submodule "contracts/lib/crane"]
-	path = contracts/lib/crane
-	url = https://github.com/cyotee/crane
 [submodule "reference/poker-solidity"]
 	path = reference/poker-solidity
 	url = https://github.com/dxganta/poker-solidity.git
