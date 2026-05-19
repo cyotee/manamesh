@@ -25,3 +25,7 @@
 [submodule "lib/crane"]
 	path = lib/crane
 	url = https://github.com/cyotee/crane
+[submodule "packages/boardgameio-crypto"]
+	path = packages/boardgameio-crypto
+	url = https://github.com/cyotee/boardgameio-crypto.git
+	branch = main

@@ -35,7 +35,7 @@ import {
   resetSetupPlayer,
   lookupCardIdFromPoint,
   deterministicShuffle,
-} from "../crypto-utils";
+} from "@cyotee/boardgameio-crypto";
 
 // =============================================================================
 // Constants
@@ -51,7 +51,7 @@ function isHex(s: string): boolean {
   return typeof s === "string" && /^[0-9a-fA-F]+$/.test(s);
 }
 
-// deterministicShuffle imported from ../crypto-utils
+// deterministicShuffle imported from shared embedded package
 
 /**
  * Ensure shuffle RNG state exists.
@@ -97,9 +97,12 @@ function maybeFinalizeShuffleSeed(G: OnePieceCryptoState): void {
   rng.phase = "ready";
 }
 
-// getCurrentSetupPlayer, advanceSetupPlayer, resetSetupPlayer, lookupCardIdFromPoint
-// imported from ../crypto-utils
-export { getCurrentSetupPlayer, advanceSetupPlayer, resetSetupPlayer } from "../crypto-utils";
+// Re-export setup helpers from shared embedded package.
+export {
+  getCurrentSetupPlayer,
+  advanceSetupPlayer,
+  resetSetupPlayer,
+} from "@cyotee/boardgameio-crypto";
 
 // =============================================================================
 // Initial State

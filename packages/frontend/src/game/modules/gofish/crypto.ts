@@ -35,7 +35,7 @@ import {
   resetSetupPlayer,
   lookupCardIdFromPoint,
   deterministicShuffle,
-} from "../crypto-utils";
+} from "@cyotee/boardgameio-crypto";
 
 import {
   GOFISH_SHUFFLE_STALL_WINDOW_MOVES,
@@ -95,7 +95,7 @@ function isHex(s: string): boolean {
   return typeof s === "string" && /^[0-9a-fA-F]+$/.test(s);
 }
 
-// deterministicShuffle imported from ../crypto-utils
+// deterministicShuffle imported from shared embedded package
 
 function ensureShuffleRng(G: CryptoGoFishState): ShuffleRngState {
   const existing = (G as any).shuffleRng as ShuffleRngState | undefined;
@@ -190,14 +190,18 @@ export function handSizeForPlayers(numPlayers: number): number {
   return numPlayers <= 2 ? 7 : 5;
 }
 
-// getCurrentSetupPlayer, advanceSetupPlayer, resetSetupPlayer imported from ../crypto-utils
-export { getCurrentSetupPlayer, advanceSetupPlayer, resetSetupPlayer } from "../crypto-utils";
+// Re-export setup helpers from shared embedded package.
+export {
+  getCurrentSetupPlayer,
+  advanceSetupPlayer,
+  resetSetupPlayer,
+} from "@cyotee/boardgameio-crypto";
 
 export function allKeysSubmitted(state: CryptoGoFishState): boolean {
   return state.playerOrder.every((id) => state.players[id].publicKey !== null);
 }
 
-// lookupCardIdFromPoint imported from ../crypto-utils
+// lookupCardIdFromPoint imported from shared embedded package
 
 function decryptToCardId(
   _G: CryptoGoFishState,

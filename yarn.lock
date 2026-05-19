@@ -2011,6 +2011,17 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@cyotee/boardgameio-crypto@workspace:*, @cyotee/boardgameio-crypto@workspace:packages/boardgameio-crypto":
+  version: 0.0.0-use.local
+  resolution: "@cyotee/boardgameio-crypto@workspace:packages/boardgameio-crypto"
+  dependencies:
+    typescript: "npm:^5.9.2"
+    vitest: "npm:^3.2.4"
+  peerDependencies:
+    boardgame.io: ^0.50.2
+  languageName: unknown
+  linkType: soft
+
 "@dnsquery/dns-packet@npm:^6.1.1":
   version: 6.1.1
   resolution: "@dnsquery/dns-packet@npm:6.1.1"
@@ -5481,6 +5492,7 @@ __metadata:
   dependencies:
     "@chainsafe/libp2p-noise": "npm:^17.0.0"
     "@chainsafe/libp2p-yamux": "npm:^8.0.1"
+    "@cyotee/boardgameio-crypto": "workspace:*"
     "@helia/unixfs": "npm:^7.0.1"
     "@libp2p/bootstrap": "npm:^12.0.11"
     "@libp2p/circuit-relay-v2": "npm:^4.1.3"

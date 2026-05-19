@@ -43,7 +43,7 @@ import {
   advanceSetupPlayer,
   resetSetupPlayer,
   lookupCardIdFromPoint,
-} from "../crypto-utils";
+} from "@cyotee/boardgameio-crypto";
 
 // =============================================================================
 // Types
@@ -302,7 +302,7 @@ export function createCryptoWarState(config: CryptoWarConfig): CryptoWarState {
   };
 }
 
-// getCurrentSetupPlayer, advanceSetupPlayer, resetSetupPlayer imported from ../crypto-utils
+// Setup player helpers imported from shared embedded package.
 
 /**
  * Check if all players have submitted public keys.
@@ -358,7 +358,7 @@ export function checkGameOver(state: CryptoWarState): string | null {
   return null;
 }
 
-// lookupCardIdFromPoint imported from ../crypto-utils
+// lookupCardIdFromPoint imported from shared embedded package.
 
 // =============================================================================
 // Crypto Moves

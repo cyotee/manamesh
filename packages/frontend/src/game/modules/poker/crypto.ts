@@ -69,7 +69,7 @@ import {
   advanceSetupPlayer,
   resetSetupPlayer,
   lookupCardIdFromPoint,
-} from "../crypto-utils";
+} from "@cyotee/boardgameio-crypto";
 
 // =============================================================================
 // Constants
@@ -82,8 +82,12 @@ const COMMUNITY_ZONE = "community";
 // State Helpers
 // =============================================================================
 
-// getCurrentSetupPlayer, advanceSetupPlayer, resetSetupPlayer imported from ../crypto-utils
-export { getCurrentSetupPlayer, advanceSetupPlayer, resetSetupPlayer } from "../crypto-utils";
+// Re-export setup helpers from shared embedded package.
+export {
+  getCurrentSetupPlayer,
+  advanceSetupPlayer,
+  resetSetupPlayer,
+} from "@cyotee/boardgameio-crypto";
 
 // =============================================================================
 // Initial State
@@ -679,7 +683,7 @@ function peekHoleCards(
   return G;
 }
 
-// lookupCardIdFromPoint imported from ../crypto-utils
+// lookupCardIdFromPoint imported from shared embedded package.
 
 /**
  * Parse a card ID (e.g., "Ah", "2c") into a PokerCard.
