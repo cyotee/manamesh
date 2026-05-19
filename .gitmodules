@@ -4,9 +4,6 @@
 [submodule "vendor/boardgameIO-p2p"]
 	path = vendor/boardgameIO-p2p
 	url = https://github.com/cyotee/boardgameIO-p2p
-[submodule "contracts/lib/openzeppelin-contracts"]
-	path = contracts/lib/openzeppelin-contracts
-	url = https://github.com/OpenZeppelin/openzeppelin-contracts
 [submodule "contracts/lib/crane"]
 	path = contracts/lib/crane
 	url = https://github.com/cyotee/crane
