@@ -240,19 +240,100 @@ The following are all in v1:
   the set of pending handIds per player is **not** required on-chain
   (it can be reconstructed from events for indexers).
 
-**11.13 Still under discussion (do not implement yet)**
-- `PkgArgs` final shape: confirmed fields are `{ token, operator, rakeBps }`.
-  Open: `minTimeoutSeconds` / `maxTimeoutSeconds` bounds on per-hand timeouts,
-  `maxRakeBps` ceiling, whether to allow `0 rakeBps`.
-- `buildHandResult` refactor strategy: existing TS shape (`Record<address,number>`)
-  doesn't match the PRD's parallel-array `HandOutcome`. Decide replace-in-place
-  vs. add an adapter that converts between them.
-- v2 hook: should the verifier ship as a separate `IPokerVerifierFacet` from
-  day one (with the in-Service implementation just routed through it) so a ZK
-  verifier can be cut in without touching the settlement facet?
-- Root `manamesh/remappings.txt` has the same broken `@crane/=lib/crane/` line
-  as the contracts one; decide whether to fix it or delete it (Foundry only
-  reads the contracts-workspace remappings).
+**11.13 PkgArgs final shape**
+- `PokerHandSettlerDFPkg.PkgArgs = { address token }`.
+- Operator address and `rakeBps` are **not** baked into the settler. They are
+  resolved at settlement time from a separate **Configuration Oracle** (§11.14).
+- Each settler holds an immutable reference to the oracle (set in `PkgInit`,
+  same for all settlers deployed from a given DFPkg deployment).
+
+**11.14 Configuration Oracle**
+
+*Purpose.* Exposes, per ERC20 token, the rake recipient (`operator`) and rake
+rate (`rakeBps`) used by all `PokerHandSettler` instances on that chain.
+
+*Form factor.* Built on Crane as its own Diamond: `BettingConfigOracleRepo`
+\+ `BettingConfigOracleTarget` + `BettingConfigOracleFacet`, bundled into a
+`BettingConfigOracleDFPkg`. Upgradable via `DiamondCut`. (Working name; final
+naming is an implementation detail.)
+
+*Governance.* Single owner via Crane's ERC8023 `MultiStepOwnable` (two-step
+ownership transfer). The owner is the only address allowed to:
+- Set / update per-token entries (`setTokenConfig(token, operator, rakeBps)`).
+- Update the global default (`setDefault(defaultOperator, defaultRakeBps)`).
+- Transfer ownership.
+
+*Storage shape (conceptual).*
+```
+struct Entry { address operator; uint256 rakeBps; }
+mapping(address => Entry) tokenConfig;
+Entry defaultConfig;                  // { defaultOperator, defaultRakeBps }
+```
+
+*Lookup semantics.*
+```
+(operator, rakeBps) = tokenConfig[token].operator != address(0)
+                      ? tokenConfig[token]
+                      : defaultConfig;
+```
+
+*Lookup timing.* The settler performs a **live read** on every `settleHand`
+and `forceTimeoutSettlement`. Config changes apply immediately to all pending
+and future hands at that settler. Hands do not snapshot config at activation.
+
+*Settler reference.* Each `PokerHandSettler` diamond holds an **immutable**
+reference to the oracle diamond (set in `PokerHandSettlerDFPkg.PkgInit`).
+Swapping the oracle implementation is done via `DiamondCut` on the oracle
+diamond — settlers do not need to change.
+
+*Default config governance.* The global default is itself owner-mutable
+(not a hardcoded baseline). v1 ships with `defaultOperator` and
+`defaultRakeBps` set at deployment.
+
+*Events.* Oracle emits typed events on each entry/default change for indexers.
+(Specific event signatures to be defined during implementation.)
+
+*Out of scope for v1.* No per-table or per-hand rake overrides; no oracle-level
+`maxRakeBps` ceiling (owner is trusted); no batch update entry points (single-
+entry mutators only — batching is an off-chain script concern).
+
+**11.15 Off-chain TS data model**
+- `PokerHandResult` is refactored to match the on-chain `HandOutcome` exactly
+  (parallel arrays sorted by address: `players[]`, `payouts[]`, `finalStacks[]`).
+- The `Record<address, number>` form is removed; callers of `buildHandResult`
+  update accordingly.
+
+**11.16 Verifier facet decomposition**
+- The Level-1 hand verifier ships as a **separate facet** (`IPokerVerifierFacet`)
+  from day one, attached to the same settler diamond.
+- The settlement facet calls the verifier facet through the diamond's selector
+  routing. A v2 ZK verifier can be cut in with a single `DiamondCut`, without
+  touching the settlement facet.
+
+**11.17 Repository / toolchain housekeeping**
+- Root `manamesh/remappings.txt` mirrored to match `contracts/remappings.txt`
+  (Crane line updated). Note: there are **two foundry workspaces** in this repo
+  (`manamesh/foundry.toml` and `manamesh/contracts/foundry.toml`); the root one
+  contains only the default `Counter.sol` scaffold. Decision deferred on whether
+  to delete the root workspace or properly populate `contracts/lib/` via
+  `forge install`.
+
+**11.18 Implementation-detail items deferred to coding phase**
+
+These are not blocking the architecture. Decisions will be made (or surfaced
+for confirmation) during implementation:
+
+- Oracle contract / DFPkg final names.
+- Full custom-error list across settler + oracle.
+- Event signatures for assertion / settlement / oracle config changes.
+- `timeoutPlayer` (PRD §6 "optional early warning") — assumed to emit an event
+  only, no state change; confirm during coding.
+- Test coverage layout (Crane behavior libraries + invariant handlers).
+- Deployment script structure (one script per settler instance? one factory
+  script that wires oracle + multiple settlers?).
+- Whether the vestigial root `manamesh/foundry.toml` + `Counter.sol` should
+  be deleted, and whether `contracts/lib/` should be populated via
+  `forge install` for OpenZeppelin / forge-std (currently broken).
 
 ---
 
