@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import ReactDOM from "react-dom/client";
 import { Client } from "boardgame.io/react";
-import { PokerGame } from "../../game/modules/poker";
-import { PokerBoard } from "../../components/PokerBoard";
+import { PokerGame, PokerBoard } from "@manamesh/poker";
 import { PokerLobby } from "./PokerLobby";
 import { P2PMultiplayer } from "../../p2p/transport";
 import { JoinCodeTransport } from "../../p2p/transports/joincode-transport";

@@ -14,7 +14,7 @@ import {
   CryptoPokerGame,
   type PokerState,
   type CryptoPokerState,
-} from "./modules/poker";
+} from "@manamesh/poker";
 import { WarGame, type WarState } from "./modules/war";
 import {
   CryptoGoFishSecureGame,

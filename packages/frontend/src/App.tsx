@@ -10,7 +10,7 @@ import { Local } from "boardgame.io/multiplayer";
 import { SimpleCardGame } from "./game/game";
 import { GameBoard } from "./components/GameBoard";
 import { GameSelector } from "./components/GameSelector";
-import { PokerBoard } from "./components/PokerBoard";
+import { PokerBoard } from "@manamesh/poker";
 import { WarBoard } from "./components/WarBoard";
 import { MerkleBattleshipBoard } from "./components/MerkleBattleshipBoard";
 import { ThresholdTallyBoard } from "./components/ThresholdTallyBoard";
@@ -23,8 +23,8 @@ import { startP2P, P2PMultiplayer, type JoinCodeConnection } from "./p2p";
 import { GAMES, getGameById, type GameInfo } from "./game/registry";
 import { getBlockchainService, WalletContextProvider } from "./blockchain";
 import { WalletProvider } from "./wallet";
-import type { PokerHandResult } from "./game/modules/poker/types";
-import { createCryptoInitialState } from "./game/modules/poker/crypto";
+import type { PokerHandResult } from "@manamesh/poker";
+import { createCryptoInitialState } from "@manamesh/poker";
 
 class AppErrorBoundary extends React.Component<
   { children: React.ReactNode },
