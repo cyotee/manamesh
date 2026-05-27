@@ -310,13 +310,17 @@ entry mutators only — batching is an off-chain script concern).
   routing. A v2 ZK verifier can be cut in with a single `DiamondCut`, without
   touching the settlement facet.
 
-**11.17 Repository / toolchain housekeeping**
-- Root `manamesh/remappings.txt` mirrored to match `contracts/remappings.txt`
-  (Crane line updated). Note: there are **two foundry workspaces** in this repo
-  (`manamesh/foundry.toml` and `manamesh/contracts/foundry.toml`); the root one
-  contains only the default `Counter.sol` scaffold. Decision deferred on whether
-  to delete the root workspace or properly populate `contracts/lib/` via
-  `forge install`.
+**11.17 Repository / toolchain housekeeping** — ✅ RESOLVED
+- Poker settlement now lives entirely in the in-tree embedded package
+  `manamesh-games/packages/poker/` (`@manamesh/poker`), which owns its own
+  Foundry workspace (`packages/poker/foundry.toml`) and `lib/` (forge-installed
+  forge-std, openzeppelin-contracts v5, Crane).
+- The legacy MM-035 settlement contracts (`GameVault`, `ChipToken`,
+  `ChipTokenFactory`, their interfaces, `SignatureVerifier`, and tests) have been
+  deleted from `manamesh/contracts/`, along with the orphaned frontend
+  `wallet/signing` GameVault helpers (`createGameVaultDomain`,
+  `useSignGameVaultAction`). Only the default `Counter.sol` scaffold remains in
+  `manamesh/contracts/`; it is no longer relevant to poker settlement.
 
 **11.18 Implementation-detail items deferred to coding phase**
 

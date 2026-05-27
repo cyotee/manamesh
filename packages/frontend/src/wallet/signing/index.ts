@@ -10,7 +10,6 @@ export {
   createChainSpecificDomain,
   getDomainSeparator,
 } from "./domain";
-export { createGameVaultDomain } from "./domain";
 
 // Types
 export {
@@ -42,7 +41,6 @@ export {
 // Signing
 export {
   useSignAction,
-  useSignGameVaultAction,
   useSignJoinGame,
   useSignCommitShuffle,
   useSignRevealCard,

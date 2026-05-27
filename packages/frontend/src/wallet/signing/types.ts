@@ -81,7 +81,7 @@ export const SubmitResultTypes = {
   ],
 } as const;
 
-// ============ Settlement Types (matching contracts/src/interfaces/IGameVault.sol) ============
+// ============ Settlement Types (off-chain EIP-712 game-action types) ============
 
 /**
  * Bet action - a single bet in a hand (matches Solidity Bet struct)

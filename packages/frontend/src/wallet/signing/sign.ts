@@ -9,7 +9,7 @@ import { useSignTypedData, useAccount, useChainId } from "wagmi";
 import { useCallback, useState } from "react";
 import { toHex, hexToBytes, keccak256, encodeAbiParameters } from "viem";
 import type { TypedDataDomain } from "viem";
-import { MANAMESH_DOMAIN, createGameVaultDomain } from "./domain";
+import { MANAMESH_DOMAIN } from "./domain";
 import { walletDebug } from "../debug";
 import {
   getTypesForAction,
@@ -134,28 +134,6 @@ export function useSignAction(): UseSignActionReturn {
     isSigning,
     error,
   };
-}
-
-/**
- * Hook to sign actions intended for on-chain verification by GameVault.
- * Domain includes chainId + verifyingContract.
- */
-export function useSignGameVaultAction(vaultAddress: `0x${string}`) {
-  const chainId = useChainId();
-  const { signAction, isSigning, error } = useSignAction();
-
-  const signVaultAction = useCallback(
-    async <T extends ActionData>(
-      actionType: ActionTypeName,
-      data: T,
-    ): Promise<SignedAction<T>> => {
-      const domain = createGameVaultDomain(chainId, vaultAddress);
-      return signAction(actionType, data, { domain });
-    },
-    [chainId, vaultAddress, signAction],
-  );
-
-  return { signVaultAction, isSigning, error };
 }
 
 // ============ Convenience hooks for specific action types ============

@@ -28,21 +28,6 @@ export function createChainSpecificDomain(chainId: number): TypedDataDomain {
 }
 
 /**
- * Create an on-chain-verifiable domain (must match OZ EIP712 in GameVault).
- */
-export function createGameVaultDomain(
-  chainId: number,
-  verifyingContract: `0x${string}`,
-): TypedDataDomain {
-  return {
-    name: "ManaMesh",
-    version: "1",
-    chainId: BigInt(chainId),
-    verifyingContract,
-  };
-}
-
-/**
  * Get the domain separator hash (for logging/debugging)
  */
 export function getDomainSeparator(): string {
