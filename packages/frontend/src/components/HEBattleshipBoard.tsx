@@ -21,7 +21,7 @@ import {
   paillierGenerateKeypair,
   paillierPublicKeyFromNHex,
   type PaillierKeypair,
-} from "../crypto";
+} from "@manamesh/crypto";
 
 // NOTE: This board reuses the placement UI concepts from Merkle Battleship,
 // but it is a demo-only page focusing on homomorphic encryption.

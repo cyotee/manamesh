@@ -35,8 +35,8 @@ import {
 import type { DeckList } from "../deck/types";
 import { resolveDeckList } from "../game/modules/onepiece/deckResolver";
 import { CardPreviewPane } from "./CardPreviewPane";
-import { generateKeyPair } from "../crypto/mental-poker";
-import type { CryptoKeyPair } from "../crypto/mental-poker/types";
+import { generateKeyPair } from "@manamesh/crypto/mental-poker";
+import type { CryptoKeyPair } from "@manamesh/crypto/mental-poker/types";
 import type {
   OnePieceCryptoState,
   OnePieceCryptoPlayerState,

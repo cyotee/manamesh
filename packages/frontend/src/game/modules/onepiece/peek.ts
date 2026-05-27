@@ -24,7 +24,7 @@ import type {
   CardStateTransition,
   OnePieceCryptoState,
 } from "./types";
-import type { EncryptedCard } from "../../../crypto/mental-poker";
+import type { EncryptedCard } from "@manamesh/crypto/mental-poker";
 import { batchTransitionVisibility } from "./visibility";
 import { createProof, appendProof } from "./proofChain";
 

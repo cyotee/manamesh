@@ -130,7 +130,7 @@ export function useGameKeys(): UseGameKeysReturn {
 
         // Import SRA key generation (uses elliptic secp256k1)
         const { generateKeyPair } =
-          await import("../../crypto/mental-poker/sra");
+          await import("@manamesh/crypto/mental-poker/sra");
 
         // Generate deterministic key pair from seed
         const keyPair = generateKeyPair(seed);

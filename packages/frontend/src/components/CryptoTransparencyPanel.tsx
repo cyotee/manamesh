@@ -6,7 +6,7 @@
  */
 
 import React, { useState } from 'react';
-import type { CryptoPluginState } from '../crypto/plugin/crypto-plugin';
+import type { CryptoPluginState } from '@manamesh/crypto/plugin/crypto-plugin';
 
 interface CryptoTransparencyPanelProps {
   /** Crypto plugin state from game */

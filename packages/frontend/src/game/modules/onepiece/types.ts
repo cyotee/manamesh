@@ -9,8 +9,8 @@
  */
 
 import type { CoreCard, ZoneDefinition } from "../types";
-import type { CryptoPluginState } from "../../../crypto/plugin/crypto-plugin";
-import type { EncryptedCard } from "../../../crypto/mental-poker";
+import type { CryptoPluginState } from "@manamesh/crypto/plugin/crypto-plugin";
+import type { EncryptedCard } from "@manamesh/crypto/mental-poker";
 
 // =============================================================================
 // Card Types

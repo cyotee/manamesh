@@ -143,7 +143,7 @@ export interface CryptoGoFishState {
   /** Demo-private stores keys in shared state; coop-reveal uses decryption shares. */
   securityMode: "demo-private" | "coop-reveal" | "zk-attest";
 
-  crypto: import("../../../crypto/plugin/crypto-plugin").CryptoPluginState;
+  crypto: import("@manamesh/crypto/plugin/crypto-plugin").CryptoPluginState;
   cardIds: string[];
 
   playerOrder: string[];

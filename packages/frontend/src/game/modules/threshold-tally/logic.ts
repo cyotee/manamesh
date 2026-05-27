@@ -17,7 +17,7 @@ import {
   secpPointMulHex,
   verifyRangeProof,
   RANGE_PROOF_VKEY,
-} from "../../../crypto";
+} from "@manamesh/crypto";
 
 function assert(cond: unknown, msg: string): asserts cond {
   if (!cond) throw new Error(msg);

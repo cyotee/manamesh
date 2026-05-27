@@ -27,8 +27,8 @@ import {
   reencryptDeck,
   buildCardPointLookup,
   type EncryptedCard,
-} from "../../../crypto/mental-poker";
-import { sha256Hex, stableStringify } from "../../../crypto";
+} from "@manamesh/crypto/mental-poker";
+import { sha256Hex, stableStringify } from "@manamesh/crypto";
 import {
   getCurrentSetupPlayer,
   advanceSetupPlayer,

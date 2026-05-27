@@ -12,8 +12,8 @@ import {
   getCurrentSetupPlayer,
 } from "./crypto";
 
-import { generateKeyPair } from "../../../crypto/mental-poker";
-import { sha256Hex } from "../../../crypto";
+import { generateKeyPair } from "@manamesh/crypto/mental-poker";
+import { sha256Hex } from "@manamesh/crypto";
 
 // Helpers
 function createMockCtx(

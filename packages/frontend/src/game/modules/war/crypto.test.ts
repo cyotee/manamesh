@@ -26,7 +26,7 @@ import {
   createPlayerCryptoContext,
   buildCardPointLookup,
   type CryptoPlayerContext,
-} from "../../../crypto";
+} from "@manamesh/crypto";
 
 describe("CryptoWar", () => {
   let state: CryptoWarState;

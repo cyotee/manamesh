@@ -15,20 +15,20 @@ import type { Ctx, Game } from "boardgame.io";
 import { INVALID_MOVE } from "boardgame.io/core";
 
 import type { GameConfig } from "../types";
-import type { CryptoPluginState } from "../../../crypto/plugin/crypto-plugin";
+import type { CryptoPluginState } from "@manamesh/crypto/plugin/crypto-plugin";
 import {
   decrypt,
   encryptDeck as encryptDeckCrypto,
   buildCardPointLookup,
   reencryptDeck,
   type EncryptedCard,
-} from "../../../crypto/mental-poker";
+} from "@manamesh/crypto/mental-poker";
 import {
   sha256Hex,
   stableStringify,
   ecdsaVerifyDigestHex,
-} from "../../../crypto";
-import { secpIsValidPointHex } from "../../../crypto/secp256k1";
+} from "@manamesh/crypto";
+import { secpIsValidPointHex } from "@manamesh/crypto/secp256k1";
 import {
   getCurrentSetupPlayer,
   advanceSetupPlayer,

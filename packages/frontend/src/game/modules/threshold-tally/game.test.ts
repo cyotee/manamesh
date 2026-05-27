@@ -18,7 +18,7 @@ import {
   elgamalPartialDecrypt,
   elgamalRecoverMessagePoint,
   secpRandomScalar,
-} from "../../../crypto";
+} from "@manamesh/crypto";
 import {
   createInitialState,
   publishDkgCommitment,

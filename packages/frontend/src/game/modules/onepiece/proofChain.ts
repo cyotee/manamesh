@@ -7,12 +7,12 @@
  */
 
 import type { CryptographicProof, OnePieceState } from "./types";
-import { sha256Hex } from "../../../crypto/sha256";
-import { stableStringify } from "../../../crypto/stable-json";
+import { sha256Hex } from "@manamesh/crypto/sha256";
+import { stableStringify } from "@manamesh/crypto/stable-json";
 import {
   ecdsaSignDigestHex,
   ecdsaVerifyDigestHex,
-} from "../../../crypto/ecdsa";
+} from "@manamesh/crypto/ecdsa";
 
 // =============================================================================
 // Proof Creation

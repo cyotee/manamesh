@@ -6,8 +6,8 @@ import {
   paillierAdd,
   paillierPublicKeyFromNHex,
   bigintToHex,
-} from "../../crypto/paillier";
-import type { PaillierPrivateKey } from "../../crypto/paillier";
+} from "@manamesh/crypto/paillier";
+import type { PaillierPrivateKey } from "@manamesh/crypto/paillier";
 
 // Paillier utility functions working with hex strings
 function paillierEncryptHex(nHex: string, m: number): string {

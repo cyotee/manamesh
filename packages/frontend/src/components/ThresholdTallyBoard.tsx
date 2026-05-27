@@ -20,7 +20,7 @@ import {
   elgamalEncryptExp,
   elgamalPartialDecrypt,
   secpRandomScalar,
-} from "../crypto";
+} from "@manamesh/crypto";
 
 function clampInt(n: number, min: number, max: number): number {
   const x = Math.floor(n);

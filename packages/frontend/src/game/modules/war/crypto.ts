@@ -29,15 +29,15 @@ import {
   type CryptoPluginState,
   type CryptoPlayerContext,
   type SerializedShuffleProof,
-} from "../../../crypto";
-import type { EncryptedCard } from "../../../crypto/mental-poker";
+} from "@manamesh/crypto";
+import type { EncryptedCard } from "@manamesh/crypto/mental-poker";
 import {
   encryptDeck as encryptDeckCrypto,
   reencryptDeck,
   quickShuffle,
   buildCardPointLookup,
-} from "../../../crypto/mental-poker";
-import { secpIsValidPointHex } from "../../../crypto/secp256k1";
+} from "@manamesh/crypto/mental-poker";
+import { secpIsValidPointHex } from "@manamesh/crypto/secp256k1";
 import {
   getCurrentSetupPlayer,
   advanceSetupPlayer,
