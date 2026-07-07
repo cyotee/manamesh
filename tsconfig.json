@@ -12,9 +12,6 @@
     ],
     "references": [
         {
-            "path": "./packages/boardgameio-crypto"
-        },
-        {
             "path": "./packages/frontend"
         },
         {

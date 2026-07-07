@@ -1,4 +1,10 @@
-# ManaMesh Project Status — May 8, 2026
+# ManaMesh Project Status — May 8, 2026 (with June 2026 updates for Poker)
+
+> **Update (2026-06):** Poker contracts and game flow are implemented. Remaining work is deployment/integration (real settlement wiring, contract deployment, abandonment UI). See:
+> - `packages/poker/docs/PREPAREDNESS_REPORT.md`
+> - `packages/poker/docs/PRD_Deployment.md`
+> - `packages/poker/docs/TASK.md`
+> - `packages/manamesh/PRD_CONTRACTS.md` (locked design)
 
 ## Executive Summary
 
@@ -87,7 +93,7 @@ ManaMesh is a decentralized P2P card game platform with strong cryptographic pri
 | Module | Crypto | Gameplay | Security Notes |
 |--------|--------|----------|-------|
 | **OnePiece** | ✅ SRA | ⚠️ Core done | Phaser board complete, cooperative decryption working; R6 (Date.now() in moves) |
-| **Poker** (crypto) | ⚠️ Incomplete | ❌ Missing | `submitDecryptedShare` is no-op stub (R1); betting not wired to crypto phases |
+| **Poker** (crypto) | ⚠️ Game + crypto complete | Settlement wiring pending | See new `packages/poker/` docs for current status. Contracts implemented + tested. Frontend still uses mock settlement. |
 | **Go Fish** (coop-reveal) | ✅ Coop decrypt | ❌ Missing | R2 open; R5 default mode bug |
 | **Go Fish** (zk-attest) | ✅ ECDSA scaffold | ❌ Missing | ZK circuits are placeholders; do not expose to users |
 | **Go Fish** (demo-private) | ❌ Disabled | ❌ Missing | Unconditionally throws — intentionally broken for security |
@@ -305,7 +311,7 @@ setup (Feldman DKG) → commit (EC ElGamal) → decrypt (DLEQ + Lagrange) → re
 | Simple | 100% | |
 | OnePiece | ~80% | R6 (Date.now()), UI polish remaining |
 | Poker (standard) | 100% | |
-| Poker (crypto) | ~40% | R1 (stub), betting not wired |
+| Poker (crypto) | ~75% (game+contracts) | Settlement wiring + deployment pending (see `packages/poker/docs/TASK.md`) |
 | Go Fish (all variants) | ~40% | R2+R5 open; no game rules |
 | HE Battleship | ~30% | |
 | Blockchain Settlement | ~50% | |
@@ -325,7 +331,7 @@ setup (Feldman DKG) → commit (EC ElGamal) → decrypt (DLEQ + Lagrange) → re
 | R3 — No reveal-phase stall timeout | High | Refusing peer stalls game indefinitely |
 | R5 — Go Fish default mode bug | Medium | Runtime exception in `demo-private` default |
 | R6 — `Date.now()` in OnePiece moves | Medium | Breaks boardgame.io deterministic replay |
-| Poker crypto + betting integration | High | Crypto phases exist; betting not wired |
+| Poker settlement integration | High | Crypto + game complete; live `BlockchainService` + contract deployment pending (see TASK.md) |
 | Go Fish game rules | High | Crypto scaffolding complete; no actual game rules |
 | HE Battleship verification (R12) | Medium | Reads opponent board directly |
 | OnePiece polish | Medium | TakeLifeDamage overlay, win/lose modal |

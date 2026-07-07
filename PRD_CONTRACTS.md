@@ -1,13 +1,15 @@
 **Poker Hand Settlement Smart Contracts – Product Requirements Document (PRD)**
 
 **Version:** 1.1  
-**Date:** May 19, 2026  
+**Date:** May 19, 2026 (implementation complete; see June 2026 deployment notes)  
 **Authors:** Grok (xAI) + not_cyotee (ManaMesh team)  
-**Status:** Final – Ready for implementation agent hand-off  
+**Status:** Final – Design locked. Contracts implemented in `packages/poker/contracts/`. Remaining work tracked in `packages/poker/docs/PRD_Deployment.md` and `docs/TASK.md`.  
 
 > **v1.1 note:** Original PRD body preserved below for context. The authoritative
 > implementation decisions live in §11 (Addendum: Locked Implementation Decisions).
 > Where §11 conflicts with the original body, §11 wins.
+>
+> **Current status (2026-06):** Contracts implemented and tested in `packages/poker/`. See the companion `PREPAREDNESS_REPORT.md`, `PRD_Deployment.md`, and `TASK.md` in that directory for integration/deployment status. The legacy `GameVault` design has been superseded.
 
 ### 1. Purpose
 Build a **minimal, production-ready, gas-optimized settlement layer** for Texas Hold’em poker that runs on top of the existing ManaMesh off-chain stack (boardgame.io + libp2p + mental poker with cooperative elliptic encryption/decryption).

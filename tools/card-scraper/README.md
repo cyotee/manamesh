@@ -2,145 +2,175 @@
 
 Multi-game card scraper and asset pack builder for ManaMesh. Supports **One Piece TCG** and **Magic: The Gathering**.
 
-## Setup
+This directory contains a standalone Python package (`card-scraper`) that you can run locally to download card images and generate ManaMesh-compatible asset pack manifests.
+
+## Running Locally (from this repository)
+
+This scraper lives inside the `manamesh` submodule:
 
 ```bash
-cd tools/card-scraper
+# From the root of the manamesh-games repository
+cd packages/manamesh/tools/card-scraper
+```
+
+### 1. Prerequisites
+
+- Python 3.10 or newer
+- pip (or pipx / uv)
+
+### 2. Setup / Installation
+
+```bash
+# Create and activate a virtual environment (recommended)
+python -m venv .venv
+source .venv/bin/activate   # macOS / Linux
+# .venv\Scripts\activate    # Windows
+
+# Install the package in editable mode (with dev dependencies for testing)
 pip install -e ".[dev]"
 ```
 
-Requires Python 3.10+.
-
-## Usage
+You can also install without the virtualenv if you prefer (not recommended for long term):
 
 ```bash
-# Copy and customize config
+pip install -e .
+```
+
+### 3. Basic Usage
+
+Copy the example config and edit it:
+
+```bash
 cp config.example.yaml config.yaml
+# Edit config.yaml to enable/disable sources, choose sets, etc.
+```
 
-# Scrape MTG cards (default game in config.example.yaml)
-python -m card_scraper --game mtg scrape --sets MKM,LCI
+Run a scrape:
 
-# Scrape One Piece TCG
-python -m card_scraper --game onepiece scrape
+```bash
+# Scrape MTG (default in the example config)
+python -m card_scraper scrape --game mtg --sets LCI,MKM
 
-# Scrape all sets for the default game
+# Or scrape everything configured for the default game
 python -m card_scraper scrape
 
-# Force re-scrape (ignore previous state)
+# Scrape One Piece
+python -m card_scraper --game onepiece scrape
+
+# Force a full re-scrape (ignore previous state)
 python -m card_scraper scrape --force
 
-# Check scrape status
+# Verbose logging
+python -m card_scraper -v scrape
+python -m card_scraper -vv scrape
+```
+
+Other useful commands:
+
+```bash
+# See what has been scraped before
 python -m card_scraper --game mtg status
 
-# Validate generated manifests
+# Validate the generated manifests
 python -m card_scraper validate
 
-# Clean output and state files
+# Remove generated output and state (start fresh)
 python -m card_scraper clean
 ```
 
+### Output
+
+By default, results go to:
+
+```
+output/
+  <game>/                 # e.g. mtg or onepiece
+    manifest.json         # Root manifest
+    <SET-ID>/
+      manifest.json       # Per-set manifest
+      cards/
+        <card>.jpg
+        ...
+```
+
+These can be loaded by the frontend asset system or uploaded to IPFS.
+
 ## Configuration
 
-The `config.yaml` supports a multi-game structure:
+See the full example and comments in `config.example.yaml`.
 
-```yaml
-game: mtg  # Default game (override with --game flag)
+Key sections:
 
-games:
-  onepiece:
-    sources:
-      - name: optcg-api
-        enabled: true
-        priority: 1
-        rate_limit_ms: 200
-      - name: ryan-api
-        enabled: true
-        priority: 2
-      - name: vegapull-records
-        enabled: true
-        priority: 3
-        local_path: ./data/vegapull-records/
+- `game` — default game (`mtg` or `onepiece`)
+- `games.<game>.sources` — list of data sources with priority and rate limits
+- `games.<game>.scrape` — which sets/categories to fetch
+- `output.base_dir` and `state.state_file`
 
-  mtg:
-    sources:
-      - name: scryfall-bulk      # Primary: bulk data (~501 MB)
-        enabled: true
-        priority: 1
-        bulk_ttl_hours: 24
-        image_size: normal        # small, normal, large, png, border_crop, art_crop
-      - name: scryfall-api        # Incremental updates
-        enabled: true
-        priority: 2
-        rate_limit_ms: 100
-      - name: mtgjson             # Data enrichment (no images)
-        enabled: false
-        priority: 3
-        local_path: ./data/mtgjson/AllPrintings.json
-    scrape:
-      sets: all
-      categories: [core, expansion, commander]
+For MTG, the primary source is Scryfall bulk data (~501 MB). It is cached locally.
 
-output:
-  base_dir: ./output/
-state:
-  state_file: ./state/scrape-state.json
-```
+## Running from the Monorepo Root (alternative)
 
-### Migrating from onepiece-scraper
+If you want to run it without `cd`ing every time:
 
-If you have an existing `config.yaml` from `tools/onepiece-scraper/`, the new config loader supports the legacy single-game format. Your existing config will be treated as a `onepiece` game config. To use both games, wrap your existing sources under `games.onepiece` and add an `mtg` section.
-
-## MTG Data Sources
-
-### Scryfall Bulk (Primary)
-
-Downloads the ~501 MB Default Cards JSON from Scryfall. No rate limits. Cached locally with configurable TTL (default: 24 hours). Best for full database imports.
-
-### Scryfall API (Incremental)
-
-REST API for single-set imports and incremental updates. Rate-limited to 10 req/s (configurable). Handles pagination and HTTP 429 with exponential backoff.
-
-### MTGJSON (Enrichment)
-
-Reads from a locally-downloaded `AllPrintings.json`. Provides cross-reference IDs (Scryfall UUID, Gatherer ID, MTGO ID, Arena ID, TCGplayer ID). Does not provide images.
-
-To download MTGJSON data:
 ```bash
-mkdir -p data/mtgjson
-curl -L https://mtgjson.com/api/v5/AllPrintings.json.xz -o data/mtgjson/AllPrintings.json.xz
-xz -d data/mtgjson/AllPrintings.json.xz
+cd packages/manamesh/tools/card-scraper
+python -m card_scraper ...
 ```
 
-## Architecture
+Or use the full path:
+
+```bash
+python -m card_scraper -c packages/manamesh/tools/card-scraper/config.yaml scrape
+```
+
+## Development & Testing
+
+```bash
+# Install dev deps (includes pytest, respx, etc.)
+pip install -e ".[dev]"
+
+# Run the test suite
+pytest
+
+# Run with verbose output
+pytest -v
+```
+
+The test suite uses mocked HTTP responses so it runs without network access.
+
+## Architecture Overview
 
 ```
 card_scraper/
-  models.py              # Base data models (CardDataBase, SetInfo, ScrapeState)
-  adapters.py            # Adapter protocol + registry
-  config.py              # Multi-game YAML config
-  scraper.py             # Pipeline orchestrator
-  downloader.py          # Async image downloader with retry
-  manifest.py            # Base manifest utilities
-  state.py               # JSON-backed state tracker
-  cli.py                 # CLI (argparse + Rich)
-  games/
-    onepiece/
-      models.py          # OnePieceCardData
-      manifest_template.py
-      adapters/           # optcg_api, ryan_api, vegapull_records
-    mtg/
-      models.py          # MTGCardData
-      type_parser.py     # Type line parser
-      manifest_template.py
-      adapters/           # scryfall_bulk, scryfall_api, mtgjson
+├── cli.py              # Command-line entry point
+├── scraper.py          # Main orchestration
+├── adapters.py         # Adapter registry + protocol
+├── downloader.py       # Async image downloader + retries
+├── config.py           # YAML configuration loader
+├── manifest.py         # Manifest generation
+├── state.py            # Incremental scrape state (JSON)
+├── models.py           # Shared dataclasses
+└── games/
+    ├── mtg/            # MTG adapters (scryfall-bulk, scryfall-api, mtgjson)
+    └── onepiece/       # One Piece adapters
 ```
 
-Adapters satisfy a `CardSourceAdapter` protocol and are registered per-game. The scraper tries adapters in priority order with fallback.
+See the full README content in the original file or the code for more details on each adapter.
 
-## Testing
+## Relationship to the Browser Version
 
-```bash
-python -m pytest tests/ -v
+A browser-based version of this functionality (scrape + pack building) is available in:
+
+```
+packages/manamesh-asset-pack-builder/
 ```
 
-110 tests covering models, config, state, manifests, type parser, and all adapters (mocked HTTP via respx).
+That package is meant to be served statically over IPFS. The Python version here remains the most robust option for large/complete archives.
+
+## Notes
+
+- Scraped images and output are intentionally **not** committed (see `.gitignore` rules inside this directory and the parent `manamesh` package).
+- Respect API rate limits. The config lets you tune `rate_limit_ms` per source.
+- For very large scrapes, the Scryfall bulk adapter is preferred because it avoids rate limits.
+
+For questions or contributions, see the root repository.

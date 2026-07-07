@@ -554,55 +554,34 @@ interface PokerHandResult {
 
 ## Smart Contracts
 
-### Contract Overview
+> **Note (2026-06):** The contracts section below previously described the legacy `GameVault`/`ChipToken` design (MM-035).
+> The current design for poker settlement is in `packages/poker/contracts/`:
+> - `PokerHandSettler` (per-ERC20 diamond via Crane DFPkg)
+> - `BettingConfigOracle` (shared config for operator + rakeBps)
+> - `PokerVerifierFacet` (Level-1 hand evaluation)
+>
+> See `manamesh/PRD_CONTRACTS.md`, `packages/poker/docs/`, and `packages/poker/contracts/`.
 
-| Contract                | Purpose                                        |
-| ----------------------- | ---------------------------------------------- |
-| `GameVault.sol`         | Escrow deposits, settle hands, handle disputes |
-| `ChipToken.sol`         | ERC20 token for game chips                     |
-| `ChipTokenFactory.sol`  | Create new chip token instances                |
-| `SignatureVerifier.sol` | EIP-712 signature verification library         |
+### Current Contract Overview (Poker-Focused)
 
-### GameVault.sol
+| Contract / Artifact          | Purpose |
+|------------------------------|---------|
+| `PokerHandSettler` (diamond) | Per-token escrow, `assertHandMembership`, `settleHand`, `forceTimeoutSettlement` |
+| `BettingConfigOracle` (diamond) | Per-token + default `operator` and `rakeBps` |
+| `PokerVerifierFacet`         | On-chain best-5-of-7 winner verification (optional) |
+| `HandInit` / `HandOutcome`   | EIP-712 structs (see `packages/poker/contracts/types/`) |
+| Off-chain helpers            | `buildSettlement()`, signing in `@manamesh/poker` |
 
-**Key functions:**
+**Key current functions (PokerHandSettler):**
+- `deposit(uint256)`
+- `withdraw(uint256)`
+- `assertHandMembership(HandInit, signatures[])`
+- `settleHand(HandInit, HandOutcome, winnerSignatures[])`
+- `forceTimeoutSettlement(...)`
 
-```solidity
-// Player joins a game, depositing chips
-function joinGame(bytes32 gameId, uint256 buyIn) external;
+Rake and operator come live from the oracle. Settlement uses `finalStacks` + conservation checks.
 
-// Host settles final hand result
-function settleHands(
-    PokerHandResult calldata result,
-    bytes[] calldata signatures
-) external;
-
-// Dispute a hand (replay verification)
-function disputeHand(bytes32 gameId, PokerHandResult calldata result) external;
-
-// Claim chips if opponent abandons
-function claimAbandonment(bytes32 gameId) external;
-```
-
-### ChipToken.sol
-
-Standard ERC20 with:
-
-- `mint()` — Create new chips
-- `burn()` — Destroy chips
-- `permit()` — EIP-712 approval
-
-### SignatureVerifier.sol
-
-Library for verifying EIP-712 signatures:
-
-```solidity
-function verifyPokerHandResult(
-    PokerHandResult memory result,
-    bytes memory signature,
-    address signer
-) internal view returns (bool);
-```
+Legacy GameVault/ChipToken/SignatureVerifier code has been superseded and moved out of active development.
 
 ---
 
