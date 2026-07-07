@@ -2,7 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { Client } from "boardgame.io/react";
 import { Local } from "boardgame.io/multiplayer";
-import { OnePieceGame } from "../../game/modules/onepiece";
+import { OnePieceGame } from "@manamesh/onepiece";
 import { OnePiecePhaserBoard } from "../../components/OnePiecePhaserBoard";
 
 console.log("[ManaMesh] game page boot");
