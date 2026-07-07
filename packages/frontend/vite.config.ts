@@ -7,11 +7,20 @@ import path from 'path';
 // Compute path to repo root dist/ so the single SPA lands next to the asset zip.
 const rootDist = path.resolve(__dirname, '../../../../dist');
 
+// Real stub file that replaces boardgame.io's Svelte debug panel. Aliasing to a
+// physical file (instead of a `data:` URI) resolves cleanly in both the dev
+// server's esbuild dependency pre-scan and the production build.
+const emptyDebugStub = path.resolve(__dirname, 'stubs/empty-debug.js');
+
 export default defineConfig(({ command }) => ({
     plugins: [
       react(),
       {
         name: 'strip-boardgame-debug-svelte',
+        // 'pre' so this resolveId runs before Vite's core resolver in the dev
+        // server; otherwise core resolve turns `./debug/Debug.svelte` into the
+        // real Svelte file and import-analysis chokes on it.
+        enforce: 'pre',
         resolveId(id) {
           if (id.includes('Debug.svelte') || id.includes('/client/debug/') || id.includes('boardgame.io/debug')) {
             return '\0empty-debug';
@@ -46,11 +55,27 @@ export default defineConfig(({ command }) => ({
             { find: 'react/jsx-runtime', replacement: path.join(path.dirname(require.resolve('react/package.json')), 'jsx-runtime.js') },
             { find: /^react-dom$/, replacement: path.join(path.dirname(require.resolve('react-dom/package.json')), 'index.js') },
             { find: 'react-dom/client', replacement: path.join(path.dirname(require.resolve('react-dom/package.json')), 'client.js') },
-            // Kill boardgame.io debug svelte to prevent stray import statements in bundle (breaks classic script on file://)
-            { find: /Debug\.svelte|\/debug\/Debug|boardgame\.io\/debug/, replacement: 'data:text/javascript,export default null;' },
+            // NOTE: boardgame.io's Svelte debug panel is stubbed via the
+            // `strip-boardgame-debug-svelte` plugin (dev serve + build) and the
+            // esbuild scan plugin below (dev dep-scan) — a regex resolve.alias
+            // can't be used here because it does substring replacement and
+            // mangles `./debug/Debug.svelte` into a bogus path.
         ],
     },
     optimizeDeps: {
+        // Stub the boardgame.io Svelte debug import during esbuild's dependency
+        // pre-scan (the vite/rollup `strip-boardgame-debug-svelte` plugin does
+        // not run in this phase). Maps the whole import to a real .js stub.
+        esbuildOptions: {
+            plugins: [
+                {
+                    name: 'stub-svelte-debug',
+                    setup(build) {
+                        build.onResolve({ filter: /Debug\.svelte|\/client\/debug\/|boardgame\.io\/debug/ }, () => ({ path: emptyDebugStub }));
+                    },
+                },
+            ],
+        },
         include: [
             '@rainbow-me/rainbowkit',
             'wagmi',
