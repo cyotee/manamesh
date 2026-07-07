@@ -15,7 +15,7 @@ import type {
   OnePieceState,
   OnePieceCard,
   OnePieceDonCard,
-} from "../game/modules/onepiece/types";
+} from "@manamesh/onepiece/types";
 import { PhaserBoard } from "../phaser/PhaserBoard";
 import { OnePieceZoneLayout } from "../phaser/layout/OnePieceLayout";
 import type {
@@ -33,14 +33,14 @@ import {
   type AssetSharingChannel,
 } from "../hooks/useAssetSharing";
 import type { DeckList } from "../deck/types";
-import { resolveDeckList } from "../game/modules/onepiece/deckResolver";
+import { resolveDeckList } from "@manamesh/onepiece/deckResolver";
 import { CardPreviewPane } from "./CardPreviewPane";
-import { generateKeyPair } from "@manamesh/crypto/mental-poker";
-import type { CryptoKeyPair } from "@manamesh/crypto/mental-poker/types";
+import { generateKeyPair } from "@manamesh/boardgameio-crypto/mental-poker";
+import type { CryptoKeyPair } from "@manamesh/boardgameio-crypto/mental-poker/types";
 import type {
   OnePieceCryptoState,
   OnePieceCryptoPlayerState,
-} from "../game/modules/onepiece/types";
+} from "@manamesh/onepiece/types";
 
 /**
  * Convert a OnePieceCard or DON card to renderable CardSceneState.

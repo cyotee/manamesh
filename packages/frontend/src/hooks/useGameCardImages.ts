@@ -10,7 +10,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { getCardImageBlob } from '../assets/loader';
-import type { OnePieceCard } from '../game/modules/onepiece/types';
+import type { OnePieceCard } from '@manamesh/onepiece/types';
 
 /**
  * Strip instance suffix from a card ID.

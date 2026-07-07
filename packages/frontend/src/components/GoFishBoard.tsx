@@ -15,14 +15,14 @@ import type {
   GoFishCard,
   GoFishRank,
 } from "../game/modules/gofish/types";
-import { generateKeyPair, decrypt } from "@manamesh/crypto/mental-poker";
-import type { CryptoKeyPair } from "@manamesh/crypto/mental-poker/types";
+import { generateKeyPair, decrypt } from "@manamesh/boardgameio-crypto/mental-poker";
+import type { CryptoKeyPair } from "@manamesh/boardgameio-crypto/mental-poker/types";
 import {
   ecdsaGenerateKeyPair,
   ecdsaSignDigestHex,
   sha256Hex,
   stableStringify,
-} from "@manamesh/crypto";
+} from "@manamesh/boardgameio-crypto";
 
 const RANKS: GoFishRank[] = [
   "A",

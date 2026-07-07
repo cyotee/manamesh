@@ -16,6 +16,7 @@ import { MerkleBattleshipBoard } from "./components/MerkleBattleshipBoard";
 import { ThresholdTallyBoard } from "./components/ThresholdTallyBoard";
 import { GoFishBoard } from "./components/GoFishBoard";
 import { OnePiecePhaserBoard } from "./components/OnePiecePhaserBoard";
+import { TimestreamsBoard } from "@manamesh/timestreams";
 import { DeckBuilderPage } from "./components/DeckBuilder/DeckBuilderPage";
 import { AssetPackManagement } from "./components/AssetPackManagement";
 import { P2PLobby, type P2PRole } from "./components/P2PLobby";
@@ -248,6 +249,8 @@ function getBoardComponent(
         return WrappedOnePiece;
       }
       return OnePiecePhaserBoard;
+    case "timestreams":
+      return TimestreamsBoard;
     case "simple":
     default:
       return GameBoard;
@@ -912,16 +915,56 @@ const AppContent: React.FC = () => {
   // Game selection screen
   if (gameMode === "gameSelect") {
     return (
-      <GameSelector
-        onSelectGame={handleSelectGame}
-        onDeckBuilder={handleDeckBuilder}
-        onAssetPacks={handleAssetPacks}
-      />
+      <div>
+        <GameSelector
+          onSelectGame={handleSelectGame}
+          onDeckBuilder={handleDeckBuilder}
+          onAssetPacks={handleAssetPacks}
+        />
+        {/* Quick access for Mistborn rules-free testing (no P2P needed for demo) */}
+        <div style={{ textAlign: 'center', marginTop: 20 }}>
+          <button
+            onClick={() => {
+              setSelectedGameId('mistborn');
+              setGameMode('local');
+            }}
+            style={{ padding: '8px 16px', fontSize: 14 }}
+          >
+            🚀 Quick Test Mistborn (Rules-Free Demo)
+          </button>
+          <div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>
+            Standalone interactive test - works immediately for Vercel deploys
+          </div>
+        </div>
+      </div>
     );
   }
 
   // Mode selection screen
   if (gameMode === "modeSelect" && selectedGame) {
+    if (selectedGame.id === 'mistborn') {
+      // Special launcher for Mistborn to choose pack source (IPFS or local) for testing
+      return (
+        <div style={{ padding: 20 }}>
+          <h2>Mistborn Deck Builder - Rules Free Test Launcher</h2>
+          <p>Choose asset pack source (supports IPFS CID or bundled/local for Vercel).</p>
+          <button onClick={() => {
+            // For simplicity, use default and launch local
+            setGameMode('local');
+          }}>Launch with Bundled/Local Pack</button>
+          <button onClick={() => {
+            const cid = prompt('Enter IPFS CID for mistborn pack:');
+            if (cid) {
+              // In real, we could pass via context or props; for now launch and board handles CID switch
+              alert('Launch local - use the IPFS button in the board demo to switch source after launch.');
+              setGameMode('local');
+            }
+          }}>Launch and use IPFS (enter CID in board)</button>
+          <button onClick={handleBackToGameSelect}>Back</button>
+          <p>Note: The board will start in demo mode with interactive manual play. Use the source buttons in the board to load from IPFS or local.</p>
+        </div>
+      );
+    }
     return (
       <ModeSelect
         game={selectedGame}
@@ -948,6 +991,18 @@ const AppContent: React.FC = () => {
 
   // P2P game
   if (gameMode === "p2p-game" && p2pConnection && selectedGame) {
+    if (selectedGame.id === 'timestreams') {
+      // For Timestreams, we use the dedicated page flow, but fallback here
+      // In practice, use the /src/pages/timestreams for full lobby
+      return (
+        <P2PGame
+          game={selectedGame}
+          connection={p2pConnection}
+          role={p2pRole}
+          onBack={handleBackFromP2P}
+        />
+      );
+    }
     return (
       <P2PGame
         game={selectedGame}

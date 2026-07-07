@@ -6,7 +6,7 @@
  * Phaser emits CardInteractionEvents back to React via the EventBridge.
  */
 
-import type { CardVisibilityState, SlotType } from '../game/modules/onepiece/types';
+import type { CardVisibilityState, SlotType } from '@manamesh/onepiece/types';
 
 // =============================================================================
 // React → Phaser: Scene State

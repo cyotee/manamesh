@@ -17,7 +17,7 @@ import {
   secpPointMulHex,
   verifyRangeProof,
   RANGE_PROOF_VKEY,
-} from "@manamesh/crypto";
+} from "@manamesh/boardgameio-crypto";
 
 function assert(cond: unknown, msg: string): asserts cond {
   if (!cond) throw new Error(msg);

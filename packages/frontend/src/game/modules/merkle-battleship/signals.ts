@@ -1,4 +1,4 @@
-import type { MerkleProofStep } from "@manamesh/crypto";
+import type { MerkleProofStep } from "@manamesh/boardgameio-crypto";
 
 import type { CellBit, Coord } from "./types";
 import { CELL_COUNT, GRID_SIZE } from "./types";

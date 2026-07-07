@@ -16,7 +16,7 @@ import React, {
 } from "react";
 import type { BoardProps } from "boardgame.io/react";
 import type { JoinCodeConnection } from "../p2p";
-import type { MerkleProofStep } from "@manamesh/crypto";
+import type { MerkleProofStep } from "@manamesh/boardgameio-crypto";
 
 import {
   MerkleBattleshipState,

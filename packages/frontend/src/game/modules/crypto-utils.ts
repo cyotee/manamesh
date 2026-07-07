@@ -3,7 +3,7 @@
  * These functions are identical across war, gofish, onepiece, and poker modules.
  */
 
-import { sha256Hex } from "@manamesh/crypto";
+import { sha256Hex } from "@manamesh/boardgameio-crypto";
 
 // Minimal state interface all setup-sequenced modules satisfy.
 interface SetupPlayerState {

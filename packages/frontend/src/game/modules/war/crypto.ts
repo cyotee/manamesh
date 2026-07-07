@@ -29,21 +29,21 @@ import {
   type CryptoPluginState,
   type CryptoPlayerContext,
   type SerializedShuffleProof,
-} from "@manamesh/crypto";
-import type { EncryptedCard } from "@manamesh/crypto/mental-poker";
+} from "@manamesh/boardgameio-crypto";
+import type { EncryptedCard } from "@manamesh/boardgameio-crypto/mental-poker";
 import {
   encryptDeck as encryptDeckCrypto,
   reencryptDeck,
   quickShuffle,
   buildCardPointLookup,
-} from "@manamesh/crypto/mental-poker";
-import { secpIsValidPointHex } from "@manamesh/crypto/secp256k1";
+} from "@manamesh/boardgameio-crypto/mental-poker";
+import { secpIsValidPointHex, validateEncryptedCard, validatePlayerIdentity } from "@manamesh/boardgameio-crypto/secp256k1";
 import {
   getCurrentSetupPlayer,
   advanceSetupPlayer,
   resetSetupPlayer,
   lookupCardIdFromPoint,
-} from "@cyotee/boardgameio-crypto";
+} from "@manamesh/boardgameio-crypto";
 
 // =============================================================================
 // Types
@@ -763,10 +763,10 @@ export function submitDecryptedShare(
   if (G.phase !== "reveal") {
     return INVALID_MOVE;
   }
-  if (!secpIsValidPointHex(decryptedCard.ciphertext)) {
+  if (!validateEncryptedCard(decryptedCard)) {
     return INVALID_MOVE;
   }
-  if (ctx.playerID !== undefined && playerId !== ctx.playerID) {
+  if (!validatePlayerIdentity(ctx.playerID, playerId)) {
     return INVALID_MOVE;
   }
 
@@ -863,7 +863,7 @@ export function voteAbortReveal(
   playerId: string,
 ): CryptoWarState | typeof INVALID_MOVE {
   if (G.phase !== "reveal") return INVALID_MOVE;
-  if (ctx.playerID !== undefined && playerId !== ctx.playerID) {
+  if (!validatePlayerIdentity(ctx.playerID, playerId)) {
     return INVALID_MOVE;
   }
   if (!canAbortRevealNow(G, ctx)) return INVALID_MOVE;
@@ -901,7 +901,8 @@ export function requestDecrypt(
   );
   if (existingRequest) return INVALID_MOVE;
 
-  const requestId = `decrypt-${crypto.randomUUID()}`;
+  const numMoves = (ctx as any).numMoves ?? 0;
+  const requestId = `decrypt-${(ctx as any).turn ?? 0}-${numMoves}-${playerId}-${zoneId.replace(/[:/]/g,'-')}`;
 
   // Initialize approvals - requesting player auto-approves
   const approvals: Record<string, boolean> = {};
@@ -914,7 +915,7 @@ export function requestDecrypt(
     requestingPlayer: playerId,
     zoneId,
     cardIndices,
-    timestamp: Date.now(),
+    timestamp: numMoves,
     status: "pending",
     approvals,
     decryptionShares: {},

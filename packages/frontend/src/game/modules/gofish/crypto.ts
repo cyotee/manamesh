@@ -15,27 +15,27 @@ import type { Ctx, Game } from "boardgame.io";
 import { INVALID_MOVE } from "boardgame.io/core";
 
 import type { GameConfig } from "../types";
-import type { CryptoPluginState } from "@manamesh/crypto/plugin/crypto-plugin";
+import type { CryptoPluginState } from "@manamesh/boardgameio-crypto/plugin/crypto-plugin";
 import {
   decrypt,
   encryptDeck as encryptDeckCrypto,
   buildCardPointLookup,
   reencryptDeck,
   type EncryptedCard,
-} from "@manamesh/crypto/mental-poker";
+} from "@manamesh/boardgameio-crypto/mental-poker";
 import {
   sha256Hex,
   stableStringify,
   ecdsaVerifyDigestHex,
-} from "@manamesh/crypto";
-import { secpIsValidPointHex } from "@manamesh/crypto/secp256k1";
+} from "@manamesh/boardgameio-crypto";
+import { secpIsValidPointHex, validateEncryptedCard, validatePlayerIdentity } from "@manamesh/boardgameio-crypto/secp256k1";
 import {
   getCurrentSetupPlayer,
   advanceSetupPlayer,
   resetSetupPlayer,
   lookupCardIdFromPoint,
   deterministicShuffle,
-} from "@cyotee/boardgameio-crypto";
+} from "@manamesh/boardgameio-crypto";
 
 import {
   GOFISH_SHUFFLE_STALL_WINDOW_MOVES,
@@ -195,7 +195,7 @@ export {
   getCurrentSetupPlayer,
   advanceSetupPlayer,
   resetSetupPlayer,
-} from "@cyotee/boardgameio-crypto";
+} from "@manamesh/boardgameio-crypto";
 
 export function allKeysSubmitted(state: CryptoGoFishState): boolean {
   return state.playerOrder.every((id) => state.players[id].publicKey !== null);
@@ -1478,7 +1478,7 @@ export function submitDecryptedShare(
 ): CryptoGoFishState | typeof INVALID_MOVE {
   if (G.phase !== "play") return INVALID_MOVE;
   if (G.securityMode !== "coop-reveal") return INVALID_MOVE;
-  if (ctx.playerID !== undefined && playerId !== ctx.playerID) {
+  if (!validatePlayerIdentity(ctx.playerID, playerId)) {
     return INVALID_MOVE;
   }
 
@@ -1556,7 +1556,7 @@ export function voteAbortReveal(
 ): CryptoGoFishState | typeof INVALID_MOVE {
   if (G.phase !== "play") return INVALID_MOVE;
   if (G.securityMode !== "coop-reveal") return INVALID_MOVE;
-  if (ctx.playerID !== undefined && playerId !== ctx.playerID) {
+  if (!validatePlayerIdentity(ctx.playerID, playerId)) {
     return INVALID_MOVE;
   }
   if (!G.pendingReveal) return INVALID_MOVE;

@@ -33,6 +33,8 @@ const GameCard: React.FC<{
         return "🧾";
       case "simple":
         return "🎴"; // Flower playing card
+      case "timestreams":
+        return "⏳"; // hourglass / time eras
       default:
         return "🎮"; // Game die
     }

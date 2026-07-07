@@ -23,7 +23,9 @@ import {
 } from "./modules/gofish";
 import { MerkleBattleshipGame } from "./modules/merkle-battleship";
 import { ThresholdTallyGame } from "./modules/threshold-tally";
-import { OnePieceGame, OnePieceCryptoGame } from "./modules/onepiece";
+import { OnePieceGame, OnePieceCryptoGame } from "@manamesh/onepiece";
+import { MistbornModule, MistbornBoard, MistbornGame } from "@manamesh/mistborn-deckbuilder";
+import { TimestreamsModule, TimestreamsBoard } from "@manamesh/timestreams";
 
 export interface GameInfo<T = unknown> {
   id: string;
@@ -114,6 +116,25 @@ export const GAMES: GameInfo[] = [
     minPlayers: 2,
     maxPlayers: 2,
     getGame: () => SimpleCardGame as Game,
+  },
+  {
+    id: "mistborn",
+    name: "Mistborn Deck Builder (Rules-Free)",
+    description: "Phase 1: rules-free board for manual testing. Load pack, manage cards, advance tracks.",
+    minPlayers: 2,
+    maxPlayers: 4,
+    getGame: () => MistbornGame as Game,
+    BoardComponent: MistbornBoard,
+  },
+  {
+    id: "timestreams",
+    name: "Timestreams",
+    description: "Timestreams — cryptographically fair era-seeding card game. 2-4 players, home era assignment, timeline placement.",
+    minPlayers: 2,
+    maxPlayers: 4,
+    getGame: () => TimestreamsModule.getBoardgameIOGame() as Game,
+    getCryptoGame: () => TimestreamsModule.getBoardgameIOGame() as Game,
+    BoardComponent: TimestreamsBoard,
   },
 ];
 

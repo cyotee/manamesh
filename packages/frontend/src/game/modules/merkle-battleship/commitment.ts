@@ -1,5 +1,5 @@
 import type { CellBit } from "./types";
-import type { MerkleProofStep } from "@manamesh/crypto";
+import type { MerkleProofStep } from "@manamesh/boardgameio-crypto";
 import {
   bytesToHex,
   concatBytes,
@@ -8,7 +8,7 @@ import {
   merkleRootHex,
   sha256,
   utf8Bytes,
-} from "@manamesh/crypto";
+} from "@manamesh/boardgameio-crypto";
 
 function assertHex(hex: string): void {
   if (!/^[0-9a-fA-F]*$/.test(hex) || hex.length % 2 !== 0) {
