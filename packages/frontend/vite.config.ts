@@ -3,18 +3,78 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { viteSingleFile } from 'vite-plugin-singlefile';
 import path from 'path';
+import fs from 'fs';
 
 // Compute path to repo root dist/ so the single SPA lands next to the asset zip.
-const rootDist = path.resolve(__dirname, '../../../../dist');
+// Override with TIMESTREAMS_VERCEL_OUT for a clean Vercel deploy folder.
+const rootDist = process.env.TIMESTREAMS_VERCEL_OUT
+  ? path.resolve(process.env.TIMESTREAMS_VERCEL_OUT)
+  : path.resolve(__dirname, '../../../../dist');
+const isVercelBuild = !!process.env.TIMESTREAMS_VERCEL_OUT;
 
 // Real stub file that replaces boardgame.io's Svelte debug panel. Aliasing to a
 // physical file (instead of a `data:` URI) resolves cleanly in both the dev
 // server's esbuild dependency pre-scan and the production build.
 const emptyDebugStub = path.resolve(__dirname, 'stubs/empty-debug.js');
 
+/** Scanned Timestreams asset pack (manifests + card PNGs). */
+const timestreamsPackRoot = path.resolve(
+  __dirname,
+  '../../../timestreams/assets/packs/timestreams',
+);
+
+const MIME: Record<string, string> = {
+  '.json': 'application/json',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp',
+  '.svg': 'image/svg+xml',
+};
+
+/** Serve packages/timestreams/assets/packs/timestreams at /timestreams-pack/ */
+function serveTimestreamsPack() {
+  return {
+    name: 'serve-timestreams-pack',
+    configureServer(server: { middlewares: { use: (path: string, fn: Function) => void } }) {
+      server.middlewares.use('/timestreams-pack', (req: any, res: any, next: any) => {
+        try {
+          const urlPath = decodeURIComponent((req.url || '/').split('?')[0]);
+          const rel = urlPath.replace(/^\/+/, '');
+          const filePath = path.normalize(path.join(timestreamsPackRoot, rel));
+          if (!filePath.startsWith(timestreamsPackRoot)) {
+            res.statusCode = 403;
+            res.end('Forbidden');
+            return;
+          }
+          if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
+            // try index / manifest for bare dirs
+            const asManifest = path.join(filePath, 'manifest.json');
+            if (fs.existsSync(asManifest) && fs.statSync(asManifest).isFile()) {
+              res.setHeader('Content-Type', 'application/json');
+              res.end(fs.readFileSync(asManifest));
+              return;
+            }
+            res.statusCode = 404;
+            res.end('Not found');
+            return;
+          }
+          const ext = path.extname(filePath).toLowerCase();
+          res.setHeader('Content-Type', MIME[ext] || 'application/octet-stream');
+          res.setHeader('Cache-Control', 'public, max-age=3600');
+          res.end(fs.readFileSync(filePath));
+        } catch (err) {
+          next(err);
+        }
+      });
+    },
+  };
+}
+
 export default defineConfig(({ command }) => ({
     plugins: [
       react(),
+      serveTimestreamsPack(),
       {
         name: 'strip-boardgame-debug-svelte',
         // 'pre' so this resolveId runs before Vite's core resolver in the dev
@@ -34,8 +94,17 @@ export default defineConfig(({ command }) => ({
       },
       viteSingleFile({ removeViteModuleLoader: true }),
     ], // strip debug + removeViteModuleLoader + IIFE for clean classic script on file://
-    server: { port: 3000 },
-    base: './',
+    server: {
+      port: 3000,
+      fs: {
+        allow: [
+          path.resolve(__dirname, '../../..'),
+          timestreamsPackRoot,
+        ],
+      },
+    },
+    // Absolute base for Vercel so /timestreams-pack/ resolves from site root.
+    base: isVercelBuild ? '/' : './',
     resolve: {
         alias: [
             { find: '@tanstack/query-core', replacement: require.resolve('@tanstack/query-core') },
@@ -49,6 +118,7 @@ export default defineConfig(({ command }) => ({
             { find: '@manamesh/boardgameio-crypto/sha256', replacement: path.resolve(__dirname, '../../../boardgameio-crypto/src/sha256.ts') },
             { find: '@manamesh/boardgameio-crypto/stable-json', replacement: path.resolve(__dirname, '../../../boardgameio-crypto/src/stable-json.ts') },
             { find: '@manamesh/boardgameio-crypto/ecdsa', replacement: path.resolve(__dirname, '../../../boardgameio-crypto/src/ecdsa.ts') },
+            { find: '@manamesh/boardgameio-crypto/secp256k1', replacement: path.resolve(__dirname, '../../../boardgameio-crypto/src/secp256k1.ts') },
             { find: '@manamesh/boardgameio-crypto', replacement: path.resolve(__dirname, '../../../boardgameio-crypto') },
             // Exact bare react imports (use regex ^ $ to avoid prefix matching subpaths like react/jsx-runtime)
             { find: /^react$/, replacement: path.join(path.dirname(require.resolve('react/package.json')), 'index.js') },
@@ -89,7 +159,8 @@ export default defineConfig(({ command }) => ({
     },
     build: {
         outDir: rootDist,
-        emptyOutDir: false, // preserve zip and other files in dist/
+        // Vercel build: clean folder. Local monorepo dist: keep zip / other artifacts.
+        emptyOutDir: isVercelBuild,
         assetsInlineLimit: 100000000,
         cssCodeSplit: false,
         rollupOptions: {

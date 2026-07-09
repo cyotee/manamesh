@@ -12,6 +12,8 @@ export interface TimestreamsLobbyProps {
   roomCode?: string;
   maxPlayers?: number;
   homeEraAssignment?: HomeEraAssignment;
+  /** Initial rules-engine toggle (host can change before connect). */
+  rulesEnabled?: boolean;
   game: Game;
   onGameStart: (params: {
     connection: JoinCodeConnection;
@@ -20,6 +22,7 @@ export interface TimestreamsLobbyProps {
     matchID: string;
     numPlayers: number;
     homeEraAssignment: HomeEraAssignment;
+    rulesEnabled: boolean;
   }) => void;
   onError: (error: Error) => void;
 }
@@ -73,10 +76,12 @@ export const TimestreamsLobby: React.FC<TimestreamsLobbyProps> = ({
   isHost,
   maxPlayers = 2,
   homeEraAssignment: initialHomeEra = 'selectable',
+  rulesEnabled: initialRulesEnabled = true,
   onGameStart,
   onError,
 }) => {
   const [homeEraAssignment, setHomeEraAssignment] = useState<HomeEraAssignment>(initialHomeEra);
+  const [rulesEnabled, setRulesEnabled] = useState(initialRulesEnabled);
   const [eraClaims, setEraClaims] = useState<Record<string, string>>({});
 
   const [phase, setPhase] = useState<JoinCodeState['phase']>('idle');
@@ -105,19 +110,26 @@ export const TimestreamsLobby: React.FC<TimestreamsLobbyProps> = ({
       matchID: matchIdFromOffer(offerRef.current),
       numPlayers: 2,
       homeEraAssignment,
+      // Guest inherits host's config via host-authoritative setupData; still
+      // pass local value so host path is consistent.
+      rulesEnabled: isHost ? rulesEnabled : true,
     });
-  }, [onGameStart, homeEraAssignment]);
+  }, [onGameStart, homeEraAssignment, rulesEnabled, isHost]);
 
   // Create the connection object once, wired to drive the manual exchange UI.
   useEffect(() => {
+    let cancelled = false;
     const conn = new JoinCodeConnection({
       onStateChange: (state) => {
+        if (cancelled) return;
         setPhase(state.phase);
         if (state.phase === 'waiting-for-answer') {
           offerRef.current = state.offerCode;
           setOfferCode(state.offerCode);
+          setError('');
         } else if (state.phase === 'waiting-for-host') {
           setAnswerCode(state.answerCode);
+          setError('');
         } else if (state.phase === 'connected') {
           finishStart(isHost ? 'host' : 'guest');
         } else if (state.phase === 'error') {
@@ -133,6 +145,7 @@ export const TimestreamsLobby: React.FC<TimestreamsLobbyProps> = ({
     // Host proactively creates its offer so the invite code is ready to share.
     if (isHost) {
       conn.createGame().catch((err) => {
+        if (cancelled) return;
         const msg = err instanceof Error ? err.message : String(err);
         setError(msg);
         onError(err instanceof Error ? err : new Error(msg));
@@ -140,13 +153,16 @@ export const TimestreamsLobby: React.FC<TimestreamsLobbyProps> = ({
     }
 
     return () => {
+      cancelled = true;
       // Once the game has started, ownership of the live WebRTC connection
       // transfers to the game client — closing it here would tear down the
       // connection we just handed over. Only clean up if we never started.
       if (!startedRef.current) {
         conn.close();
       }
-      connRef.current = null;
+      if (connRef.current === conn) {
+        connRef.current = null;
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isHost]);
@@ -191,19 +207,6 @@ export const TimestreamsLobby: React.FC<TimestreamsLobbyProps> = ({
     setEraClaims((prev) => ({ ...prev, [displayName]: era }));
   };
 
-  const startLocalTest = () => {
-    if (startedRef.current) return;
-    startedRef.current = true;
-    onGameStart({
-      connection: null as unknown as JoinCodeConnection,
-      role: 'host',
-      playerID: '0',
-      matchID: 'local_test_' + Date.now(),
-      numPlayers: 2,
-      homeEraAssignment,
-    });
-  };
-
   const connecting = phase === 'connecting';
   const connected = phase === 'connected';
 
@@ -211,12 +214,16 @@ export const TimestreamsLobby: React.FC<TimestreamsLobbyProps> = ({
     <div style={{ padding: 20, maxWidth: 700, margin: '0 auto', background: '#0f172a', color: '#e2e8f0' }}>
       <h2>Timestreams Lobby</h2>
       <p>
-        Player: {displayName} | Mode: {isHost ? 'Host' : 'Guest'} | Serverless P2P (join codes)
+        Player: {displayName} | Mode: <strong>{isHost ? 'Host' : 'Guest'}</strong> | Serverless P2P (join codes)
+      </p>
+      <p style={{ fontSize: '0.85em', color: '#94a3b8' }}>
+        Two-way exchange: Host share invite → Guest paste invite &amp; send answer → Host paste answer → WebRTC opens.
+        Works across the internet via STUN (no server we run). Same machine / two tabs works for testing.
       </p>
 
       {error && (
         <p style={{ color: '#f87171' }}>
-          Connection note: {error}. You can still use “Start Local Test” below.
+          Connection note: {error}
         </p>
       )}
 
@@ -301,14 +308,47 @@ export const TimestreamsLobby: React.FC<TimestreamsLobbyProps> = ({
       {/* Host-only pre-game options */}
       {isHost && !connected && (
         <div style={{ marginTop: 16 }}>
-          <label>Home Era Assignment: </label>
-          <select
-            value={homeEraAssignment}
-            onChange={(e) => setHomeEraAssignment(e.target.value as HomeEraAssignment)}
+          <div style={{ marginBottom: 12 }}>
+            <label>Home Era Assignment: </label>
+            <select
+              value={homeEraAssignment}
+              onChange={(e) => setHomeEraAssignment(e.target.value as HomeEraAssignment)}
+            >
+              <option value="selectable">Selectable (claim eras)</option>
+              <option value="random">Random (fair)</option>
+            </select>
+          </div>
+
+          <label
+            data-testid="rules-enabled-toggle"
+            style={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: 8,
+              padding: 10,
+              background: rulesEnabled ? '#1e2937' : '#422006',
+              border: rulesEnabled ? '1px solid #334155' : '1px solid #eab308',
+              borderRadius: 6,
+              cursor: 'pointer',
+              fontSize: '0.9em',
+            }}
           >
-            <option value="selectable">Selectable (claim eras)</option>
-            <option value="random">Random (fair)</option>
-          </select>
+            <input
+              type="checkbox"
+              checked={rulesEnabled}
+              onChange={(e) => setRulesEnabled(e.target.checked)}
+              style={{ marginTop: 3 }}
+            />
+            <span>
+              <strong>Rules engine</strong>
+              {rulesEnabled ? ' (on)' : ' (OFF — structural play only)'}
+              <br />
+              <span style={{ color: '#94a3b8', fontSize: '0.85em' }}>
+                Uncheck to skip play/score effects, gates, and triggers so you can test P2P and
+                the board even if the rules engine errors.
+              </span>
+            </span>
+          </label>
 
           {homeEraAssignment === 'selectable' && (
             <div style={{ margin: '12px 0' }}>
@@ -330,19 +370,10 @@ export const TimestreamsLobby: React.FC<TimestreamsLobbyProps> = ({
         </div>
       )}
 
-      <div style={{ marginTop: 20 }}>
-        <button onClick={startLocalTest} style={{ background: '#334155' }}>
-          Start Local Test (board, no network)
-        </button>
-        <p style={{ fontSize: '0.8em', color: '#94a3b8' }}>
-          Local test opens the board on this machine only. For real multiplayer, complete the
-          two-way invite/answer exchange above — no server required.
-        </p>
-      </div>
-
       <p style={{ fontSize: '0.75em', color: '#64748b', marginTop: 12 }}>
         Players ≤ {maxPlayers}. Serverless join-code P2P is 1-vs-1; peers behind symmetric NAT may
-        need a TURN relay (inherent WebRTC limitation).
+        need a TURN relay (inherent WebRTC limitation). Use the menu&apos;s &quot;Local 2-Seat&quot;
+        option to exercise the rules engine without network.
       </p>
     </div>
   );

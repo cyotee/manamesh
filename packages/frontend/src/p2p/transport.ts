@@ -137,6 +137,8 @@ export interface P2PTransportOpts {
   playerID?: string;
   numPlayers?: number;
   credentials?: string;
+  /** Passed to game.setup as the second argument (moduleConfig, decks, etc.) */
+  setupData?: unknown;
 }
 
 interface TransportDataCallback {
@@ -174,13 +176,18 @@ function findStartingPhase(game: Game): string | null {
  * This is a simplified version of boardgame.io's InitializeGame
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function initializeGameState(game: Game, numPlayers: number): State<any> {
+function initializeGameState(
+  game: Game,
+  numPlayers: number,
+  setupData?: unknown,
+): State<any> {
   // Find the starting phase from game config
   const startingPhase = findStartingPhase(game);
 
+  const playOrder = Array.from({ length: numPlayers }, (_, i) => String(i));
   const ctx: Ctx = {
     numPlayers,
-    playOrder: Array.from({ length: numPlayers }, (_, i) => String(i)),
+    playOrder,
     playOrderPos: 0,
     activePlayers: null,
     currentPlayer: "0",
@@ -189,9 +196,19 @@ function initializeGameState(game: Game, numPlayers: number): State<any> {
     phase: startingPhase || null,
   };
 
-  // Initialize game state using the setup function
+  // boardgame.io setup receives a FnContext-like first arg in modern APIs,
+  // but this monorepo's TimestreamsGame.setup expects (ctx, setupData).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const G = game.setup ? (game.setup as any)({ ctx }) : {};
+  const G = game.setup
+    ? (game.setup as any)({ ...ctx, playOrder }, setupData)
+    : {};
+
+  // Run onBegin for the starting phase if present
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const phases = (game as any).phases;
+  if (startingPhase && phases?.[startingPhase]?.onBegin) {
+    phases[startingPhase].onBegin({ G, ctx });
+  }
 
   return {
     G,
@@ -204,36 +221,82 @@ function initializeGameState(game: Game, numPlayers: number): State<any> {
 }
 
 /**
- * Find a move definition from the game config
- * Checks both top-level moves and phase-specific moves
+ * Invoke phase onBegin when entering a new phase.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function runPhaseOnBegin(game: Game, G: any, ctx: Ctx): void {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const phases = (game as any).phases;
+  if (!ctx.phase || !phases?.[ctx.phase]?.onBegin) return;
+  phases[ctx.phase].onBegin({ G, ctx });
+}
+
+/**
+ * Resolve next player index using phase/game turn.order if available.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function resolveNextPlayOrderPos(game: Game, G: any, ctx: Ctx): number {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const phases = (game as any).phases;
+  const phaseTurn = ctx.phase ? phases?.[ctx.phase]?.turn : undefined;
+  const order = phaseTurn?.order ?? (game as any).turn?.order;
+  if (order?.next) {
+    try {
+      const next = order.next({ G, ctx });
+      if (typeof next === "number" && next >= 0) return next;
+    } catch {
+      /* fall through */
+    }
+  }
+  return (ctx.playOrderPos + 1) % ctx.numPlayers;
+}
+
+/**
+ * Find a move definition from the game config.
+ * Order: phase moves → phase stage moves → top-level moves.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function findMove(
   game: Game,
   moveType: string,
   phase: string | null,
-): ((args: any, ...moveArgs: any[]) => any) | null {
-  // Check top-level moves first
+): { move: (args: any, ...moveArgs: any[]) => any; ignoreStaleStateID?: boolean } | null {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let moveDef = (game.moves as any)?.[moveType];
+  const phases = (game as any).phases;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let moveDef: any = phase ? phases?.[phase]?.moves?.[moveType] : undefined;
 
-  // If not found and we have a phase, check phase-specific moves
+  // Stage moves (e.g. turn.stages.crypto.moves.submitPublicKey)
   if (!moveDef && phase) {
+    const stages = phases?.[phase]?.turn?.stages;
+    if (stages) {
+      for (const stageName of Object.keys(stages)) {
+        const stageMove = stages[stageName]?.moves?.[moveType];
+        if (stageMove) {
+          moveDef = stageMove;
+          break;
+        }
+      }
+    }
+  }
+
+  if (!moveDef) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const phases = (game as any).phases;
-    moveDef = phases?.[phase]?.moves?.[moveType];
+    moveDef = (game.moves as any)?.[moveType];
   }
 
   if (!moveDef) {
     return null;
   }
 
-  // Handle both direct function and { move: fn } formats
   if (typeof moveDef === "function") {
-    return moveDef;
+    return { move: moveDef };
   }
   if (typeof moveDef === "object" && typeof moveDef.move === "function") {
-    return moveDef.move;
+    return {
+      move: moveDef.move,
+      ignoreStaleStateID: !!moveDef.ignoreStaleStateID,
+    };
   }
 
   return null;
@@ -249,17 +312,20 @@ function applyAction(
   state: State<any>,
   action: any,
 ): State<any> | typeof INVALID_MOVE {
-  const { type, playerID, payload } = action;
+  const { type, payload } = action;
+  // boardgame.io puts playerID on payload; P2P may also stitch it on the action root.
+  const playerID =
+    payload?.playerID ?? action.playerID ?? action.payload?.playerID ?? null;
 
   if (type !== "MAKE_MOVE") {
     // We only handle MAKE_MOVE actions for now
     return INVALID_MOVE;
   }
 
-  const { type: moveType, args } = payload;
-  const move = findMove(game, moveType, state.ctx.phase);
+  const { type: moveType, args } = payload || {};
+  const found = findMove(game, moveType, state.ctx.phase);
 
-  if (!move) {
+  if (!found) {
     console.log(
       "[applyAction] Move not found:",
       moveType,
@@ -268,6 +334,7 @@ function applyAction(
     );
     return INVALID_MOVE;
   }
+  const move = found.move;
 
   // Create a copy of the state
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -291,23 +358,64 @@ function applyAction(
   };
 
   // Call the move with events
+  if (!playerID) {
+    console.error("[applyAction] Missing playerID on action", action);
+    return INVALID_MOVE;
+  }
   const moveArgs = { G, ctx, playerID, events };
-  const result = move(moveArgs, ...args);
+  const result = move(moveArgs, ...(Array.isArray(args) ? args : []));
 
   // Handle move result
   if (result === INVALID_MOVE) {
     return INVALID_MOVE;
   }
 
-  // If the move returns a new G, use it
-  if (result !== undefined) {
+  // If the move returns a new G object, use it. Ignore non-object returns
+  // (legacy moves that returned booleans would otherwise corrupt G).
+  if (result !== undefined && result !== null && typeof result === "object") {
     G = result;
   }
 
-  // Handle phase transition
+  /** Align ctx.currentPlayer using phase turn.order.first (home-era chronology). */
+  const alignPhaseFirstPlayer = (nextPhase: string) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const nextPhaseConfig = (game.phases as any)?.[nextPhase];
+    const firstFn = nextPhaseConfig?.turn?.order?.first;
+    if (typeof firstFn !== "function") return;
+    try {
+      const firstPos = firstFn({ G, ctx });
+      if (typeof firstPos === "number" && firstPos >= 0) {
+        // firstPos is an index into G.playerOrder / ctx.playOrder (same seats).
+        const playOrder = ctx.playOrder || G.playerOrder || [];
+        const pid = playOrder[firstPos] ?? G.playerOrder?.[firstPos];
+        if (pid != null) {
+          ctx = {
+            ...ctx,
+            playOrderPos: firstPos,
+            currentPlayer: String(pid),
+            numMoves: 0,
+          };
+          console.log(
+            "[applyAction] First player for",
+            nextPhase,
+            "→",
+            ctx.currentPlayer,
+            "(pos",
+            firstPos,
+            ")",
+          );
+        }
+      }
+    } catch (err) {
+      console.warn("[applyAction] turn.order.first failed", err);
+    }
+  };
+
+  // Handle phase transition (events.endPhase — e.g. last shuffle → play)
   if (phaseEnded && game.phases) {
     const currentPhase = ctx.phase;
-    const phaseConfig = game.phases[currentPhase];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const phaseConfig = (game.phases as any)[currentPhase as string];
     if (phaseConfig?.next) {
       const nextPhase =
         typeof phaseConfig.next === "function"
@@ -320,12 +428,16 @@ function applyAction(
         nextPhase,
       );
       ctx = { ...ctx, phase: nextPhase };
+      runPhaseOnBegin(game, G, ctx);
+      alignPhaseFirstPlayer(nextPhase);
     }
   }
 
-  // Check phase endIf (automatic phase transition)
-  if (!phaseEnded && game.phases && ctx.phase) {
-    const phaseConfig = game.phases[ctx.phase];
+  // Check phase endIf (automatic phase transition) — may chain once more
+  // (e.g. setup → play, or keyExchange → encrypt after last key).
+  if (game.phases && ctx.phase) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const phaseConfig = (game.phases as any)[ctx.phase];
     if (phaseConfig?.endIf) {
       const shouldEnd = phaseConfig.endIf({ G, ctx });
       if (shouldEnd && phaseConfig.next) {
@@ -338,27 +450,37 @@ function applyAction(
           nextPhase,
         );
         ctx = { ...ctx, phase: nextPhase };
+        runPhaseOnBegin(game, G, ctx);
+        alignPhaseFirstPlayer(nextPhase);
       }
     }
   }
 
   // Check for end turn
-  const numMoves = ctx.numMoves + 1;
+  const numMoves = (ctx.numMoves || 0) + 1;
   const shouldEndTurn =
     turnEnded || (game.turn?.maxMoves && numMoves >= game.turn.maxMoves);
 
   let newCtx = { ...ctx, numMoves };
 
   if (shouldEndTurn) {
-    // Advance to next player
-    const nextPos = (ctx.playOrderPos + 1) % ctx.numPlayers;
+    const nextPos = resolveNextPlayOrderPos(game, G, { ...ctx, numMoves });
+    const playOrder = ctx.playOrder || G.playerOrder || [];
+    const nextPid = playOrder[nextPos] ?? G.playerOrder?.[nextPos] ?? ctx.currentPlayer;
     newCtx = {
       ...newCtx,
       playOrderPos: nextPos,
-      currentPlayer: ctx.playOrder[nextPos],
+      currentPlayer: String(nextPid),
       numMoves: 0,
       turn: ctx.turn + 1,
     };
+    console.log(
+      "[applyAction] endTurn → currentPlayer",
+      newCtx.currentPlayer,
+      "day",
+      G.currentDay,
+      "startOfDayPending was consumed by turn.order.next if set",
+    );
   }
 
   // Check for game end
@@ -383,22 +505,33 @@ class P2PMaster {
   private db: BrowserStorage;
   private matchID: string;
   private numPlayers: number;
+  private setupData?: unknown;
   private subscribers: Map<string, (data: P2PMessage) => void> = new Map();
   private initialized: Promise<void>;
   private _isInitialized = false;
 
-  constructor(game: Game, matchID: string, numPlayers: number) {
+  constructor(
+    game: Game,
+    matchID: string,
+    numPlayers: number,
+    setupData?: unknown,
+  ) {
     this.game = game;
     this.db = new BrowserStorage();
     this.matchID = matchID;
     this.numPlayers = numPlayers;
+    this.setupData = setupData;
 
     // Initialize the game state and store the promise
     this.initialized = this.initGame();
   }
 
   private async initGame(): Promise<void> {
-    const initialState = initializeGameState(this.game, this.numPlayers);
+    const initialState = initializeGameState(
+      this.game,
+      this.numPlayers,
+      this.setupData,
+    );
 
     await this.db.createMatch(this.matchID, {
       initialState,
@@ -467,18 +600,44 @@ class P2PMaster {
       return { error: "Match not found" };
     }
 
-    // Check state ID matches (prevents stale updates)
-    if (state._stateID !== stateID) {
-      console.log(
-        `[P2PMaster] Stale state: expected ${state._stateID}, got ${stateID}`,
-      );
-      return { error: "Stale state" };
+    // Ensure playerID is on the action (boardgame.io stores it in payload).
+    if (action?.payload && (action.payload.playerID == null || action.payload.playerID === "")) {
+      action = {
+        ...action,
+        payload: { ...action.payload, playerID },
+        playerID,
+      };
+    } else if (action && action.playerID == null) {
+      action = { ...action, playerID };
     }
 
-    // Apply the action
+    const moveType = action?.payload?.type;
+    const found = moveType
+      ? findMove(this.game, moveType, state.ctx.phase)
+      : null;
+    const ignoreStale = !!(found && found.ignoreStaleStateID);
+
+    // Concurrent crypto moves (key exchange, shuffle commit) race across peers.
+    // Apply against latest state when the move opts into ignoreStaleStateID.
+    if (state._stateID !== stateID) {
+      if (!ignoreStale) {
+        console.log(
+          `[P2PMaster] Stale state: expected ${state._stateID}, got ${stateID} (move=${moveType}, player=${playerID})`,
+        );
+        return { error: "Stale state" };
+      }
+      console.log(
+        `[P2PMaster] Accepting stale concurrent move ${moveType} from P${playerID} (client=${stateID}, master=${state._stateID})`,
+      );
+    }
+
+    // Apply the action against the master's current state
     const newState = applyAction(this.game, state, action);
 
     if (newState === INVALID_MOVE) {
+      console.log(
+        `[P2PMaster] Invalid move ${moveType} from P${playerID} phase=${state.ctx.phase}`,
+      );
       return { error: "Invalid move" };
     }
 
@@ -606,6 +765,7 @@ export class P2PTransport {
   private credentials?: string;
   private numPlayers: number;
   private game: Game;
+  private setupData?: unknown;
   private transportDataCallback: TransportDataCallback | null = null;
   private assetSharingCallbacks: Set<(msg: AssetSharingMessage) => void> =
     new Set();
@@ -621,6 +781,7 @@ export class P2PTransport {
     this.credentials = opts.credentials;
     this.numPlayers = opts.numPlayers || 2;
     this.game = opts.game;
+    this.setupData = opts.setupData;
     this.transportDataCallback = opts.transportDataCallback || null;
   }
 
@@ -730,7 +891,12 @@ export class P2PTransport {
     console.log("[P2PTransport] Connecting as host");
 
     // Create the master for the host
-    this.master = new P2PMaster(this.game, this.matchID, this.numPlayers);
+    this.master = new P2PMaster(
+      this.game,
+      this.matchID,
+      this.numPlayers,
+      this.setupData,
+    );
 
     // Wait for the master to initialize the game state
     await this.master.waitForInit();
@@ -799,25 +965,31 @@ export class P2PTransport {
     if (!this.master) return;
 
     switch (message.type) {
-      case "action":
+      case "action": {
         let [action, stateID, matchID, playerID] = message.args;
+        const pid = playerID || "1";
 
-        // If the action doesn't include a playerID, stitch it in from the
-        // transport-level playerID provided alongside the message.
-        if (
-          action &&
-          (action.playerID === undefined || action.playerID === null)
-        ) {
-          action = { ...action, playerID };
+        // boardgame.io puts playerID on payload; also set top-level.
+        if (action) {
+          if (action.playerID == null) {
+            action = { ...action, playerID: pid };
+          }
+          if (action.payload && action.payload.playerID == null) {
+            action = {
+              ...action,
+              payload: { ...action.payload, playerID: pid },
+            };
+          }
         }
         this.master
-          .onUpdate(action, stateID, matchID, playerID)
+          .onUpdate(action, stateID, matchID, pid)
           .then((result) => {
             if (result?.error) {
               this.sendToGuest({ type: "error", args: [result.error] });
             }
           });
         break;
+      }
 
       case "sync-req":
         const [syncMatchID, syncPlayerID, syncCredentials, syncNumPlayers] =
@@ -853,9 +1025,16 @@ export class P2PTransport {
         this.notifyClient(message);
         break;
 
-      case "error":
-        console.error("[P2PTransport] Host error:", message.args[0]);
+      case "error": {
+        const err = message.args?.[0];
+        console.error("[P2PTransport] Host error:", err);
+        // After a rejected concurrent move, re-sync so stateID catches up
+        // and retries (e.g. submitPublicKey) can succeed.
+        if (err === "Stale state" || err === "Invalid move") {
+          this.requestSync();
+        }
         break;
+      }
     }
   }
 
@@ -976,24 +1155,39 @@ export class P2PTransport {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   sendAction(state: State<any>, action: any): void {
-    // Ensure actions carry a playerID. Some clients/versions omit it.
-    if (action && (action.playerID === undefined || action.playerID === null)) {
-      action = { ...action, playerID: this.playerID };
+    const pid = this.playerID || "0";
+    // boardgame.io stores playerID on payload; also set top-level for applyAction.
+    if (action) {
+      if (action.playerID == null) {
+        action = { ...action, playerID: pid };
+      }
+      if (action.payload && action.payload.playerID == null) {
+        action = {
+          ...action,
+          payload: { ...action.payload, playerID: pid },
+        };
+      }
     }
 
     console.log(
       "[P2PTransport] sendAction called:",
-      action.type,
+      action?.type,
+      action?.payload?.type,
+      "as P" + pid,
       "state:",
       state ? `stateID=${state._stateID}` : "null",
     );
     if (this.role === "host" && this.master) {
       // Host processes action locally
       this.master
-        .onUpdate(action, state._stateID, this.matchID, this.playerID || "0")
+        .onUpdate(action, state._stateID, this.matchID, pid)
         .then((result) => {
           if (result?.error) {
             console.error("[P2PTransport] Action failed:", result.error);
+            // Host can still re-sync local client after rare races
+            if (result.error === "Stale state") {
+              this.requestSync();
+            }
           } else {
             console.log("[P2PTransport] Action processed successfully");
           }
@@ -1002,7 +1196,7 @@ export class P2PTransport {
       // Guest sends action to host
       this.sendToHost({
         type: "action",
-        args: [action, state._stateID, this.matchID, this.playerID],
+        args: [action, state._stateID, this.matchID, pid],
       });
     }
   }

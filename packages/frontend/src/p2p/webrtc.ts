@@ -30,6 +30,8 @@ export class PeerConnection {
   private iceGatheringComplete = false;
   private events: PeerConnectionEvents;
   private _state: ConnectionState = 'new';
+  /** Set when close() is intentional so onclose doesn't report a failure. */
+  private intentionalClose = false;
 
   constructor(events: PeerConnectionEvents) {
     this.events = events;
@@ -60,6 +62,7 @@ export class PeerConnection {
     };
 
     this.pc.onconnectionstatechange = () => {
+      if (this.intentionalClose) return;
       switch (this.pc.connectionState) {
         case 'connecting':
           this.setState('connecting');
@@ -74,6 +77,9 @@ export class PeerConnection {
           this.setState('failed');
           this.events.onError(new Error('Connection failed'));
           break;
+        case 'closed':
+          // Normal after close(); ignore.
+          break;
       }
     };
 
@@ -87,12 +93,13 @@ export class PeerConnection {
 
     channel.onopen = () => {
       console.log('[WebRTC] Data channel opened');
-      this.setState('connected');
+      if (!this.intentionalClose) this.setState('connected');
     };
 
     channel.onclose = () => {
       console.log('[WebRTC] Data channel closed');
-      this.setState('disconnected');
+      // Intentional close (lobby remount / cleanup) must not surface as an error.
+      if (!this.intentionalClose) this.setState('disconnected');
     };
 
     channel.onerror = (event) => {
@@ -191,11 +198,20 @@ export class PeerConnection {
    * Close the connection
    */
   close(): void {
-    if (this.dataChannel) {
-      this.dataChannel.close();
+    this.intentionalClose = true;
+    try {
+      if (this.dataChannel) {
+        this.dataChannel.close();
+      }
+    } catch {
+      /* ignore */
     }
-    this.pc.close();
-    this.setState('disconnected');
+    try {
+      this.pc.close();
+    } catch {
+      /* ignore */
+    }
+    // Do not emit 'disconnected' on intentional close — callers clean up their own UI state.
   }
 
   /**

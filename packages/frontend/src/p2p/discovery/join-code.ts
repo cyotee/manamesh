@@ -51,8 +51,15 @@ export class JoinCodeConnection {
         this.events.onConnectionStateChange(state);
         if (state === 'connected') {
           this.setState({ phase: 'connected' });
-        } else if (state === 'failed' || state === 'disconnected') {
+        } else if (state === 'failed') {
           if (this._state.phase !== 'error') {
+            this.setState({ phase: 'error', error: `Connection ${state}` });
+          }
+        } else if (state === 'disconnected') {
+          // Only treat as fatal once we had a live link or were finishing the handshake.
+          // During offer/answer creation, transient closes (React StrictMode remount) are normal.
+          const phase = this._state.phase;
+          if (phase === 'connected' || phase === 'connecting') {
             this.setState({ phase: 'error', error: `Connection ${state}` });
           }
         }
