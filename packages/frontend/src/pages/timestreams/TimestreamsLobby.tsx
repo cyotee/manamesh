@@ -23,8 +23,16 @@ export interface TimestreamsLobbyProps {
     numPlayers: number;
     homeEraAssignment: HomeEraAssignment;
     rulesEnabled: boolean;
+    /** Host resume after refresh: restore board from localStorage. */
+    restoreFromPersist?: boolean;
   }) => void;
   onError: (error: Error) => void;
+  /**
+   * When resuming after refresh, reuse this matchID so the host can load
+   * the saved board (WebRTC still needs a new join-code exchange).
+   */
+  resumeMatchID?: string | null;
+  resumeAsRole?: 'host' | 'guest' | null;
 }
 
 const ERAS: string[] = ['stone', 'medieval', 'renaissance', 'industrial', 'modern', 'future'];
@@ -79,6 +87,8 @@ export const TimestreamsLobby: React.FC<TimestreamsLobbyProps> = ({
   rulesEnabled: initialRulesEnabled = true,
   onGameStart,
   onError,
+  resumeMatchID = null,
+  resumeAsRole = null,
 }) => {
   const [homeEraAssignment, setHomeEraAssignment] = useState<HomeEraAssignment>(initialHomeEra);
   const [rulesEnabled, setRulesEnabled] = useState(initialRulesEnabled);
@@ -103,18 +113,32 @@ export const TimestreamsLobby: React.FC<TimestreamsLobbyProps> = ({
     const conn = connRef.current;
     if (!conn) return;
     startedRef.current = true;
+    // Resume: keep stable matchID so host can restore board from localStorage.
+    // Fresh game: derive matchID from the offer code.
+    const matchID =
+      resumeMatchID ||
+      matchIdFromOffer(offerRef.current || '');
+    const playerID =
+      resumeAsRole === 'host'
+        ? '0'
+        : resumeAsRole === 'guest'
+          ? '1'
+          : role === 'host'
+            ? '0'
+            : '1';
     onGameStart({
       connection: conn,
       role,
-      playerID: role === 'host' ? '0' : '1',
-      matchID: matchIdFromOffer(offerRef.current),
+      playerID,
+      matchID,
       numPlayers: 2,
       homeEraAssignment,
       // Guest inherits host's config via host-authoritative setupData; still
       // pass local value so host path is consistent.
       rulesEnabled: isHost ? rulesEnabled : true,
+      restoreFromPersist: !!resumeMatchID && role === 'host',
     });
-  }, [onGameStart, homeEraAssignment, rulesEnabled, isHost]);
+  }, [onGameStart, homeEraAssignment, rulesEnabled, isHost, resumeMatchID, resumeAsRole]);
 
   // Create the connection object once, wired to drive the manual exchange UI.
   useEffect(() => {
@@ -212,14 +236,35 @@ export const TimestreamsLobby: React.FC<TimestreamsLobbyProps> = ({
 
   return (
     <div style={{ padding: 20, maxWidth: 700, margin: '0 auto', background: '#0f172a', color: '#e2e8f0' }}>
-      <h2>Timestreams Lobby</h2>
+      <h2>
+        {resumeMatchID
+          ? isHost
+            ? 'Resume match as Host'
+            : 'Resume match as Guest'
+          : 'Timestreams Lobby'}
+      </h2>
       <p>
         Player: {displayName} | Mode: <strong>{isHost ? 'Host' : 'Guest'}</strong> | Serverless P2P (join codes)
       </p>
-      <p style={{ fontSize: '0.85em', color: '#94a3b8' }}>
-        Two-way exchange: Host share invite → Guest paste invite &amp; send answer → Host paste answer → WebRTC opens.
-        Works across the internet via STUN (no server we run). Same machine / two tabs works for testing.
-      </p>
+      {resumeMatchID ? (
+        <div
+          style={{
+            ...boxStyle,
+            border: '1px solid #eab308',
+            background: '#422006',
+            fontSize: 13,
+          }}
+        >
+          Reconnecting match <code style={{ fontSize: 11 }}>{resumeMatchID}</code>.
+          Exchange <strong>new</strong> join codes (WebRTC dies on refresh). Host
+          restores the board from this browser; guest syncs after connect.
+        </div>
+      ) : (
+        <p style={{ fontSize: '0.85em', color: '#94a3b8' }}>
+          Two-way exchange: Host share invite → Guest paste invite &amp; send answer → Host paste answer → WebRTC opens.
+          Works across the internet via STUN (no server we run). Same machine / two tabs works for testing.
+        </p>
+      )}
 
       {error && (
         <p style={{ color: '#f87171' }}>

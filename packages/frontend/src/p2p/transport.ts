@@ -26,8 +26,11 @@ import type {
 import { isAssetSharingMessage } from "./asset-sharing";
 import type { AssetSharingMessage } from "./asset-sharing";
 
+const MATCH_STATE_PREFIX = "timestreams_match_state_v1:";
+
 /**
- * Simple in-memory storage for browser-side game state
+ * Host-side game storage: in-memory + localStorage so a host refresh can
+ * resume the same matchID without resetting the board.
  */
 class BrowserStorage {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -37,6 +40,60 @@ class BrowserStorage {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private metadata: any = null;
   private log: LogEntry[] = [];
+  private matchID: string | null = null;
+  /** When true, createMatch may restore from localStorage (host resume). */
+  preferRestore = false;
+
+  private persistKey(matchID: string): string {
+    return MATCH_STATE_PREFIX + matchID;
+  }
+
+  private writePersist(): void {
+    if (!this.matchID || typeof localStorage === "undefined") return;
+    try {
+      localStorage.setItem(
+        this.persistKey(this.matchID),
+        JSON.stringify({
+          state: this.state,
+          initialState: this.initialState,
+          metadata: this.metadata,
+          log: this.log,
+          savedAt: Date.now(),
+        }),
+      );
+    } catch (e) {
+      console.warn("[BrowserStorage] persist failed", e);
+    }
+  }
+
+  /** Load a previously saved match (host resume). Returns true if found. */
+  loadPersisted(matchID: string): boolean {
+    if (typeof localStorage === "undefined") return false;
+    try {
+      const raw = localStorage.getItem(this.persistKey(matchID));
+      if (!raw) return false;
+      const data = JSON.parse(raw);
+      if (!data?.state) return false;
+      this.matchID = matchID;
+      this.state = data.state;
+      this.initialState = data.initialState ?? data.state;
+      this.metadata = data.metadata ?? null;
+      this.log = Array.isArray(data.log) ? data.log : [];
+      console.log("[BrowserStorage] Restored match", matchID, "from localStorage");
+      return true;
+    } catch (e) {
+      console.warn("[BrowserStorage] loadPersisted failed", e);
+      return false;
+    }
+  }
+
+  static clearPersisted(matchID: string): void {
+    try {
+      localStorage.removeItem(MATCH_STATE_PREFIX + matchID);
+    } catch {
+      /* ignore */
+    }
+  }
 
   async createMatch(
     matchID: string,
@@ -47,10 +104,17 @@ class BrowserStorage {
       metadata: any;
     },
   ): Promise<void> {
+    this.matchID = matchID;
+    // Prefer restored state when host is resuming this matchID
+    if (this.preferRestore && this.loadPersisted(matchID)) {
+      if (opts.metadata) this.metadata = { ...this.metadata, ...opts.metadata };
+      return;
+    }
     this.state = opts.initialState;
     this.initialState = opts.initialState;
     this.metadata = opts.metadata;
     this.log = [];
+    this.writePersist();
   }
 
   async fetch(
@@ -94,10 +158,60 @@ class BrowserStorage {
     state: State<any>,
     deltalog?: LogEntry[],
   ): Promise<void> {
+    this.matchID = matchID;
     this.state = state;
     if (deltalog) {
       this.log = [...this.log, ...deltalog];
     }
+    this.writePersist();
+  }
+}
+
+/** Session ticket for rejoin after refresh (both host and guest). */
+export const TIMESTREAMS_SESSION_KEY = "timestreams_p2p_session_v1";
+
+export interface TimestreamsP2PSession {
+  matchID: string;
+  playerID: string;
+  role: P2PRole;
+  homeEraAssignment?: string;
+  rulesEnabled?: boolean;
+  playMode?: string;
+  /** First offer fragment so both peers can re-derive the same matchID after a new handshake. */
+  stableSessionId: string;
+  savedAt: number;
+}
+
+export function saveTimestreamsSession(session: TimestreamsP2PSession): void {
+  try {
+    localStorage.setItem(TIMESTREAMS_SESSION_KEY, JSON.stringify(session));
+  } catch {
+    /* ignore */
+  }
+}
+
+export function loadTimestreamsSession(): TimestreamsP2PSession | null {
+  try {
+    const raw = localStorage.getItem(TIMESTREAMS_SESSION_KEY);
+    if (!raw) return null;
+    const s = JSON.parse(raw) as TimestreamsP2PSession;
+    if (!s?.matchID || !s?.playerID || !s?.role) return null;
+    // Expire after 24h
+    if (s.savedAt && Date.now() - s.savedAt > 24 * 60 * 60 * 1000) {
+      clearTimestreamsSession();
+      return null;
+    }
+    return s;
+  } catch {
+    return null;
+  }
+}
+
+export function clearTimestreamsSession(): void {
+  try {
+    localStorage.removeItem(TIMESTREAMS_SESSION_KEY);
+  } catch {
+    /* ignore */
   }
 }
 
@@ -137,6 +251,8 @@ export interface P2PTransportOpts {
   playerID?: string;
   numPlayers?: number;
   credentials?: string;
+  /** Host: load board state from localStorage for this matchID after WebRTC re-handshake. */
+  restoreFromPersist?: boolean;
   /** Passed to game.setup as the second argument (moduleConfig, decks, etc.) */
   setupData?: unknown;
 }
@@ -515,9 +631,11 @@ class P2PMaster {
     matchID: string,
     numPlayers: number,
     setupData?: unknown,
+    opts?: { restoreFromPersist?: boolean },
   ) {
     this.game = game;
     this.db = new BrowserStorage();
+    this.db.preferRestore = !!opts?.restoreFromPersist;
     this.matchID = matchID;
     this.numPlayers = numPlayers;
     this.setupData = setupData;
@@ -766,6 +884,7 @@ export class P2PTransport {
   private numPlayers: number;
   private game: Game;
   private setupData?: unknown;
+  private restoreFromPersist: boolean;
   private transportDataCallback: TransportDataCallback | null = null;
   private assetSharingCallbacks: Set<(msg: AssetSharingMessage) => void> =
     new Set();
@@ -782,6 +901,7 @@ export class P2PTransport {
     this.numPlayers = opts.numPlayers || 2;
     this.game = opts.game;
     this.setupData = opts.setupData;
+    this.restoreFromPersist = !!opts.restoreFromPersist;
     this.transportDataCallback = opts.transportDataCallback || null;
   }
 
@@ -890,12 +1010,13 @@ export class P2PTransport {
   private async connectAsHost(): Promise<void> {
     console.log("[P2PTransport] Connecting as host");
 
-    // Create the master for the host
+    // Create the master for the host (optionally restore board from localStorage)
     this.master = new P2PMaster(
       this.game,
       this.matchID,
       this.numPlayers,
       this.setupData,
+      { restoreFromPersist: this.restoreFromPersist },
     );
 
     // Wait for the master to initialize the game state
