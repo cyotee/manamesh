@@ -2,17 +2,29 @@
  * Mock Blockchain Service
  *
  * Simulates blockchain interactions for development and testing.
- * Replace with real smart contract calls for production.
+ * Offline path — no RPC. Live path: see live-service.ts + @manamesh/poker settlementClient.
  */
 
+import type { Hex } from 'viem';
+import { getAddress } from 'viem';
+import {
+  prepareSettlementPayload,
+  deriveHandId,
+  type SettlementTableConfig,
+} from '@manamesh/poker';
 import type {
   BlockchainService,
   BlockchainEvent,
   BlockchainEventListener,
+  BlockchainMode,
   GameSession,
   HandResult,
   SettlementResult,
+  AssertHandMembershipParams,
+  SettleHandParams,
+  SettleFromStateParams,
 } from './types';
+import type { TxCallResult } from './types';
 
 /**
  * Default starting balance for new players
@@ -28,18 +40,33 @@ const SIMULATED_DELAY = 100;
  * Mock blockchain service implementation
  */
 export class MockBlockchainService implements BlockchainService {
+  readonly mode: BlockchainMode = 'mock';
+
   private balances: Map<string, number> = new Map();
   private sessions: Map<string, GameSession> = new Map();
   private listeners: Set<BlockchainEventListener> = new Set();
   private handCounter = 0;
   private sessionCounter = 0;
+  private playerAddresses: Record<string, Hex> = {};
+  private assertedHands = new Set<string>();
+  private tableConfig?: SettlementTableConfig;
 
-  constructor(initialBalances?: Record<string, number>) {
+  constructor(
+    initialBalances?: Record<string, number>,
+    opts?: {
+      playerAddresses?: Record<string, Hex>;
+      tableConfig?: SettlementTableConfig;
+    },
+  ) {
     if (initialBalances) {
       for (const [playerId, balance] of Object.entries(initialBalances)) {
         this.balances.set(playerId, balance);
       }
     }
+    if (opts?.playerAddresses) {
+      this.playerAddresses = { ...opts.playerAddresses };
+    }
+    this.tableConfig = opts?.tableConfig;
   }
 
   /**
@@ -69,6 +96,14 @@ export class MockBlockchainService implements BlockchainService {
     return `0x${Array.from({ length: 64 }, () =>
       Math.floor(Math.random() * 16).toString(16)
     ).join('')}`;
+  }
+
+  setPlayerAddresses(addresses: Record<string, Hex>): void {
+    this.playerAddresses = { ...addresses };
+  }
+
+  getTableConfig(): SettlementTableConfig | undefined {
+    return this.tableConfig;
   }
 
   /**
@@ -115,7 +150,7 @@ export class MockBlockchainService implements BlockchainService {
   }
 
   /**
-   * Settle a completed hand
+   * Settle a completed hand (legacy HandResult path)
    */
   async settlePot(handResult: HandResult): Promise<SettlementResult> {
     await this.delay();
@@ -179,6 +214,89 @@ export class MockBlockchainService implements BlockchainService {
     return result;
   }
 
+  async assertHandMembership(params: AssertHandMembershipParams): Promise<TxCallResult> {
+    await this.delay();
+    const handId = deriveHandId(params.handInit);
+    if (this.assertedHands.has(handId)) {
+      return { success: false, error: `Hand already asserted: ${handId}` };
+    }
+    if (params.signatures.length !== params.handInit.players.length) {
+      return {
+        success: false,
+        error: `signatures length ${params.signatures.length} != players ${params.handInit.players.length}`,
+      };
+    }
+    this.assertedHands.add(handId);
+    return { success: true, txHash: this.generateTxHash() as Hex };
+  }
+
+  async settleHand(params: SettleHandParams): Promise<SettlementResult> {
+    await this.delay();
+    const { handInit, settlement } = params;
+    const handId = deriveHandId(handInit);
+
+    // Map address-sorted finalStacks back to playerIds when addresses are known
+    const newBalances: Record<string, number> = {};
+    const scale = this.tableConfig?.scale ?? 1n;
+
+    if (Object.keys(this.playerAddresses).length > 0) {
+      const addrToId = new Map<string, string>();
+      for (const [id, addr] of Object.entries(this.playerAddresses)) {
+        addrToId.set(getAddress(addr).toLowerCase(), id);
+      }
+      handInit.players.forEach((addr, i) => {
+        const id = addrToId.get(getAddress(addr).toLowerCase());
+        if (id) {
+          const stack = Number(settlement.outcome.finalStacks[i] / scale);
+          // Set absolute post-hand stack as balance for offline continuity
+          this.balances.set(id, stack);
+          newBalances[id] = stack;
+        }
+      });
+    }
+
+    this.assertedHands.delete(handId);
+
+    const result: SettlementResult = {
+      success: true,
+      txHash: this.generateTxHash(),
+      newBalances,
+    };
+    this.emit({ type: 'settlementComplete', handId, result });
+    return result;
+  }
+
+  async settleFromState(params: SettleFromStateParams): Promise<SettlementResult> {
+    if (!this.tableConfig) {
+      return {
+        success: false,
+        newBalances: {},
+        error:
+          'Mock settleFromState requires tableConfig (settler domain params). Use settlePot for simple offline play.',
+      };
+    }
+    try {
+      const prepared = prepareSettlementPayload({
+        state: params.state,
+        addresses: this.playerAddresses,
+        table: this.tableConfig,
+        playerHandNonces: params.playerHandNonces,
+        handId: params.handId,
+      });
+      return this.settleHand({
+        handInit: prepared.handInit,
+        settlement: prepared.settlement,
+        winnerSignatures: params.winnerSignatures,
+      });
+    } catch (e) {
+      return {
+        success: false,
+        newBalances: {},
+        error: e instanceof Error ? e.message : String(e),
+      };
+    }
+  }
+
   /**
    * End a game session
    */
@@ -195,9 +313,12 @@ export class MockBlockchainService implements BlockchainService {
 
   /**
    * Get player's wallet address from their game ID
-   * (Mock just returns a deterministic fake address)
+   * (Mock returns configured map or a deterministic fake address)
    */
   getPlayerAddress(playerId: string): string {
+    if (this.playerAddresses[playerId]) {
+      return getAddress(this.playerAddresses[playerId]);
+    }
     // Generate a deterministic mock address from player ID
     const hash = Array.from(playerId).reduce((acc, char) => acc + char.charCodeAt(0), 0);
     return `0x${hash.toString(16).padStart(40, '0')}`;
@@ -237,16 +358,28 @@ export class MockBlockchainService implements BlockchainService {
 /**
  * Singleton instance for the app
  */
-let globalInstance: MockBlockchainService | null = null;
+let globalInstance: BlockchainService | null = null;
+let globalMode: BlockchainMode = 'mock';
 
 /**
- * Get or create the global blockchain service instance
+ * Get or create the global blockchain service instance (mock by default).
+ * For live mode use `createBlockchainService({ mode: 'live', ... })` then
+ * `setBlockchainService`, or pass mode via `getBlockchainService` options.
  */
-export function getBlockchainService(initialBalances?: Record<string, number>): MockBlockchainService {
+export function getBlockchainService(initialBalances?: Record<string, number>): BlockchainService {
   if (!globalInstance) {
     globalInstance = new MockBlockchainService(initialBalances);
+    globalMode = 'mock';
   }
   return globalInstance;
+}
+
+/**
+ * Install a service instance as the global (used for live mode switch).
+ */
+export function setBlockchainService(service: BlockchainService): void {
+  globalInstance = service;
+  globalMode = service.mode;
 }
 
 /**
@@ -254,4 +387,9 @@ export function getBlockchainService(initialBalances?: Record<string, number>): 
  */
 export function resetBlockchainService(): void {
   globalInstance = null;
+  globalMode = 'mock';
+}
+
+export function getBlockchainServiceMode(): BlockchainMode {
+  return globalInstance?.mode ?? globalMode;
 }

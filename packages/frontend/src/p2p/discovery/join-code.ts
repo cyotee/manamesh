@@ -1,10 +1,14 @@
 /**
  * Two-way join code discovery mechanism
  * Fully serverless P2P connection using manual code exchange
+ *
+ * Implements {@link P2PChannel} from `@cyotee/boardgameio-p2p` so it can be
+ * passed to `P2PMultiplayer({ connection })`.
  */
 
 import { PeerConnection, type ConnectionState, type PeerConnectionEvents } from '../webrtc';
 import { encodeOffer, decodeOffer, isValidJoinCode } from '../codec';
+import type { P2PChannel, P2PChannelEvents } from '@cyotee/boardgameio-p2p/channel';
 
 export type JoinCodeRole = 'host' | 'guest';
 
@@ -27,9 +31,13 @@ export interface JoinCodeEvents {
 /**
  * Manages the two-way join code exchange process
  */
-export class JoinCodeConnection {
+export class JoinCodeConnection implements P2PChannel {
   private peerConnection: PeerConnection | null = null;
-  private events: JoinCodeEvents;
+  /**
+   * Public for P2PChannel / channel transport message wiring.
+   * The boardgame.io transport may wrap onMessage / onConnectionStateChange.
+   */
+  readonly events: JoinCodeEvents & P2PChannelEvents;
   private _state: JoinCodeState = { phase: 'idle' };
 
   constructor(events: JoinCodeEvents) {
