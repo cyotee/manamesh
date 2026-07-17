@@ -4,6 +4,12 @@ import react from '@vitejs/plugin-react';
 import { viteSingleFile } from 'vite-plugin-singlefile';
 import path from 'path';
 import fs from 'fs';
+import { createRequire } from 'module';
+import { fileURLToPath } from 'url';
+
+const require = createRequire(import.meta.url);
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Compute path to repo root dist/ so the single SPA lands next to the asset zip.
 // Override with TIMESTREAMS_VERCEL_OUT for a clean Vercel deploy folder.
@@ -120,12 +126,12 @@ export default defineConfig(({ command }) => ({
             // Channel transport only (avoid loading PeerJS entry for app path)
             { find: '@cyotee/boardgameio-p2p/channel', replacement: path.resolve(__dirname, '../../../boardgameIO-p2p/src/channel-transport.ts') },
             { find: '@cyotee/boardgameio-p2p', replacement: path.resolve(__dirname, '../../../boardgameIO-p2p/src/index.ts') },
-            { find: '@manamesh/boardgameio-crypto/mental-poker', replacement: path.resolve(__dirname, '../../../boardgameio-crypto/src/mental-poker/index.ts') },
-            { find: '@manamesh/boardgameio-crypto/sha256', replacement: path.resolve(__dirname, '../../../boardgameio-crypto/src/sha256.ts') },
-            { find: '@manamesh/boardgameio-crypto/stable-json', replacement: path.resolve(__dirname, '../../../boardgameio-crypto/src/stable-json.ts') },
-            { find: '@manamesh/boardgameio-crypto/ecdsa', replacement: path.resolve(__dirname, '../../../boardgameio-crypto/src/ecdsa.ts') },
-            { find: '@manamesh/boardgameio-crypto/secp256k1', replacement: path.resolve(__dirname, '../../../boardgameio-crypto/src/secp256k1.ts') },
-            { find: '@manamesh/boardgameio-crypto', replacement: path.resolve(__dirname, '../../../boardgameio-crypto') },
+            { find: '@cyotee/boardgameio-crypto/mental-poker', replacement: path.resolve(__dirname, '../../../boardgameio-crypto/src/mental-poker/index.ts') },
+            { find: '@cyotee/boardgameio-crypto/sha256', replacement: path.resolve(__dirname, '../../../boardgameio-crypto/src/sha256.ts') },
+            { find: '@cyotee/boardgameio-crypto/stable-json', replacement: path.resolve(__dirname, '../../../boardgameio-crypto/src/stable-json.ts') },
+            { find: '@cyotee/boardgameio-crypto/ecdsa', replacement: path.resolve(__dirname, '../../../boardgameio-crypto/src/ecdsa.ts') },
+            { find: '@cyotee/boardgameio-crypto/secp256k1', replacement: path.resolve(__dirname, '../../../boardgameio-crypto/src/secp256k1.ts') },
+            { find: '@cyotee/boardgameio-crypto', replacement: path.resolve(__dirname, '../../../boardgameio-crypto/src') },
             // Exact bare react imports (use regex ^ $ to avoid prefix matching subpaths like react/jsx-runtime)
             { find: /^react$/, replacement: path.join(path.dirname(require.resolve('react/package.json')), 'index.js') },
             { find: 'react/jsx-runtime', replacement: path.join(path.dirname(require.resolve('react/package.json')), 'jsx-runtime.js') },
