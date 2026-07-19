@@ -6,8 +6,8 @@ import {
   paillierAdd,
   paillierPublicKeyFromNHex,
   bigintToHex,
-} from "@manamesh/boardgameio-crypto/paillier";
-import type { PaillierPrivateKey } from "@manamesh/boardgameio-crypto/paillier";
+} from "@cyotee/boardgameio-crypto/paillier";
+import type { PaillierPrivateKey } from "@cyotee/boardgameio-crypto/paillier";
 
 // Paillier utility functions working with hex strings
 function paillierEncryptHex(nHex: string, m: number): string {

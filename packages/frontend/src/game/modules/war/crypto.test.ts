@@ -21,12 +21,12 @@ import {
   createCardIds,
   getShuffleProofs,
   verifyPlayerShuffle,
-} from "./boardgameio-crypto";
+} from "./crypto";
 import {
   createPlayerCryptoContext,
   buildCardPointLookup,
   type CryptoPlayerContext,
-} from "@manamesh/boardgameio-crypto";
+} from "@cyotee/boardgameio-crypto";
 
 describe("CryptoWar", () => {
   let state: CryptoWarState;

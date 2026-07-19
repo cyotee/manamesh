@@ -12,8 +12,8 @@ import {
   claimTimeout,
   isTimedOut,
 } from "./logic";
-import type { MerkleProofStep } from "@manamesh/boardgameio-crypto";
-import { verifyMerkleProof } from "@manamesh/boardgameio-crypto";
+import type { MerkleProofStep } from "@cyotee/boardgameio-crypto";
+import { verifyMerkleProof } from "@cyotee/boardgameio-crypto";
 import { leafHash } from "./commitment";
 
 type GuessReveal = {

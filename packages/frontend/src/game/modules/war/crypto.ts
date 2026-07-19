@@ -29,21 +29,21 @@ import {
   type CryptoPluginState,
   type CryptoPlayerContext,
   type SerializedShuffleProof,
-} from "@manamesh/boardgameio-crypto";
-import type { EncryptedCard } from "@manamesh/boardgameio-crypto/mental-poker";
+} from "@cyotee/boardgameio-crypto";
+import type { EncryptedCard } from "@cyotee/boardgameio-crypto/mental-poker";
 import {
   encryptDeck as encryptDeckCrypto,
   reencryptDeck,
   quickShuffle,
   buildCardPointLookup,
-} from "@manamesh/boardgameio-crypto/mental-poker";
-import { secpIsValidPointHex, validateEncryptedCard, validatePlayerIdentity } from "@manamesh/boardgameio-crypto/secp256k1";
+} from "@cyotee/boardgameio-crypto/mental-poker";
+import { secpIsValidPointHex, validateEncryptedCard, validatePlayerIdentity } from "@cyotee/boardgameio-crypto/secp256k1";
 import {
   getCurrentSetupPlayer,
   advanceSetupPlayer,
   resetSetupPlayer,
   lookupCardIdFromPoint,
-} from "@manamesh/boardgameio-crypto";
+} from "@cyotee/boardgameio-crypto";
 
 // =============================================================================
 // Types

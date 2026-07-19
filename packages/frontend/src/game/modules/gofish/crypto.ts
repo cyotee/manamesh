@@ -15,27 +15,27 @@ import type { Ctx, Game } from "boardgame.io";
 import { INVALID_MOVE } from "boardgame.io/core";
 
 import type { GameConfig } from "../types";
-import type { CryptoPluginState } from "@manamesh/boardgameio-crypto/plugin/crypto-plugin";
+import type { CryptoPluginState } from "@cyotee/boardgameio-crypto/plugin/crypto-plugin";
 import {
   decrypt,
   encryptDeck as encryptDeckCrypto,
   buildCardPointLookup,
   reencryptDeck,
   type EncryptedCard,
-} from "@manamesh/boardgameio-crypto/mental-poker";
+} from "@cyotee/boardgameio-crypto/mental-poker";
 import {
   sha256Hex,
   stableStringify,
   ecdsaVerifyDigestHex,
-} from "@manamesh/boardgameio-crypto";
-import { secpIsValidPointHex, validateEncryptedCard, validatePlayerIdentity } from "@manamesh/boardgameio-crypto/secp256k1";
+} from "@cyotee/boardgameio-crypto";
+import { secpIsValidPointHex, validateEncryptedCard, validatePlayerIdentity } from "@cyotee/boardgameio-crypto/secp256k1";
 import {
   getCurrentSetupPlayer,
   advanceSetupPlayer,
   resetSetupPlayer,
   lookupCardIdFromPoint,
   deterministicShuffle,
-} from "@manamesh/boardgameio-crypto";
+} from "@cyotee/boardgameio-crypto";
 
 import {
   GOFISH_SHUFFLE_STALL_WINDOW_MOVES,
@@ -195,7 +195,7 @@ export {
   getCurrentSetupPlayer,
   advanceSetupPlayer,
   resetSetupPlayer,
-} from "@manamesh/boardgameio-crypto";
+} from "@cyotee/boardgameio-crypto";
 
 export function allKeysSubmitted(state: CryptoGoFishState): boolean {
   return state.playerOrder.every((id) => state.players[id].publicKey !== null);

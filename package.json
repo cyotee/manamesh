@@ -9,11 +9,11 @@
         "@tanstack/query-core": "^5.50.0"
     },
     "scripts": {
-        "dev:frontend": "yarn workspace @manamesh/frontend dev",
+        "dev:frontend": "yarn workspace @cyotee/manamesh dev",
         "dev:backend": "yarn workspace @manamesh/backend dev",
-        "build": "yarn workspace @manamesh/frontend build",
+        "build": "yarn workspace @cyotee/manamesh build",
         "build:all": "yarn workspaces foreach --all run build",
-        "test": "yarn workspace @manamesh/frontend test",
+        "test": "yarn workspace @cyotee/manamesh test",
         "test:all": "yarn workspaces foreach --all run test"
     },
     "devDependencies": {

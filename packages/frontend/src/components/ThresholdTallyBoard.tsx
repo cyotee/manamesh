@@ -20,7 +20,7 @@ import {
   elgamalEncryptExp,
   elgamalPartialDecrypt,
   secpRandomScalar,
-} from "@manamesh/boardgameio-crypto";
+} from "@cyotee/boardgameio-crypto";
 
 function clampInt(n: number, min: number, max: number): number {
   const x = Math.floor(n);

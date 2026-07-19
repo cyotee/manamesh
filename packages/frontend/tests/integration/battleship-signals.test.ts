@@ -7,7 +7,7 @@ import {
   commitmentRootHexForBoard,
   leafHash,
 } from "../../src/game/modules/merkle-battleship";
-import { verifyMerkleProof } from "../../src/crypto/merkle";
+import { verifyMerkleProof } from "@cyotee/boardgameio-crypto";
 import {
   handleBattleshipSignal,
   type BattleshipGuessSignal,

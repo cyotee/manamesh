@@ -6,7 +6,7 @@
  *
  * @example
  * ```typescript
- * import { GameModule, ZoneDefinition, CoreCard } from '@manamesh/frontend/game/modules';
+ * import { GameModule, ZoneDefinition, CoreCard } from '@cyotee/manamesh/game/modules';
  *
  * const myGame: GameModule = {
  *   id: 'my-game',

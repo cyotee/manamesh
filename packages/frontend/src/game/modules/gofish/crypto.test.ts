@@ -20,12 +20,12 @@ import {
   submitZkProofRespondToAsk,
   submitZkVerdict,
   allKeysSubmitted,
-} from "./boardgameio-crypto";
+} from "./crypto";
 import type { CryptoGoFishState } from "./types";
 import {
   createPlayerCryptoContext,
   type CryptoPlayerContext,
-} from "@manamesh/boardgameio-crypto";
+} from "@cyotee/boardgameio-crypto";
 import {
   ecdsaGenerateKeyPair,
   ecdsaSignDigestHex,
@@ -33,7 +33,7 @@ import {
   stableStringify,
   decrypt,
   buildCardPointLookup,
-} from "@manamesh/boardgameio-crypto";
+} from "@cyotee/boardgameio-crypto";
 
 describe("CryptoGoFish", () => {
   let state: CryptoGoFishState;

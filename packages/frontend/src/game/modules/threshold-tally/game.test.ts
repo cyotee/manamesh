@@ -18,7 +18,7 @@ import {
   elgamalPartialDecrypt,
   elgamalRecoverMessagePoint,
   secpRandomScalar,
-} from "@manamesh/boardgameio-crypto";
+} from "@cyotee/boardgameio-crypto";
 import {
   createInitialState,
   publishDkgCommitment,
