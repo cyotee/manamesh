@@ -13,7 +13,51 @@
       "types": "./dist/public-api.d.ts",
       "default": "./dist/public-api.js"
     },
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./game/modules": {
+      "types": "./src/game/modules/types.ts",
+      "default": "./src/game/modules/types.ts"
+    },
+    "./deck": {
+      "types": "./src/deck/types.ts",
+      "default": "./src/deck/types.ts"
+    },
+    "./assets/manifest": {
+      "types": "./src/assets/manifest/types.ts",
+      "default": "./src/assets/manifest/types.ts"
+    },
+    "./assets/loader": {
+      "types": "./src/assets/loader/public.ts",
+      "default": "./src/assets/loader/public.ts"
+    },
+    "./hooks/useAssetPack": {
+      "types": "./src/hooks/useAssetPack.ts",
+      "default": "./src/hooks/useAssetPack.ts"
+    },
+    "./hooks/useCardImage": {
+      "types": "./src/hooks/useCardImage.ts",
+      "default": "./src/hooks/useCardImage.ts"
+    },
+    "./hooks/useCardSettings": {
+      "types": "./src/hooks/useCardSettings.ts",
+      "default": "./src/hooks/useCardSettings.ts"
+    },
+    "./components/CryptoTransparencyPanel": {
+      "types": "./src/components/CryptoTransparencyPanel.tsx",
+      "default": "./src/components/CryptoTransparencyPanel.tsx"
+    },
+    "./components/CardSettingsPanel": {
+      "types": "./src/components/CardSettingsPanel.tsx",
+      "default": "./src/components/CardSettingsPanel.tsx"
+    },
+    "./blockchain/wallet": {
+      "types": "./src/blockchain/wallet/index.ts",
+      "default": "./src/blockchain/wallet/index.ts"
+    },
+    "./assets/packs/standard-cards": {
+      "types": "./src/assets/packs/standard-cards.ts",
+      "default": "./src/assets/packs/standard-cards.ts"
+    }
   },
   "bin": "bin/cli.js",
   "files": [
