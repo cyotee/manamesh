@@ -9,7 +9,11 @@
         "@tanstack/query-core": "^5.50.0"
     },
     "scripts": {
-        "dev:frontend": "yarn workspace @cyotee/manamesh dev",
+        "dev:frontend": "yarn workspace @cyotee/manamesh exec vite --open /src/pages/timestreams/",
+        "dev:timestreams": "yarn workspace @cyotee/manamesh exec vite --open /src/pages/timestreams/",
+        "dev:poker": "yarn workspace @cyotee/manamesh exec vite --open /src/pages/poker/",
+        "dev:battleship": "yarn workspace @cyotee/manamesh exec vite --open /src/pages/merkle-battleship/",
+        "dev:onepiece": "yarn workspace @cyotee/manamesh exec vite --open /src/pages/onepiece/",
         "dev:backend": "yarn workspace @manamesh/backend dev",
         "build": "yarn workspace @cyotee/manamesh build",
         "build:all": "yarn workspaces foreach --all run build",

@@ -10,6 +10,7 @@ import {
 } from "@manamesh/timestreams";
 import type { PackCatalog, PackCatalogLoadResult } from "@manamesh/timestreams";
 import { TimestreamsLobby } from "./TimestreamsLobby";
+import { RoomCodeLobby } from "../../components/RoomCodeLobby";
 import {
   P2PMultiplayer,
   saveTimestreamsSession,
@@ -17,7 +18,8 @@ import {
   clearTimestreamsSession,
   type TimestreamsP2PSession,
 } from "../../p2p/transport";
-import type { JoinCodeConnection } from "../../p2p/transport";
+import type { P2PChannel } from "@cyotee/boardgameio-p2p/channel";
+import { getTimestreamsMaxPlayers } from "../../p2p/connect";
 
 /**
  * Keep window scroll where the *user* left it across boardgame.io re-renders.
@@ -159,7 +161,10 @@ console.log("[ManaMesh] timestreams page boot");
 type AppPhase = "menu" | "lobby" | "game" | "local-dual";
 
 interface GameStartParams {
-  connection: JoinCodeConnection | null;
+  /** Guest / 2p host channel */
+  connection?: P2PChannel | null;
+  /** Host multi-peer: playerID → guest channel */
+  hostConnections?: Map<string, P2PChannel>;
   role: "host" | "guest";
   playerID: string;
   matchID: string;
@@ -352,7 +357,11 @@ function TimestreamsApp() {
 
   // P2P client factory — recreated when gameParams change.
   const P2PClient = useMemo(() => {
-    if (!gameParams?.connection) return null;
+    if (!gameParams) return null;
+    const hasChannel =
+      gameParams.connection ||
+      (gameParams.hostConnections && gameParams.hostConnections.size > 0);
+    if (!hasChannel) return null;
     const moduleConfig = {
       homeEraAssignment: gameParams.homeEraAssignment,
       playMode: gameParams.playMode ?? "mental-poker",
@@ -368,7 +377,8 @@ function TimestreamsApp() {
       game,
       board: TimestreamsBoard,
       multiplayer: P2PMultiplayer({
-        connection: gameParams.connection,
+        connection: gameParams.connection ?? undefined,
+        hostConnections: gameParams.hostConnections,
         role: gameParams.role,
         matchID: gameParams.matchID,
         playerID: gameParams.playerID,
@@ -600,9 +610,8 @@ function TimestreamsApp() {
         </label>
 
         <p style={{ fontSize: "0.85em", opacity: 0.8, marginTop: 16 }}>
-          For remote play with another person: open Host here, send the invite code (chat/email),
-          they open Join as Guest, paste the invite, send the answer code back, you paste it — game starts.
-          STUN only (Google); peers on hard symmetric NAT may need TURN later.
+          Remote play: Host creates a short table code (optional password); guests join with the
+          same code. Advanced SDP join codes remain available as a 2-player fallback.
         </p>
         {error && <p style={{ color: "#f87171" }}>Note: {error}</p>}
       </div>
@@ -625,19 +634,55 @@ function TimestreamsApp() {
             ← Menu
           </button>
         </div>
-        <TimestreamsLobby
+        <RoomCodeLobby
+          gameId="timestreams"
+          title="Timestreams Lobby"
           displayName={getPlayerName()}
           isHost={lobbyRole === "host"}
-          rulesEnabled={
-            resumeSession?.rulesEnabled !== undefined
-              ? !!resumeSession.rulesEnabled
-              : rulesEnabled
-          }
-          game={gameDef}
-          onGameStart={handleGameStart}
+          maxPlayers={getTimestreamsMaxPlayers()}
+          minPlayers={2}
           onError={handleLobbyError}
-          resumeMatchID={resumeSession?.matchID ?? null}
-          resumeAsRole={resumeSession ? lobbyRole : null}
+          onGameStart={(params) => {
+            handleGameStart({
+              connection: params.connection ?? null,
+              hostConnections: params.hostConnections,
+              role: params.role,
+              playerID: params.playerID,
+              matchID: params.matchID,
+              numPlayers: params.numPlayers,
+              homeEraAssignment: "selectable",
+              rulesEnabled:
+                resumeSession?.rulesEnabled !== undefined
+                  ? !!resumeSession.rulesEnabled
+                  : rulesEnabled,
+              restoreFromPersist:
+                !!resumeSession?.matchID && params.role === "host",
+            });
+          }}
+          renderAdvanced={({ forced, reason }) => (
+            <div style={{ marginTop: 12 }}>
+              {forced && (
+                <p style={{ color: "#fbbf24", fontSize: 13 }}>
+                  Quick connect unavailable ({reason}). Use 2-player join codes:
+                </p>
+              )}
+              <TimestreamsLobby
+                displayName={getPlayerName()}
+                isHost={lobbyRole === "host"}
+                maxPlayers={2}
+                rulesEnabled={
+                  resumeSession?.rulesEnabled !== undefined
+                    ? !!resumeSession.rulesEnabled
+                    : rulesEnabled
+                }
+                game={gameDef}
+                onGameStart={handleGameStart}
+                onError={handleLobbyError}
+                resumeMatchID={resumeSession?.matchID ?? null}
+                resumeAsRole={resumeSession ? lobbyRole : null}
+              />
+            </div>
+          )}
         />
       </ErrorBoundary>
     );

@@ -118,20 +118,65 @@ export default defineConfig(({ command }) => ({
             { find: 'boardgame.io/react', replacement: path.resolve(__dirname, '../../../boardgame.io/packages/react.ts') },
             { find: 'boardgame.io/multiplayer', replacement: path.resolve(__dirname, '../../../boardgame.io/packages/multiplayer.ts') },
             { find: '@manamesh/timestreams', replacement: path.resolve(__dirname, '../../../timestreams') },
+            { find: '@manamesh/game-battleship-merkle', replacement: path.resolve(__dirname, '../../../game-battleship-merkle/src') },
             { find: 'boardgame.io/core', replacement: path.resolve(__dirname, '../../../boardgame.io/packages/core.ts') },
             { find: 'boardgame.io/internal', replacement: path.resolve(__dirname, '../../../boardgame.io/packages/internal.ts') },
             { find: 'boardgame.io/master', replacement: path.resolve(__dirname, '../../../boardgame.io/packages/master.ts') },
             { find: 'boardgame.io/client', replacement: path.resolve(__dirname, '../../../boardgame.io/packages/client.ts') },
             { find: 'boardgame.io', replacement: path.resolve(__dirname, '../../../boardgame.io') },
-            // Channel transport only (avoid loading PeerJS entry for app path)
+            // Channel transport + optional Trystero (avoid PeerJS entry for app path)
             { find: '@cyotee/boardgameio-p2p/channel', replacement: path.resolve(__dirname, '../../../boardgameIO-p2p/src/channel-transport.ts') },
+            { find: '@cyotee/boardgameio-p2p/trystero', replacement: path.resolve(__dirname, '../../../boardgameIO-p2p/src/trystero/index.ts') },
             { find: '@cyotee/boardgameio-p2p', replacement: path.resolve(__dirname, '../../../boardgameIO-p2p/src/index.ts') },
-            { find: '@cyotee/boardgameio-crypto/mental-poker', replacement: path.resolve(__dirname, '../../../boardgameio-crypto/src/mental-poker/index.ts') },
+            // Exact / more-specific crypto subpaths first (string aliases are prefix matches).
+            {
+              find: '@cyotee/boardgameio-crypto/mental-poker/sra',
+              replacement: path.resolve(
+                __dirname,
+                '../../../boardgameio-crypto/src/mental-poker/sra.ts',
+              ),
+            },
+            {
+              find: '@cyotee/boardgameio-crypto/mental-poker/commitment',
+              replacement: path.resolve(
+                __dirname,
+                '../../../boardgameio-crypto/src/mental-poker/commitment.ts',
+              ),
+            },
+            {
+              find: '@cyotee/boardgameio-crypto/mental-poker/shuffle-proof',
+              replacement: path.resolve(
+                __dirname,
+                '../../../boardgameio-crypto/src/mental-poker/shuffle-proof.ts',
+              ),
+            },
+            {
+              find: '@cyotee/boardgameio-crypto/mental-poker/types',
+              replacement: path.resolve(
+                __dirname,
+                '../../../boardgameio-crypto/src/mental-poker/types.ts',
+              ),
+            },
+            {
+              find: /^@cyotee\/boardgameio-crypto\/mental-poker$/,
+              replacement: path.resolve(
+                __dirname,
+                '../../../boardgameio-crypto/src/mental-poker/index.ts',
+              ),
+            },
             { find: '@cyotee/boardgameio-crypto/sha256', replacement: path.resolve(__dirname, '../../../boardgameio-crypto/src/sha256.ts') },
             { find: '@cyotee/boardgameio-crypto/stable-json', replacement: path.resolve(__dirname, '../../../boardgameio-crypto/src/stable-json.ts') },
             { find: '@cyotee/boardgameio-crypto/ecdsa', replacement: path.resolve(__dirname, '../../../boardgameio-crypto/src/ecdsa.ts') },
             { find: '@cyotee/boardgameio-crypto/secp256k1', replacement: path.resolve(__dirname, '../../../boardgameio-crypto/src/secp256k1.ts') },
-            { find: '@cyotee/boardgameio-crypto', replacement: path.resolve(__dirname, '../../../boardgameio-crypto/src') },
+            {
+              find: /^@cyotee\/boardgameio-crypto$/,
+              replacement: path.resolve(__dirname, '../../../boardgameio-crypto/src/index.ts'),
+            },
+            // Directory fallback for other subpaths (keychain, plugin, …)
+            {
+              find: /^@cyotee\/boardgameio-crypto\/(.*)$/,
+              replacement: path.resolve(__dirname, '../../../boardgameio-crypto/src/$1'),
+            },
             // Exact bare react imports (use regex ^ $ to avoid prefix matching subpaths like react/jsx-runtime)
             { find: /^react$/, replacement: path.join(path.dirname(require.resolve('react/package.json')), 'index.js') },
             { find: 'react/jsx-runtime', replacement: path.join(path.dirname(require.resolve('react/package.json')), 'jsx-runtime.js') },

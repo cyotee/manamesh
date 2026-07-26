@@ -1,7 +1,5 @@
-export * from "./types";
-export * from "./logic";
-export * from "./commitment";
-export * from "./audit";
-export * from "./fleet";
-export * from "./signals";
-export * from "./game";
+/**
+ * @deprecated Import from `@manamesh/game-battleship-merkle` instead.
+ * Thin re-export kept for any leftover in-tree paths.
+ */
+export * from "@manamesh/game-battleship-merkle";

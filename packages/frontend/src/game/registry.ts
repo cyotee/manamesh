@@ -15,13 +15,7 @@ import {
   type PokerState,
   type CryptoPokerState,
 } from "@manamesh/poker";
-import { WarGame, type WarState } from "./modules/war";
-import {
-  CryptoGoFishSecureGame,
-  CryptoGoFishZkAttestGame,
-  type CryptoGoFishState,
-} from "./modules/gofish";
-import { MerkleBattleshipGame } from "./modules/merkle-battleship";
+import { MerkleBattleshipGame, MerkleBattleshipBoard } from "@manamesh/game-battleship-merkle";
 import { ThresholdTallyGame } from "./modules/threshold-tally";
 import { OnePieceGame, OnePieceCryptoGame } from "@manamesh/onepiece";
 import { MistbornModule, MistbornBoard, MistbornGame } from "@manamesh/mistborn-deckbuilder";
@@ -53,32 +47,11 @@ export const GAMES: GameInfo[] = [
     id: "merkle-battleship",
     name: "Merkle Battleship",
     description:
-      "Verifiable Battleship with binding placement (Merkle commitment).",
+      "Verifiable Battleship with binding placement (Merkle commitment). Package: @manamesh/game-battleship-merkle.",
     minPlayers: 2,
     maxPlayers: 2,
     getGame: () => MerkleBattleshipGame as Game,
-  },
-  // NOTE: The insecure "demo-private" Go Fish variant has been removed from
-  // the registry. Use the secure or zk variants instead.
-  {
-    id: "gofish-secure",
-    name: "Go Fish (Coop Reveal)",
-    description:
-      "Go Fish with cooperative decryption shares (no private keys in shared state). Currently supports forced-draw reveal demo.",
-    minPlayers: 2,
-    maxPlayers: 4,
-    getGame: () => CryptoGoFishSecureGame as Game,
-    getCryptoGame: () => CryptoGoFishSecureGame as Game,
-  },
-  {
-    id: "gofish-zk",
-    name: "Go Fish (ZK Attest)",
-    description:
-      "Go Fish with a deterministic verifier who signs ZK verdicts for off-move proof checking (scaffolding).",
-    minPlayers: 2,
-    maxPlayers: 4,
-    getGame: () => CryptoGoFishZkAttestGame as Game,
-    getCryptoGame: () => CryptoGoFishZkAttestGame as Game,
+    BoardComponent: MerkleBattleshipBoard as ComponentType<BoardProps<unknown>>,
   },
   {
     id: "poker",
@@ -89,15 +62,6 @@ export const GAMES: GameInfo[] = [
     maxPlayers: 6,
     getGame: () => PokerGame as Game,
     getCryptoGame: () => CryptoPokerGame as Game,
-  },
-  {
-    id: "war",
-    name: "War",
-    description:
-      "Classic card battle. Flip cards and capture your opponent's deck!",
-    minPlayers: 2,
-    maxPlayers: 2,
-    getGame: () => WarGame as Game,
   },
   {
     id: "onepiece",
