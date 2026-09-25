@@ -32,12 +32,15 @@ export {
   getChainById,
   isChainSupported,
   getChainMetadata,
+  isE2eWalletMode,
+  getLocalAnvilChain,
   mainnet,
   sepolia,
   arbitrum,
   base,
   optimism,
   polygon,
+  foundry,
 } from './config';
 
 // Hooks
@@ -126,4 +129,5 @@ export {
   ChainBadge,
   WalletModal,
   WalletButton,
+  E2eWalletToolbar,
 } from './components';

@@ -1,5 +1,11 @@
 # ManaMesh Project Status — May 8, 2026 (with June 2026 updates for Poker)
 
+> **Current assessment — 2026-09-05:** This document records historical status.
+> Poker still has malicious-host protocol blockers beyond settlement wiring:
+> traceable shuffles, shared hole-card plaintext and unverified host state.
+> See the monorepo [production-readiness investigation](../../docs/production-readiness.md)
+> for current fixes and test evidence; the claims below are not release approval.
+
 > **Update (2026-06):** Poker contracts and game flow are implemented. Remaining work is deployment/integration (real settlement wiring, contract deployment, abandonment UI). See:
 > - `packages/poker/docs/PREPAREDNESS_REPORT.md`
 > - `packages/poker/docs/PRD_Deployment.md`

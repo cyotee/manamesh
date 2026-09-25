@@ -15,6 +15,7 @@ import type {
   OnePieceState,
   OnePieceCard,
   OnePieceDonCard,
+  PlayAreaSlot,
 } from "@manamesh/onepiece/types";
 import { PhaserBoard } from "../phaser/PhaserBoard";
 import { OnePieceZoneLayout } from "../phaser/layout/OnePieceLayout";
@@ -34,6 +35,7 @@ import {
 } from "../hooks/useAssetSharing";
 import type { DeckList } from "../deck/types";
 import { resolveDeckList } from "@manamesh/onepiece/deckResolver";
+import { createOnePieceShuffleSeed } from "./onepiece-shuffle-seed";
 import { CardPreviewPane } from "./CardPreviewPane";
 import { generateKeyPair } from "@cyotee/boardgameio-crypto/mental-poker";
 import type { CryptoKeyPair } from "@cyotee/boardgameio-crypto/mental-poker/types";
@@ -393,7 +395,7 @@ export function OnePiecePhaserBoard(
   // Check if the local player's deck is loaded
   const player = G.players[localPlayerId];
   const hasLeader = (player?.playArea ?? []).some(
-    (slot) => slot.slotType === "leader" && slot.cardId !== null,
+    (slot: PlayAreaSlot) => slot.slotType === "leader" && slot.cardId !== null,
   );
   const hasDeck =
     (player?.mainDeck?.length ?? 0) > 0 || (player?.lifeDeck?.length ?? 0) > 0;
@@ -465,6 +467,7 @@ export function OnePiecePhaserBoard(
 
   // Crypto helpers: key pair ref and in-progress guard
   const cryptoKeyPairRef = useRef<CryptoKeyPair | null>(null);
+  const shuffleSeedRef = useRef<ReturnType<typeof createOnePieceShuffleSeed> | null>(null);
   const cryptoSetupInProgress = useRef<Set<string>>(new Set());
 
   // -----------------------------------------------------------------------
@@ -552,28 +555,9 @@ export function OnePiecePhaserBoard(
       return;
     }
 
-    // Encrypt: when it's our setupPlayerIndex turn, encryptDeck
-    if (
-      phase === "encrypt" &&
-      cryptoG.setupPlayerIndex != null &&
-      myCrypto &&
-      !myCrypto.hasEncrypted
-    ) {
-      const currentSetupPlayer =
-        cryptoG.playerOrder?.[cryptoG.setupPlayerIndex];
-      if (currentSetupPlayer === localPlayerId) {
-        const kp = getOrCreateKeyPair();
-        cryptoSetupInProgress.current.add(actionKey);
-        setTimeout(() => {
-          try {
-            moves.encryptDeck?.(localPlayerId, kp.privateKey);
-          } catch (err) {
-            console.error("[OnePiece] encryptDeck failed", err);
-          }
-        }, 120);
-      }
-      return;
-    }
+    // This protocol does not yet support validated public encryption payloads.
+    // Never submit the private encryption key to a multiplayer move.
+    if (phase === "encrypt") return;
 
     // Shuffle: commit/reveal flow and shuffleEncryptedDeck
     if (
@@ -583,18 +567,16 @@ export function OnePiecePhaserBoard(
       !myCrypto.hasShuffled
     ) {
       const rng = cryptoG.shuffleRng;
-      const kp = getOrCreateKeyPair();
+      // A resumed client without its committed seed cannot safely reveal a new one.
+      if (!shuffleSeedRef.current && rng.commits?.[localPlayerId]) return;
+      const seed = shuffleSeedRef.current ??= createOnePieceShuffleSeed();
 
       // Commit phase
       if (rng.phase === "commit" && !rng.commits?.[localPlayerId]) {
         cryptoSetupInProgress.current.add(actionKey);
-        // simple seed: random hex from keypair privateKey slice
-        const seedHex =
-          kp.privateKey.slice(0, 32) || Math.random().toString(16).slice(2, 34);
-        const commitHash = seedHex; // game will hash server-side; keep simple
         setTimeout(() => {
           try {
-            moves.commitShuffleSeed?.(localPlayerId, commitHash);
+            moves.commitShuffleSeed?.(localPlayerId, seed.commitHashHex);
           } catch (err) {
             console.error("[OnePiece] commitShuffleSeed failed", err);
           }
@@ -605,11 +587,9 @@ export function OnePiecePhaserBoard(
       // Reveal phase
       if (rng.phase === "reveal" && !rng.reveals?.[localPlayerId]) {
         cryptoSetupInProgress.current.add(actionKey);
-        const seedHex =
-          kp.privateKey.slice(0, 32) || Math.random().toString(16).slice(2, 34);
         setTimeout(() => {
           try {
-            moves.revealShuffleSeed?.(localPlayerId, seedHex);
+            moves.revealShuffleSeed?.(localPlayerId, seed.seedHex);
           } catch (err) {
             console.error("[OnePiece] revealShuffleSeed failed", err);
           }
@@ -844,7 +824,7 @@ export function OnePiecePhaserBoard(
               case "discard":
                 if (event.cardId) {
                   const slot = G.players[localPlayerId]?.playArea?.find(
-                    (s) => s.cardId === event.cardId,
+                    (s: PlayAreaSlot) => s.cardId === event.cardId,
                   );
                   if (slot) {
                     moves.trashFromPlay?.(localPlayerId, slot.position);

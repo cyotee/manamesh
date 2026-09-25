@@ -6,19 +6,20 @@ import {
   createInitialState,
   commitmentRootHexForBoard,
   leafHash,
-} from "../../src/game/modules/merkle-battleship";
+  createShotDisclosureGuard,
+} from "@manamesh/game-battleship-merkle";
 import { verifyMerkleProof } from "@cyotee/boardgameio-crypto";
 import {
   handleBattleshipSignal,
   type BattleshipGuessSignal,
-} from "../../src/game/modules/merkle-battleship/signals";
+} from "@manamesh/game-battleship-merkle";
 
 describe("Battleship P2P signals", () => {
   it("guess -> reveal -> applyReveal works and verifies proof", () => {
     const matchID = "sig-test";
 
     // Player 1 owns a board with a ship at (0,0).
-    const boardBits = Array.from({ length: 100 }, () => 0 as const);
+    const boardBits = Array.from({ length: 100 }, () => 0 as 0 | 1);
     boardBits[0] = 1;
     const saltsHex = Array.from({ length: 100 }, (_, i) =>
       i.toString(16).padStart(2, "0"),
@@ -42,6 +43,7 @@ describe("Battleship P2P signals", () => {
       boardBits,
       saltsHex,
       haveMyCommitment: true,
+      disclosure: { allow: createShotDisclosureGuard(), phase: "battle", turn: 1, currentPlayer: "0" },
     });
 
     expect(defRes.outgoingSignals).toHaveLength(1);

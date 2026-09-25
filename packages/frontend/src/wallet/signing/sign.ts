@@ -104,7 +104,7 @@ export function useSignAction(): UseSignActionReturn {
           domain: opts?.domain ?? MANAMESH_DOMAIN,
           types,
           primaryType: actionType,
-          message: data as Record<string, unknown>,
+          message: { ...data },
         });
 
         const signedAction: SignedAction<T> = {

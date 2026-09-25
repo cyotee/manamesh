@@ -1,3 +1,4 @@
+import { StrictSign, type Message } from '@libp2p/gossipsub';
 import type { ManaMeshLibp2p } from '../../libp2p-config';
 import { getLobbyTopic } from './keys';
 import type {
@@ -11,16 +12,18 @@ export interface LobbyEvents {
   onError: (err: Error) => void;
 }
 
+type LobbyNode = Pick<ManaMeshLibp2p, 'peerId'> & { services: Pick<ManaMeshLibp2p['services'], 'pubsub'> };
+
 export class GossipLobbyAdapter {
-  private libp2p: ManaMeshLibp2p;
+  private libp2p: LobbyNode;
   private topic: string;
   private events: LobbyEvents;
-  private subscription: ((msg: Uint8Array, peerId: string) => void) | null = null;
+  private subscription: ((event: CustomEvent<Message>) => void) | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private peerId: string;
 
   constructor(
-    libp2p: ManaMeshLibp2p,
+    libp2p: LobbyNode,
     roomCode: string,
     events: LobbyEvents,
   ) {
@@ -31,18 +34,28 @@ export class GossipLobbyAdapter {
   }
 
   async start(): Promise<void> {
-    await this.libp2p.services.pubsub.subscribe(this.topic);
-    this.subscription = (data: Uint8Array, peerId: string) => {
-      try {
-        const msg = JSON.parse(new TextDecoder().decode(data)) as LobbyMessage;
-        if (msg.sender !== this.peerId) {
-          this.events.onMessage(msg);
-        }
-      } catch (err) {
-        console.warn('[Gossip] Failed to parse message:', err);
-      }
+    if (this.subscription) return;
+    if (this.libp2p.services.pubsub.globalSignaturePolicy !== StrictSign) {
+      throw new Error('Lobby requires signed pubsub messages');
+    }
+    this.subscription = (event: CustomEvent<Message>) => {
+      const wire = event.detail;
+      if (wire.type !== 'signed' || wire.topic !== this.topic || wire.data.byteLength > 65536) return;
+      const author = wire.from.toString();
+      if (author === this.peerId) return;
+      let msg: unknown;
+      try { msg = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(wire.data)); }
+      catch { return; }
+      if (!isLobbyMessage(msg) || msg.sender !== author) return;
+      this.events.onMessage(msg);
     };
-    this.libp2p.services.pubsub.addEventListener('message', this.subscription as any);
+    this.libp2p.services.pubsub.addEventListener('message', this.subscription);
+    try { await this.libp2p.services.pubsub.subscribe(this.topic); }
+    catch (error) {
+      this.libp2p.services.pubsub.removeEventListener('message', this.subscription);
+      this.subscription = null;
+      throw error;
+    }
   }
 
   send(type: LobbyMessageType, payload: Omit<LobbyPayload, 'type'>): void {
@@ -54,8 +67,12 @@ export class GossipLobbyAdapter {
       payload: { ...payload, type } as LobbyPayload,
     };
     const data = new TextEncoder().encode(JSON.stringify(msg));
-    this.libp2p.services.pubsub.publish(this.topic, data).catch((err) => {
-      this.events.onError(err as Error);
+    if (!this.subscription || data.byteLength > 65536 || !isLobbyMessage(msg)) {
+      this.events.onError(new Error('Invalid or inactive lobby send'));
+      return;
+    }
+    this.libp2p.services.pubsub.publish(this.topic, data).catch((err: unknown) => {
+      this.events.onError(err instanceof Error ? err : new Error(String(err)));
     });
   }
 
@@ -76,9 +93,31 @@ export class GossipLobbyAdapter {
   async stop(): Promise<void> {
     this.stopHeartbeat();
     if (this.subscription) {
-      this.libp2p.services.pubsub.removeEventListener('message', this.subscription as any);
+      this.libp2p.services.pubsub.removeEventListener('message', this.subscription);
       this.subscription = null;
     }
     await this.libp2p.services.pubsub.unsubscribe(this.topic);
+  }
+}
+
+
+const object = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+const text = (value: unknown): value is string => typeof value === 'string' && value.length <= 4096;
+const seat = (value: unknown) => Number.isSafeInteger(value) && (value as number) >= 0 && (value as number) < 64;
+function isLobbyMessage(value: unknown): value is LobbyMessage {
+  if (!object(value) || value._matchmaking !== true || !text(value.sender) ||
+      !Number.isSafeInteger(value.timestamp) || !object(value.payload) || value.type !== value.payload.type) return false;
+  const p = value.payload;
+  switch (p.type) {
+    case 'JoinRequest': return text(p.displayName) && (p.requestedSeat === undefined || seat(p.requestedSeat));
+    case 'JoinResponse': return text(p.recipientPeerId) && p.recipientPeerId.length > 0 && typeof p.accepted === 'boolean' && (p.seatOffered === undefined || seat(p.seatOffered)) && (p.reason === undefined || text(p.reason));
+    case 'JoinConfirm': case 'SeatOffer': return seat(p.seat);
+    case 'LeaveNotice': return ['voluntary', 'kicked', 'timeout'].includes(String(p.reason));
+    case 'ReadyToggle': return typeof p.ready === 'boolean';
+    case 'GameStart': return Number.isSafeInteger(p.startTime) && (p.seed === undefined || text(p.seed)) && (p.joinCode === undefined || text(p.joinCode));
+    case 'GameAbort': return text(p.reason);
+    case 'Heartbeat': return true;
+    default: return false;
   }
 }

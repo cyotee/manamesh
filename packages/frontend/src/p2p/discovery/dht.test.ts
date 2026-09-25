@@ -4,6 +4,16 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+// These cases exercise unavailable-DHT behavior, not browser transport startup.
+// Make that failure deterministic instead of depending on live bootstrap peers
+// and importing browser WebRTC's native Node dependencies into the test runner.
+vi.mock('../libp2p-config', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../libp2p-config')>(),
+  createNode: vi.fn(async () => { throw new Error('DHT unavailable'); }),
+  getNode: vi.fn(() => null),
+  isConnectedToPeers: vi.fn(() => false),
+}));
 import {
   generateRoomCode,
   normalizeRoomCode,
@@ -237,7 +247,7 @@ describe('Error handling', () => {
 });
 
 describe('State transitions', () => {
-  // These tests take longer because libp2p actually initializes and waits for bootstrap
+  // The real connection state machine handles a controlled transport failure.
   it('createRoom transitions through correct states when DHT unavailable', async () => {
     const calls: DHTState[] = [];
     const events: DHTEvents = {

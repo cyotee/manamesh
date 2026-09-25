@@ -9,9 +9,9 @@ import type { Hex } from 'viem';
 import { getAddress } from 'viem';
 import {
   prepareSettlementPayload,
-  deriveHandId,
   type SettlementTableConfig,
-} from '@manamesh/poker';
+} from '@manamesh/poker/settlement';
+import { deriveHandId } from '@manamesh/poker/handId';
 import type {
   BlockchainService,
   BlockchainEvent,
@@ -286,7 +286,8 @@ export class MockBlockchainService implements BlockchainService {
       return this.settleHand({
         handInit: prepared.handInit,
         settlement: prepared.settlement,
-        winnerSignatures: params.winnerSignatures,
+        claimantSignatures: params.claimantSignatures,
+        handEndSignatures: params.handEndSignatures,
       });
     } catch (e) {
       return {

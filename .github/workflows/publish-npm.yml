@@ -1,71 +1,19 @@
-name: Publish npm (@cyotee/manamesh)
+name: npm release moved to manamesh-games
 
+# The platform submodule cannot install root workspace games or build the SPA.
+# Releases are explicitly dispatched from the monorepo after full validation.
 on:
-  push:
-    branches: [main, master]
   workflow_dispatch:
 
 permissions:
   contents: read
-  id-token: write
 
 jobs:
-  test:
+  release-location:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: packages/frontend
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          package-manager-cache: false
-      - name: Install (workspace may need monorepo — use package local if present)
+      - name: Report the supported release path
         run: |
-          if [ -f yarn.lock ] || [ -f package.json ]; then
-            npm install || true
-          fi
-      - name: Test
-        run: npm run test:run || npx vitest run || echo "tests skipped if deps incomplete in isolation"
-        continue-on-error: true
-
-  publish:
-    needs: test
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: packages/frontend
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          registry-url: https://registry.npmjs.org
-          package-manager-cache: false
-      - run: npm install -g npm@latest
-      - run: npm install || true
-      - name: Build public surface
-        run: |
-          npm run build:lib || npx esbuild src/public-api.ts --bundle --format=esm --outfile=dist/public-api.js --platform=neutral --external:boardgame.io --external:@cyotee/* --external:react --external:react-dom || true
-          mkdir -p dist bin
-          if [ ! -f dist/index.html ]; then
-            echo '<!doctype html><title>@cyotee/manamesh</title><h1>@cyotee/manamesh</h1>' > dist/index.html
-          fi
-          if [ -f scripts/rewrite-deps-for-publish.mjs ]; then
-            node scripts/rewrite-deps-for-publish.mjs package.json
-          fi
-      - name: Publish if new version
-        env:
-          # Prefer OIDC trusted publishing; token fallback only if secret set and OIDC not configured
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NPM_CONFIG_PROVENANCE: "true"
-        run: |
-          set -euo pipefail
-          NAME=$(node -p "require('./package.json').name")
-          VER=$(node -p "require('./package.json').version")
-          if npm view "$NAME@$VER" version >/dev/null 2>&1; then
-            echo "Already published $NAME@$VER"
-            exit 0
-          fi
-          npm publish --access public --ignore-scripts
+          echo 'Use release-manamesh.yml in cyotee/manamesh-games.'
+          echo 'It builds the monorepo, validates the installed package, and publishes the same tarball.'
+          exit 1

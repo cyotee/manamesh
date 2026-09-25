@@ -102,7 +102,7 @@ export const CustomConnectButton: React.FC<{
                 displayName: account?.displayName,
                 displayBalance: account?.displayBalance,
                 chain: chain
-                  ? { name: chain.name, iconUrl: chain.iconUrl }
+                  ? { name: chain.name ?? String(chain.id), iconUrl: chain.iconUrl }
                   : undefined,
                 openConnectModal,
                 openAccountModal,

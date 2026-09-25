@@ -4,7 +4,7 @@
  * Resolves libp2p bootstrap nodes from multiple sources in priority order:
  * 1. localStorage cache (24hr TTL) — fastest, no network call
  * 2. ENS text record "manamesh.nodes.eth" → "bootstrap"
- * 3. Hardcoded Protocol Labs bootstrap nodes — always works
+ * 3. Hardcoded Protocol Labs bootstrap nodes — last-resort fallback
  *
  * This is game-agnostic — any game module can use MatchmakingService
  * which uses these bootstrap nodes.
@@ -17,7 +17,7 @@ const ENS_NAME = 'manamesh.nodes.eth';
 const CACHE_KEY = 'manamesh_bootstrap_nodes';
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
-// Hardcoded fallback — Protocol Labs bootstrap nodes, always available
+// Hardcoded fallback — Protocol Labs bootstrap nodes, availability depends on the network
 
 export const HARDCODE_D_BOOTSTRAP_NODES: string[] = [
   '/dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN',
@@ -33,16 +33,22 @@ interface CacheEntry {
   timestamp: number;
 }
 
+function isNodeList(value: unknown): value is string[] {
+  return Array.isArray(value) && value.length > 0 && value.length <= 64 &&
+    value.every(node => typeof node === "string" && node.startsWith("/") && node.length <= 2048 && !/\s/.test(node));
+}
+
 function getFromCache(): string[] | null {
   try {
     const raw = localStorage.getItem(CACHE_KEY);
     if (!raw) return null;
     const entry: CacheEntry = JSON.parse(raw);
-    if (Date.now() - entry.timestamp > CACHE_TTL_MS) {
+    if (!entry || !Number.isFinite(entry.timestamp) ||
+        entry.timestamp > Date.now() || Date.now() - entry.timestamp > CACHE_TTL_MS) {
       localStorage.removeItem(CACHE_KEY);
       return null;
     }
-    if (!Array.isArray(entry.nodes) || entry.nodes.length === 0) return null;
+    if (!isNodeList(entry.nodes)) return null;
     return entry.nodes;
   } catch {
     return null;
@@ -68,11 +74,6 @@ async function resolveFromEns(): Promise<string[]> {
       : http(),
   });
 
-  const resolver = await publicClient.getResolver({ name: ENS_NAME });
-  if (!resolver) {
-    throw new Error(`ENS name ${ENS_NAME} has no resolver`);
-  }
-
   const bootstrapText = await publicClient.getEnsText({
     name: ENS_NAME,
     key: 'bootstrap',
@@ -82,9 +83,9 @@ async function resolveFromEns(): Promise<string[]> {
     throw new Error(`ENS name ${ENS_NAME} has no "bootstrap" text record`);
   }
 
-  const nodes = JSON.parse(bootstrapText) as string[];
-  if (!Array.isArray(nodes) || nodes.length === 0) {
-    throw new Error(`ENS "bootstrap" text record is empty`);
+  const nodes: unknown = JSON.parse(bootstrapText);
+  if (!isNodeList(nodes)) {
+    throw new Error(`ENS "bootstrap" text record is not a valid node list`);
   }
 
   return nodes;
@@ -97,7 +98,7 @@ async function resolveFromEns(): Promise<string[]> {
  * 1. In-memory cache (fastest)
  * 2. localStorage cache (24hr TTL)
  * 3. ENS text record "manamesh.nodes.eth"
- * 4. Hardcoded Protocol Labs nodes (always works)
+ * 4. Hardcoded Protocol Labs nodes (last-resort fallback)
  *
  * Returns a readonly array. Do not mutate.
  */
@@ -135,7 +136,7 @@ export async function resolveBootstrapNodes(): Promise<readonly string[]> {
  * Call this from a "Refresh" button in settings UI.
  */
 export async function refreshBootstrapNodes(): Promise<readonly string[]> {
-  localStorage.removeItem(CACHE_KEY);
+  try { localStorage.removeItem(CACHE_KEY); } catch { /* Storage may be denied. */ }
   cachedBootstrapNodes = null;
   return resolveBootstrapNodes();
 }

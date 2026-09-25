@@ -273,7 +273,9 @@ export interface MoveValidation {
  * - Rendering hints (zone layouts)
  *
  * @template TCard - The card type used by this game
- * @template TState - The game state type
+ * @template TState - The game's own state layout. Consumers requiring generic
+ * zone storage must separately require BaseGameState; custom boards need not
+ * duplicate their domain state into a second zones dictionary.
  *
  * @example
  * ```typescript
@@ -287,7 +289,7 @@ export interface MoveValidation {
  */
 export interface GameModule<
   TCard extends CoreCard = CoreCard,
-  TState extends BaseGameState<TCard> = BaseGameState<TCard>,
+  TState extends object = BaseGameState<TCard>,
 > {
   // ---------------------------------------------------------------------------
   // Identity

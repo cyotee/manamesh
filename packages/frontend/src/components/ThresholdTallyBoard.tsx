@@ -153,9 +153,8 @@ export const ThresholdTallyBoard: React.FC<BoardProps<any>> = ({
       setStatus("Already published your DKG commitment.");
       return;
     }
-    dealerRef.current = dkgMakeDealerSecrets();
-    const { c0Hex, c1Hex } = dealerRef.current.commitment;
-    (moves as any).publishDkgCommitment({ c0Hex, c1Hex });
+    dealerRef.current = dkgMakeDealerSecrets(state.crypto.threshold, state.playerOrder.length);
+    (moves as any).publishDkgCommitment(dealerRef.current.commitment);
     setStatus("Published DKG commitment. Send shares to peers.");
   };
 
@@ -268,7 +267,7 @@ export const ThresholdTallyBoard: React.FC<BoardProps<any>> = ({
     const r = secpRandomScalar();
     const ct = elgamalEncryptExp(pkHex, BigInt(m), r);
     (moves as any).submitCiphertext({ c1Hex: ct.c1Hex, c2Hex: ct.c2Hex });
-    setStatus(`Submitted Enc(${m}) under threshold key (t=2).`);
+    setStatus(`Submitted Enc(${m}) under threshold key (t=${state.crypto.threshold}).`);
   };
 
   const decryptAggregateAndPublish = () => {
@@ -687,7 +686,8 @@ export const ThresholdTallyBoard: React.FC<BoardProps<any>> = ({
                           "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
                       }}
                     >
-                      0x{cHex.slice(0, 20)}…
+                      c1: {cHex.c1Hex.slice(0, 20)}…<br />
+                      c2: {cHex.c2Hex.slice(0, 20)}…
                     </div>
                   )}
                 </div>

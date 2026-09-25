@@ -10,6 +10,11 @@ export * from './mock-service';
 export * from './live-service';
 export * from './config';
 export * from './wallet';
+export {
+  createClientsFromInjected,
+  settlementPortsFromViem,
+  tryInstallLiveFromInjected,
+} from './liveFromInjected';
 
 import type { Hex } from 'viem';
 import type { BlockchainMode, BlockchainService } from './types';

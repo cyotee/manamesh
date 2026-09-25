@@ -5,85 +5,38 @@
 
 import type { ConnectionOffer } from './webrtc';
 
-/**
- * Compress a string using the browser's CompressionStream API
- * Falls back to no compression if not available
- */
-async function compress(data: string): Promise<Uint8Array> {
-  const encoder = new TextEncoder();
-  const inputBytes = encoder.encode(data);
-
-  // Check if CompressionStream is available
-  if (typeof CompressionStream === 'undefined') {
-    return inputBytes;
-  }
-
-  const stream = new CompressionStream('gzip');
+/** Consume both sides concurrently and observe write errors as well as read errors. */
+async function transformBytes(
+  data: Uint8Array,
+  stream: CompressionStream | DecompressionStream,
+): Promise<Uint8Array> {
   const writer = stream.writable.getWriter();
-  writer.write(inputBytes);
-  writer.close();
-
-  const compressedChunks: Uint8Array[] = [];
-  const reader = stream.readable.getReader();
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    compressedChunks.push(value);
-  }
-
-  // Combine chunks
-  const totalLength = compressedChunks.reduce((acc, chunk) => acc + chunk.length, 0);
-  const result = new Uint8Array(totalLength);
-  let offset = 0;
-  for (const chunk of compressedChunks) {
-    result.set(chunk, offset);
-    offset += chunk.length;
-  }
-
-  return result;
+  const write = async () => {
+    // Copy into an ordinary ArrayBuffer rather than retaining a possibly shared view.
+    await writer.write(new Uint8Array(data));
+    await writer.close();
+  };
+  const [, output] = await Promise.all([
+    write(),
+    new Response(stream.readable).arrayBuffer(),
+  ]);
+  return new Uint8Array(output);
 }
 
-/**
- * Decompress a Uint8Array using the browser's DecompressionStream API
- * Falls back to treating as uncompressed if decompression fails
- */
+/** Compress when supported; older peers may send plain JSON instead. */
+async function compress(data: string): Promise<Uint8Array> {
+  const bytes = new TextEncoder().encode(data);
+  if (typeof CompressionStream === 'undefined') return bytes;
+  return transformBytes(bytes, new CompressionStream('gzip'));
+}
+
+/** Preserve compatibility with uncompressed join codes. */
 async function decompress(data: Uint8Array): Promise<string> {
   const decoder = new TextDecoder();
-
-  // Check if DecompressionStream is available
-  if (typeof DecompressionStream === 'undefined') {
-    return decoder.decode(data);
-  }
-
+  if (typeof DecompressionStream === 'undefined') return decoder.decode(data);
   try {
-    const stream = new DecompressionStream('gzip');
-    const writer = stream.writable.getWriter();
-    // Create a new Uint8Array to ensure proper buffer type
-    writer.write(new Uint8Array(data.buffer, data.byteOffset, data.byteLength));
-    writer.close();
-
-    const decompressedChunks: Uint8Array[] = [];
-    const reader = stream.readable.getReader();
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      decompressedChunks.push(value);
-    }
-
-    // Combine chunks
-    const totalLength = decompressedChunks.reduce((acc, chunk) => acc + chunk.length, 0);
-    const result = new Uint8Array(totalLength);
-    let offset = 0;
-    for (const chunk of decompressedChunks) {
-      result.set(chunk, offset);
-      offset += chunk.length;
-    }
-
-    return decoder.decode(result);
+    return decoder.decode(await transformBytes(data, new DecompressionStream('gzip')));
   } catch {
-    // If decompression fails, assume data is uncompressed
     return decoder.decode(data);
   }
 }

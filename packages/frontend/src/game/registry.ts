@@ -8,20 +8,18 @@
 import type { Game } from "boardgame.io";
 import type { BoardProps } from "boardgame.io/react";
 import type { ComponentType } from "react";
-import { SimpleCardGame, type SimpleCardGameState } from "./game";
+import { SimpleCardGame } from "./game";
 import {
   PokerGame,
   CryptoPokerGame,
-  type PokerState,
-  type CryptoPokerState,
 } from "@manamesh/poker";
 import { MerkleBattleshipGame, MerkleBattleshipBoard } from "@manamesh/game-battleship-merkle";
 import { ThresholdTallyGame } from "./modules/threshold-tally";
 import { OnePieceGame, OnePieceCryptoGame } from "@manamesh/onepiece";
-import { MistbornModule, MistbornBoard, MistbornGame } from "@manamesh/mistborn-deckbuilder";
+import { MistbornBoard, MistbornGame } from "@manamesh/mistborn-deckbuilder";
 import { TimestreamsModule, TimestreamsBoard } from "@manamesh/timestreams";
 
-export interface GameInfo<T = unknown> {
+export interface GameInfo<T = unknown, CryptoState = T> {
   id: string;
   name: string;
   description: string;
@@ -29,84 +27,93 @@ export interface GameInfo<T = unknown> {
   maxPlayers: number;
   getGame: () => Game<T>;
   /** Get the crypto-enabled version for P2P play (if available) */
-  getCryptoGame?: () => Game<T>;
+  getCryptoGame?: () => Game<CryptoState>;
   BoardComponent?: ComponentType<BoardProps<T>>;
 }
 
-export const GAMES: GameInfo[] = [
-  {
+/** Check each game's board against its state before collecting heterogeneous entries. */
+export function defineGame<const Id extends string, State, CryptoState = State>(
+  info: GameInfo<State, CryptoState> & { id: Id },
+): GameInfo<State, CryptoState> & { id: Id } {
+  return info;
+}
+
+export const GAMES = [
+  defineGame({
     id: "threshold-tally",
     name: "Threshold Tally Arena (Demo)",
     description:
       "Threshold homomorphic tally demo: submit encrypted inputs and only decrypt the aggregate.",
     minPlayers: 2,
     maxPlayers: 3,
-    getGame: () => ThresholdTallyGame as Game,
-  },
-  {
+    getGame: () => ThresholdTallyGame,
+  }),
+  defineGame({
     id: "merkle-battleship",
     name: "Merkle Battleship",
     description:
       "Verifiable Battleship with binding placement (Merkle commitment). Package: @manamesh/game-battleship-merkle.",
     minPlayers: 2,
     maxPlayers: 2,
-    getGame: () => MerkleBattleshipGame as Game,
-    BoardComponent: MerkleBattleshipBoard as ComponentType<BoardProps<unknown>>,
-  },
-  {
+    getGame: () => MerkleBattleshipGame,
+    BoardComponent: MerkleBattleshipBoard,
+  }),
+  defineGame({
     id: "poker",
     name: "Texas Hold'em",
     description:
       "Classic poker with betting rounds. Bluff, bet, and win the pot!",
     minPlayers: 2,
     maxPlayers: 6,
-    getGame: () => PokerGame as Game,
-    getCryptoGame: () => CryptoPokerGame as Game,
-  },
-  {
+    getGame: () => PokerGame,
+    getCryptoGame: () => CryptoPokerGame,
+  }),
+  defineGame({
     id: "onepiece",
     name: "One Piece TCG",
     description:
       "One Piece Trading Card Game — rules-agnostic state manager with cooperative decryption.",
     minPlayers: 2,
     maxPlayers: 2,
-    getGame: () => OnePieceGame as Game,
-    getCryptoGame: () => OnePieceCryptoGame as Game,
-  },
-  {
+    getGame: () => OnePieceGame,
+    getCryptoGame: () => OnePieceCryptoGame,
+  }),
+  defineGame({
     id: "simple",
     name: "Simple Card Game",
     description: "Draw and play cards. First to play 5 cards wins!",
     minPlayers: 2,
     maxPlayers: 2,
-    getGame: () => SimpleCardGame as Game,
-  },
-  {
+    getGame: () => SimpleCardGame,
+  }),
+  defineGame({
     id: "mistborn",
     name: "Mistborn Deck Builder (Rules-Free)",
     description: "Phase 1: rules-free board for manual testing. Load pack, manage cards, advance tracks.",
     minPlayers: 2,
     maxPlayers: 4,
-    getGame: () => MistbornGame as Game,
+    getGame: () => MistbornGame,
     BoardComponent: MistbornBoard,
-  },
-  {
+  }),
+  defineGame({
     id: "timestreams",
     name: "Timestreams",
     description: "Timestreams — cryptographically fair era-seeding card game. 2-4 players, home era assignment, timeline placement.",
     minPlayers: 2,
     maxPlayers: 4,
-    getGame: () => TimestreamsModule.getBoardgameIOGame() as Game,
-    getCryptoGame: () => TimestreamsModule.getBoardgameIOGame() as Game,
+    getGame: () => TimestreamsModule.getBoardgameIOGame(),
+    getCryptoGame: () => TimestreamsModule.getBoardgameIOGame(),
     BoardComponent: TimestreamsBoard,
-  },
+  }),
 ];
 
-export function getGameById(id: string): GameInfo | undefined {
+export type RegisteredGame = (typeof GAMES)[number];
+
+export function getGameById(id: string): RegisteredGame | undefined {
   return GAMES.find((g) => g.id === id);
 }
 
-export function getGamesByPlayerCount(playerCount: number): GameInfo[] {
+export function getGamesByPlayerCount(playerCount: number): RegisteredGame[] {
   return GAMES.filter(
     (g) => playerCount >= g.minPlayers && playerCount <= g.maxPlayers,
   );

@@ -21,7 +21,7 @@ import {
   paillierGenerateKeypair,
   paillierPublicKeyFromNHex,
   type PaillierKeypair,
-} from "@cyotee/boardgameio-crypto";
+} from "@cyotee/boardgameio-crypto/paillier";
 
 // NOTE: This board reuses the placement UI concepts from Merkle Battleship,
 // but it is a demo-only page focusing on homomorphic encryption.
@@ -108,7 +108,7 @@ export const HEBattleshipBoard: React.FC<BoardProps<any>> = ({
 
   const boardBits = useMemo(() => buildBoardBits(placedShips), [placedShips]);
   const occupiedCount = useMemo(
-    () => boardBits.reduce((acc, b) => acc + (b === 1 ? 1 : 0), 0),
+    () => boardBits.reduce<number>((acc, b) => acc + (b === 1 ? 1 : 0), 0),
     [boardBits],
   );
 
@@ -189,7 +189,7 @@ export const HEBattleshipBoard: React.FC<BoardProps<any>> = ({
 
     // Sanity check: decrypt locally (only possible with opponent key; this is just a local check).
     // We can't decrypt encSumForOpp since it's under oppPk. Keep a local plaintext check instead.
-    const myPlainCount = boardBits.reduce((acc, bit) => acc + (bit ? 1 : 0), 0);
+    const myPlainCount = boardBits.reduce<number>((acc, bit) => acc + (bit ? 1 : 0), 0);
     if (myPlainCount !== occupiedCount) {
       setStatus("Internal error: plaintext count mismatch");
       return;

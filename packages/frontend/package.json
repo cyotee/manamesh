@@ -82,9 +82,14 @@
     "dev:onepiece": "vite --open /src/pages/onepiece/",
     "build": "vite build && node ./scripts/build-lib.mjs",
     "build:spa": "vite build",
+    "build:poker:preview": "MANAMESH_PAGE=poker vite build",
     "build:lib": "node ./scripts/build-lib.mjs",
     "test": "vitest",
     "test:run": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test:e2e": "playwright test -c e2e/playwright.config.ts",
+    "test:e2e:ui": "playwright test -c e2e/playwright.config.ts --ui",
+    "test:e2e:install": "playwright install chromium",
     "prepublishOnly": "npm run build",
     "start": "node ./bin/cli.js"
   },
@@ -96,6 +101,7 @@
     "@helia/unixfs": "^7.0.1",
     "@libp2p/bootstrap": "^12.0.11",
     "@libp2p/circuit-relay-v2": "^4.1.3",
+    "@libp2p/gossipsub": "17.1.1",
     "@libp2p/identify": "^4.0.10",
     "@libp2p/kad-dht": "^16.1.3",
     "@libp2p/ping": "^3.0.10",
@@ -130,6 +136,7 @@
     "webtorrent": "^2.4.7"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.5.5",
     "@types/react": "^18.3.5",

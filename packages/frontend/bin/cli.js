@@ -20,9 +20,14 @@ Options:
   process.exit(0);
 }
 
-let port = Number(process.env.PORT) || 3000;
+let portValue = process.env.PORT ?? "3000";
 const portIdx = args.findIndex((a) => a === "--port" || a === "-p");
-if (portIdx >= 0 && args[portIdx + 1]) port = Number(args[portIdx + 1]) || port;
+if (portIdx >= 0) portValue = args[portIdx + 1];
+if (typeof portValue !== "string" || !/^\d+$/.test(portValue) || Number(portValue) > 65535) {
+  console.error("Error: port must be an integer from 0 to 65535.");
+  process.exit(1);
+}
+const port = Number(portValue);
 
 if (!fs.existsSync(path.join(distDir, "index.html"))) {
   console.error("Error: prebuilt dist/index.html not found. Build the package first.");
@@ -44,28 +49,58 @@ const MIME = {
   ".map": "application/json",
 };
 
+// Compare path components, not a string prefix (dist-private is not in dist).
+const realDist = fs.realpathSync(distDir);
+const withinDist = file => {
+  const relative = path.relative(realDist, file);
+  return relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
+};
 const server = http.createServer((req, res) => {
+  const reply = (status, body, headers = {}) => {
+    res.writeHead(status, { "Content-Type": "text/plain; charset=utf-8", "X-Content-Type-Options": "nosniff", ...headers });
+    res.end(req.method === "HEAD" ? undefined : body);
+  };
+  if (req.method !== "GET" && req.method !== "HEAD") {
+    reply(405, "Method Not Allowed", { Allow: "GET, HEAD" }); return;
+  }
+  let urlPath;
   try {
-    const urlPath = decodeURIComponent((req.url || "/").split("?")[0]);
-    let rel = urlPath === "/" ? "/index.html" : urlPath;
-    const filePath = path.normalize(path.join(distDir, rel));
-    if (!filePath.startsWith(distDir)) {
-      res.writeHead(403); res.end("Forbidden"); return;
+    urlPath = decodeURIComponent((req.url || "/").split("?")[0]);
+    if (!urlPath.startsWith("/") || urlPath.includes("\0") || urlPath.includes("\\")) throw new Error();
+  } catch {
+    reply(400, "Bad Request"); return;
+  }
+  let filePath = path.resolve(realDist, `.${urlPath === "/" ? "/index.html" : urlPath}`);
+  if (!withinDist(filePath)) { reply(403, "Forbidden"); return; }
+  try {
+    // Resolve symlinks before reading; an in-directory link must not expose
+    // files outside the package's static tree.
+    try {
+      filePath = fs.realpathSync(filePath);
+    } catch (error) {
+      if (error.code !== "ENOENT" && error.code !== "ENOTDIR") throw error;
+      if (path.extname(urlPath) || !(req.headers.accept || "").includes("text/html")) {
+        reply(404, "Not Found"); return;
+      }
+      filePath = fs.realpathSync(path.join(realDist, "index.html"));
     }
-    if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
-      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-      res.end(fs.readFileSync(path.join(distDir, "index.html")));
-      return;
-    }
-    const ext = path.extname(filePath).toLowerCase();
-    res.writeHead(200, { "Content-Type": MIME[ext] || "application/octet-stream" });
-    res.end(fs.readFileSync(filePath));
-  } catch (e) {
-    res.writeHead(500); res.end(String(e));
+    if (!withinDist(filePath)) { reply(403, "Forbidden"); return; }
+    if (!fs.statSync(filePath).isFile()) { reply(404, "Not Found"); return; }
+    const body = fs.readFileSync(filePath);
+    reply(200, body, {
+      "Content-Type": MIME[path.extname(filePath).toLowerCase()] || "application/octet-stream",
+      "Content-Length": body.length,
+    });
+  } catch {
+    reply(500, "Internal Server Error");
   }
 });
 
+server.on("error", error => {
+  console.error(`Unable to start ManaMesh: ${error.code || "server error"}`);
+  process.exitCode = 1;
+});
 server.listen(port, "127.0.0.1", () => {
-  console.log(`ManaMesh listening at http://127.0.0.1:${port}/`);
+  console.log(`ManaMesh listening at http://127.0.0.1:${server.address().port}/`);
   console.log("Press Ctrl+C to stop.");
 });

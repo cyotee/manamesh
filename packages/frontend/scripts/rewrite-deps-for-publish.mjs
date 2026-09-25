@@ -11,8 +11,6 @@ const pkg = JSON.parse(fs.readFileSync(path, "utf8"));
 
 // Library re-exports only need these at runtime for consumers of public-api
 pkg.dependencies = {
-  "@cyotee/boardgameio-p2p": "^0.5.0",
-  "@cyotee/boardgameio-crypto": "^0.1.0",
   "boardgame.io": "npm:@cyotee/boardgame.io@0.50.3",
 };
 pkg.peerDependencies = {
@@ -25,8 +23,26 @@ pkg.peerDependenciesMeta = {
 };
 delete pkg.devDependencies;
 delete pkg.private;
+// Registry artifacts are prebuilt; repository build hooks cannot run here.
+pkg.scripts = { start: "node ./bin/cli.js" };
 pkg.publishConfig = { access: "public" };
-pkg.files = ["dist", "bin", "README.md", "LICENSE"];
+// The monorepo workflow builds and publishes this artifact; provenance must
+// identify that repository, whose commit also pins the platform submodule.
+pkg.repository = {
+  type: "git",
+  url: "git+https://github.com/cyotee/manamesh-games.git",
+  directory: "packages/manamesh/packages/frontend",
+};
+pkg.files = ["dist/public-api.js", "dist/public-api.d.ts", "dist/channel-transport.d.ts", "dist/channel.d.ts", "dist/extension-messages.d.ts", "dist/index.html", "bin", "README.md", "LICENSE", "TRANSPORT-LICENSE"];
+// Source subpaths are workspace integration points, not part of the thin
+// registry package. Never advertise files omitted from the tarball.
+pkg.exports = {
+  ".": {
+    types: "./dist/public-api.d.ts",
+    default: "./dist/public-api.js",
+  },
+  "./package.json": "./package.json",
+};
 pkg.bin = { manamesh: "./bin/cli.js" };
 
 fs.writeFileSync(path, JSON.stringify(pkg, null, 2) + "\n");

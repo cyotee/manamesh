@@ -289,7 +289,7 @@ export class DHTConnection {
 
       // Look up offer from DHT
       const offerData = await this.lookupFromDHT(getRoomKey(normalized));
-      if (!offerData || offerData.type !== 'offer') {
+      if (!offerData || offerData.type !== 'offer' || typeof offerData.data !== 'string') {
         throw new Error('Room not found. Check the code and try again.');
       }
 

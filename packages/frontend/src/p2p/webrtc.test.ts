@@ -112,6 +112,9 @@ class MockRTCPeerConnection {
 
 class MockRTCDataChannel {
   label: string;
+  ordered = true;
+  maxPacketLifeTime: number | null = null;
+  maxRetransmits: number | null = null;
   readyState: RTCDataChannelState = 'connecting';
 
   onopen: (() => void) | null = null;
@@ -264,14 +267,18 @@ describe('PeerConnection', () => {
   });
 
   describe('close', () => {
-    it('closes the connection and updates state', async () => {
+    it('closes and updates state without emitting an unexpected disconnect', async () => {
       const { events, calls } = createMockEvents();
       const pc = new PeerConnection(events);
 
       await pc.createOffer();
       pc.close();
 
-      expect(calls.stateChanges).toContain('disconnected');
+      expect(pc.state).toBe('disconnected');
+      // Intentional cleanup must not trigger callers' reconnect/failure flows.
+      expect(calls.stateChanges).not.toContain('disconnected');
+      pc.close();
+      expect(pc.state).toBe('disconnected');
     });
   });
 
@@ -370,5 +377,74 @@ describe('Integration scenarios', () => {
     // Cleanup
     host.close();
     guest.close();
+  });
+});
+
+
+describe('dedicated reliable channels', () => {
+  function fixture() {
+    const messages = vi.fn();
+    const peer = new PeerConnection({ onMessage: messages, onStateChange: vi.fn(), onError: vi.fn() });
+    const rtc = (peer as unknown as { pc: MockRTCPeerConnection }).pc;
+    const game = new MockRTCDataChannel('game');
+    rtc.simulateDataChannel(game);
+    game.simulateOpen();
+    rtc.simulateConnectionState('connected');
+    return { peer, rtc, game, messages };
+  }
+  it('refuses unknown and duplicate channels without replacing game routing', () => {
+    const f = fixture();
+    const unknown = new MockRTCDataChannel('unknown');
+    const duplicate = new MockRTCDataChannel('game');
+    f.rtc.simulateDataChannel(unknown); f.rtc.simulateDataChannel(duplicate);
+    expect(unknown.readyState).toBe('closed'); expect(duplicate.readyState).toBe('closed');
+    unknown.simulateMessage('injected'); duplicate.simulateMessage('injected');
+    f.game.simulateMessage('real'); f.peer.send('outgoing');
+    expect(f.messages.mock.calls).toEqual([['real']]);
+    expect(f.game.getSentMessages()).toEqual(['outgoing']);
+    f.peer.close();
+  });
+  it('routes an admitted channel separately and never replaces it after closure', () => {
+    const f = fixture(); const accept = vi.fn();
+    const dispose = f.peer.registerReliableChannel('manamesh-poker-history-v1', accept);
+    const history = new MockRTCDataChannel('manamesh-poker-history-v1');
+    f.rtc.simulateDataChannel(history);
+    expect(accept).toHaveBeenCalledWith(history);
+    history.simulateMessage('not a game snapshot');
+    expect(f.messages).not.toHaveBeenCalled();
+    dispose();
+    const replacement = new MockRTCDataChannel(history.label);
+    f.rtc.simulateDataChannel(replacement);
+    expect(replacement.readyState).toBe('closed'); expect(accept).toHaveBeenCalledTimes(1);
+    expect(f.game.readyState).toBe('open');
+    f.peer.close();
+  });
+  it('rejects unreliable channels without consuming the registered receiver', () => {
+    const f = fixture(); const accept = vi.fn();
+    f.peer.registerReliableChannel('proofs', accept);
+    for (const option of ['ordered', 'maxPacketLifeTime', 'maxRetransmits'] as const) {
+      const invalid = new MockRTCDataChannel('proofs');
+      if (option === 'ordered') invalid.ordered = false; else invalid[option] = 1;
+      f.rtc.simulateDataChannel(invalid); expect(invalid.readyState).toBe('closed');
+    }
+    const valid = new MockRTCDataChannel('proofs'); f.rtc.simulateDataChannel(valid);
+    expect(accept).toHaveBeenCalledTimes(1); f.peer.close();
+  });
+  it('bounds local registrations and refuses opening before connection or after disposal', () => {
+    const f = fixture();
+    expect(() => f.peer.registerReliableChannel('game', vi.fn())).toThrow('channel_label');
+    const dispose = f.peer.registerReliableChannel('history', vi.fn());
+    expect(() => f.peer.registerReliableChannel('history', vi.fn())).toThrow('channel_registration');
+    for (const label of ['proofs', 'admission', 'control']) f.peer.registerReliableChannel(label, vi.fn());
+    expect(() => f.peer.registerReliableChannel('extra', vi.fn())).toThrow('channel_registration');
+    f.rtc.simulateConnectionState('connecting');
+    expect(() => f.peer.openReliableChannel('history')).toThrow('not_connected');
+    f.rtc.simulateConnectionState('connected');
+    dispose(); expect(() => f.peer.openReliableChannel('history')).toThrow('channel_registration');
+    const proofs = f.peer.openReliableChannel('proofs');
+    expect(proofs.label).toBe('proofs');
+    expect(() => f.peer.openReliableChannel('proofs')).toThrow('channel_registration');
+    f.peer.close(); expect(proofs.readyState).toBe('closed');
+    expect(() => f.peer.registerReliableChannel('new', vi.fn())).toThrow('closed');
   });
 });

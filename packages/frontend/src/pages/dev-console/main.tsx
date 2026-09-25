@@ -1,6 +1,5 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import App from "../../App";
 
 console.log("[ManaMesh] dev-console boot");
 
@@ -10,6 +9,22 @@ const root = ReactDOM.createRoot(rootEl);
 
 root.render(
   <React.StrictMode>
-    <App />
+    <main style={{ padding: 24 }}>
+      <h1>ManaMesh development pages</h1>
+      <nav aria-label="Game development pages">
+        <ul>
+          {[
+            ["timestreams", "Timestreams"],
+            ["poker", "Poker"],
+            ["onepiece", "One Piece"],
+            ["merkle-battleship", "Merkle Battleship"],
+            ["simple", "Simple card game"],
+            ["threshold-tally", "Threshold Tally demo"],
+          ].map(([path, label]) => <li key={path}>
+            <a href={`../${path}/`}>{label}</a>
+          </li>)}
+        </ul>
+      </nav>
+    </main>
   </React.StrictMode>,
 );

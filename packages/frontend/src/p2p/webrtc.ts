@@ -26,6 +26,7 @@ const ICE_SERVERS: RTCIceServer[] = [
 export class PeerConnection {
   private pc: RTCPeerConnection;
   private dataChannel: RTCDataChannel | null = null;
+  private auxiliary = new Map<string, { accept: (channel: RTCDataChannel) => void; disposed: boolean; channel?: RTCDataChannel }>();
   private iceCandidates: RTCIceCandidateInit[] = [];
   private iceGatheringComplete = false;
   private events: PeerConnectionEvents;
@@ -84,11 +85,19 @@ export class PeerConnection {
     };
 
     this.pc.ondatachannel = (event) => {
-      this.setupDataChannel(event.channel);
+      const channel = event.channel;
+      if (channel.label === 'game') this.setupDataChannel(channel);
+      else this.acceptReliableChannel(channel);
+
     };
   }
 
   private setupDataChannel(channel: RTCDataChannel): void {
+    if (this.intentionalClose || this.dataChannel || channel.label !== 'game'
+      || !channel.ordered || channel.maxPacketLifeTime !== null || channel.maxRetransmits !== null) {
+      channel.close();
+      return;
+    }
     this.dataChannel = channel;
 
     channel.onopen = () => {
@@ -110,6 +119,46 @@ export class PeerConnection {
     channel.onmessage = (event) => {
       this.events.onMessage(event.data);
     };
+  }
+
+  /** Register before the remote peer opens a dedicated reliable channel.
+   * Labels are locally agreed routing only, never authentication of a peer.
+   * A registration admits one channel for this connection's lifetime.
+   */
+  registerReliableChannel(label: string, accept: (channel: RTCDataChannel) => void): () => void {
+    if (this.intentionalClose) throw new Error('webrtc:closed');
+    if (!/^[a-z][a-z0-9-]{0,63}$/.test(label) || label === 'game') throw new Error('webrtc:channel_label');
+    if (this.auxiliary.has(label) || this.auxiliary.size >= 4) throw new Error('webrtc:channel_registration');
+    const registration = { accept, disposed: false, channel: undefined as RTCDataChannel | undefined };
+    this.auxiliary.set(label, registration);
+    return () => {
+      if (this.auxiliary.get(label) !== registration) return;
+      // Keep the occupied slot: a remote replacement must not revive a disposed protocol.
+      registration.disposed = true;
+      registration.channel?.close();
+    };
+  }
+
+  private acceptReliableChannel(channel: RTCDataChannel): void {
+    const registration = this.auxiliary.get(channel.label);
+    if (this.intentionalClose || !registration || registration.disposed || registration.channel || !channel.ordered
+      || channel.maxPacketLifeTime !== null || channel.maxRetransmits !== null) {
+      channel.close();
+      return;
+    }
+    registration.channel = channel;
+    try { registration.accept(channel); }
+    catch { channel.close(); }
+  }
+
+  /** Only the agreed initiator opens; the other peer registers its receiver first. */
+  openReliableChannel(label: string): RTCDataChannel {
+    if (this.intentionalClose || this.pc.connectionState !== 'connected') throw new Error('webrtc:not_connected');
+    const registration = this.auxiliary.get(label);
+    if (!registration || registration.disposed || registration.channel) throw new Error('webrtc:channel_registration');
+    const channel = this.pc.createDataChannel(label, { ordered: true });
+    this.acceptReliableChannel(channel);
+    return channel;
   }
 
   /**
@@ -199,6 +248,10 @@ export class PeerConnection {
    */
   close(): void {
     this.intentionalClose = true;
+    for (const registration of this.auxiliary.values()) {
+      try { registration.channel?.close(); } catch { /* continue closing other channels */ }
+    }
+    this.auxiliary.clear();
     try {
       if (this.dataChannel) {
         this.dataChannel.close();
@@ -212,6 +265,7 @@ export class PeerConnection {
       /* ignore */
     }
     // Do not emit 'disconnected' on intentional close — callers clean up their own UI state.
+    this._state = 'disconnected';
   }
 
   /**

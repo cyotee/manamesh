@@ -11,12 +11,20 @@ const rootEl = document.getElementById("root");
 if (!rootEl) throw new Error("[ManaMesh] Missing #root element");
 const root = ReactDOM.createRoot(rootEl);
 
+const LocalClient = Client({
+  game: SimpleCardGame,
+  board: GameBoard,
+  multiplayer: Local(),
+  numPlayers: 2,
+  debug: false,
+});
+
 root.render(
   <React.StrictMode>
-    <Client
-      game={SimpleCardGame}
-      board={GameBoard}
-      multiplayer={Local()}
-    />
+    {Array.from({ length: 2 }, (_, seat) => (
+      <section key={seat} aria-label={`Player ${seat}`}>
+        <LocalClient playerID={String(seat)} matchID="local-simple" />
+      </section>
+    ))}
   </React.StrictMode>
 );

@@ -5,6 +5,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { P2PTransport, P2PMultiplayer, type P2PMessage } from './transport';
 import type { Game } from 'boardgame.io';
+import { InitializeGame, ProcessGameConfig } from 'boardgame.io/internal';
 
 // Mock JoinCodeConnection
 class MockJoinCodeConnection {
@@ -148,6 +149,7 @@ describe('P2PTransport', () => {
       // Should have received an update
       const updateCall = dataCallback.mock.calls.find(call => call[0].type === 'update');
       expect(updateCall).toBeDefined();
+      if (!updateCall) throw new Error("Expected a host update");
       expect(updateCall[0].args[1].G.value).toBe(1);
     });
 
@@ -264,7 +266,7 @@ describe('P2PTransport', () => {
       mockConnection.clearMessages();
 
       // Send an action
-      const mockState = { G: { value: 0 }, ctx: {}, plugins: {}, _stateID: 0 };
+      const mockState = InitializeGame({ game: TestGame, numPlayers: 2 });
       transport.sendAction(mockState, {
         type: 'MAKE_MOVE',
         playerID: '1',
@@ -353,7 +355,7 @@ describe('P2PTransport', () => {
       mockConnection.setConnected(false);
 
       // Try to send action
-      const mockState = { G: { value: 0 }, ctx: {}, plugins: {}, _stateID: 0 };
+      const mockState = InitializeGame({ game: TestGame, numPlayers: 2 });
       transport.sendAction(mockState, {
         type: 'MAKE_MOVE',
         playerID: '1',
@@ -464,7 +466,8 @@ describe('P2PTransport', () => {
       expect(typeof factory).toBe('function');
 
       const transport = factory({
-        game: TestGame,
+        gameKey: TestGame,
+        game: ProcessGameConfig(TestGame),
         transportDataCallback: dataCallback,
       });
 

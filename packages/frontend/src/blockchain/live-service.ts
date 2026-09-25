@@ -16,7 +16,7 @@ import {
   type SettlementTableConfig,
   type SettlementWriteClient,
   type SettlementReadClient,
-} from '@manamesh/poker';
+} from '@manamesh/poker/settlement';
 import type {
   BlockchainService,
   BlockchainMode,
@@ -94,7 +94,7 @@ export class LiveBlockchainService implements BlockchainService {
 
   /**
    * Simplified HandResult path is not sufficient for live settlement
-   * (needs HandInit, addresses, winner signatures). Callers must use
+   * (needs HandInit, addresses, claimant and hand-end signatures). Callers must use
    * settleHand / settleFromState.
    */
   async settlePot(_handResult: HandResult): Promise<SettlementResult> {
@@ -102,7 +102,7 @@ export class LiveBlockchainService implements BlockchainService {
       success: false,
       newBalances: {},
       error:
-        'Live mode does not support settlePot(HandResult). Use settleFromState or settleHand with EIP-712 winner signatures and player address map.',
+        'Live mode does not support settlePot(HandResult). Use settleFromState or settleHand with EIP-712 claimant and hand-end signatures and player address map.',
     };
   }
 
@@ -114,7 +114,8 @@ export class LiveBlockchainService implements BlockchainService {
     const result = await this.client.settleHand(
       params.handInit,
       params.settlement,
-      params.winnerSignatures,
+      params.claimantSignatures,
+      params.handEndSignatures,
     );
     return {
       success: result.success,

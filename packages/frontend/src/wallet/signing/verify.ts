@@ -55,7 +55,7 @@ export async function verifySignedAction<T extends ActionData>(
       domain: opts?.domain ?? MANAMESH_DOMAIN,
       types,
       primaryType: actionType,
-      message: data as Record<string, unknown>,
+      message: { ...data },
       signature,
     });
 
@@ -96,7 +96,7 @@ export async function verifyTypedSignature(
       domain: opts?.domain ?? MANAMESH_DOMAIN,
       types,
       primaryType: actionType,
-      message: data as Record<string, unknown>,
+      message: { ...data },
       signature,
     });
 
@@ -133,7 +133,7 @@ export function hashTypedAction(
     domain: opts?.domain ?? MANAMESH_DOMAIN,
     types,
     primaryType: actionType,
-    message: data as Record<string, unknown>,
+    message: { ...data },
   });
 }
 
@@ -144,7 +144,7 @@ export function hashTypedAction(
 export async function verifySignedActions(
   signedActions: SignedAction[],
 ): Promise<VerificationResult[]> {
-  return Promise.all(signedActions.map(verifySignedAction));
+  return Promise.all(signedActions.map(action => verifySignedAction(action)));
 }
 
 /**

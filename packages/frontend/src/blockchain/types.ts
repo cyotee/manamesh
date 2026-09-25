@@ -94,14 +94,16 @@ export interface AssertHandMembershipParams {
 export interface SettleHandParams {
   handInit: HandInit;
   settlement: BuiltSettlement;
-  winnerSignatures: readonly Hex[];
+  claimantSignatures: readonly Hex[];
+  handEndSignatures: readonly Hex[];
 }
 
 /** Params for building + settling from finished game state. */
 export interface SettleFromStateParams {
   state: SettleableHandState;
   playerHandNonces: Record<string, bigint>;
-  winnerSignatures: readonly Hex[];
+  claimantSignatures: readonly Hex[];
+  handEndSignatures: readonly Hex[];
   handId?: Hex;
 }
 

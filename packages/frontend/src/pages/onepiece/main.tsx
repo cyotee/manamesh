@@ -26,6 +26,29 @@ const rootEl = document.getElementById("root");
 if (!rootEl) throw new Error("[ManaMesh] Missing #root element");
 const root = ReactDOM.createRoot(rootEl);
 
+function LocalOnePieceGame() {
+  const [playerID, setPlayerID] = useState("0");
+  const LocalClient = useMemo(() => Client({
+    game: OnePieceGame,
+    board: OnePiecePhaserBoard,
+    multiplayer: Local(),
+    numPlayers: 2,
+    debug: false,
+  }), []);
+  return <>
+    <label>Local seat: <select aria-label="Local seat" value={playerID}
+      onChange={(event) => setPlayerID(event.target.value)}>
+      <option value="0">Player 0</option>
+      <option value="1">Player 1</option>
+    </select></label>
+    {["0", "1"].map((seat) => (
+      <div key={seat} hidden={seat !== playerID}>
+        <LocalClient playerID={seat} matchID="local-onepiece" />
+      </div>
+    ))}
+  </>;
+}
+
 function OnePieceApp() {
   const [phase, setPhase] = useState<Phase>("menu");
   const [lobbyRole, setLobbyRole] = useState<"host" | "guest">("host");
@@ -121,7 +144,7 @@ function OnePieceApp() {
         >
           ← Menu
         </button>
-        <Client game={OnePieceGame} board={OnePiecePhaserBoard} multiplayer={Local()} />
+        <LocalOnePieceGame />
       </div>
     );
   }

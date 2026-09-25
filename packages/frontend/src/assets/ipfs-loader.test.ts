@@ -8,6 +8,8 @@
  * without requiring helia, since helia dependencies are hard to mock.
  */
 
+import { CID } from 'multiformats/cid';
+import { sha256 } from 'multiformats/hashes/sha2';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { setHeliaForTest, clearHeliaTestInstance, fetchFromHelia } from './ipfs-loader';
 import type { Helia } from 'helia';
@@ -33,13 +35,18 @@ describe('fetchFromHelia', () => {
     const clearSpy = vi.spyOn(globalThis, 'clearTimeout');
 
     const neverResolves = new Promise<Uint8Array>(() => {});
+    let fetchSignal: AbortSignal | undefined;
     const mockHelia = {
-      blockstore: { get: () => neverResolves },
+      blockstore: { get: (_cid: unknown, options?: { signal?: AbortSignal }) => {
+        fetchSignal = options?.signal;
+        return neverResolves;
+      } },
     } as unknown as Helia;
     setHeliaForTest(mockHelia);
 
     const result = await fetchFromHelia(VALID_CID, 30); // 30ms timeout
     expect(result).toBeNull();
+    expect(fetchSignal?.aborted).toBe(true);
     expect(clearSpy).toHaveBeenCalled();
   });
 
@@ -51,15 +58,17 @@ describe('fetchFromHelia', () => {
     } as unknown as Helia;
     setHeliaForTest(mockHelia);
 
-    const result = await fetchFromHelia(VALID_CID, 5000);
+    const rawCid = CID.createV1(0x55, await sha256.digest(fakeBlock));
+    const result = await fetchFromHelia(rawCid.toString(), 5000);
     expect(result).not.toBeNull();
     expect(result).toBeInstanceOf(Blob);
+    expect(new Uint8Array(await result!.arrayBuffer())).toEqual(fakeBlock);
     expect(clearSpy).toHaveBeenCalled();
   });
 
   it('returns null when no Helia instance is available', async () => {
-    clearHeliaTestInstance();
-    // No test instance and no real helia initialized → getHelia() returns null
+    // Model an unavailable instance without starting a real network node.
+    setHeliaForTest(null);
     const result = await fetchFromHelia(VALID_CID, 100);
     expect(result).toBeNull();
   });

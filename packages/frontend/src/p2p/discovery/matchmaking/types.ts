@@ -57,6 +57,7 @@ export interface JoinRequestPayload {
 
 export interface JoinResponsePayload {
   type: 'JoinResponse';
+  recipientPeerId: string;
   accepted: boolean;
   seatOffered?: number;
   reason?: string;

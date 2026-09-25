@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 
 const root = path.dirname(fileURLToPath(import.meta.url)) + "/..";
 const outdir = path.join(root, "dist");
+const transportRoot = path.resolve(root, "../../../boardgameIO-p2p");
 fs.mkdirSync(outdir, { recursive: true });
 
 await esbuild.build({
@@ -16,11 +17,22 @@ await esbuild.build({
   bundle: true,
   platform: "neutral",
   format: "esm",
+  // Ship the checked-out security fixes, not the older registry transport.
+  alias: {
+    "@cyotee/boardgameio-p2p/channel": path.join(transportRoot, "src/channel-transport.ts"),
+  },
+  plugins: [{
+    name: "node-compatible-engine-entry",
+    setup(build) {
+      // The engine's legacy entry directories have no ESM exports map.
+      build.onResolve({ filter: /^boardgame\.io\/(core|internal)$/ }, ({ path: entry }) => ({
+        path: `boardgame.io/dist/cjs/${entry.split("/")[1]}.js`, external: true,
+      }));
+    },
+  }],
   external: [
     "boardgame.io",
     "boardgame.io/*",
-    "@cyotee/boardgameio-p2p",
-    "@cyotee/boardgameio-p2p/*",
     "@cyotee/boardgameio-crypto",
     "@cyotee/boardgameio-crypto/*",
     "react",
@@ -30,11 +42,19 @@ await esbuild.build({
   logLevel: "info",
 });
 
-// Minimal ambient d.ts for consumers
+// Match src/public-api.ts exactly; every target is supplied by the transport package.
 fs.writeFileSync(
   path.join(outdir, "public-api.d.ts"),
-  `export { P2P, P2PMultiplayer, type P2PChannel, type P2PMultiplayerOpts } from "@cyotee/boardgameio-p2p/channel";
-export type { JoinCodeConnection } from "./p2p/transports/joincode-transport";
+  `export {
+  P2PMultiplayer, P2PTransport, BrowserStorage,
+  type P2PChannel, type P2PTransportOpts, type P2PRole,
+} from "./channel-transport.js";
 `
 );
+for (const name of ["channel-transport", "channel", "extension-messages"]) {
+  const declaration = fs.readFileSync(path.join(transportRoot, "dist", `${name}.d.ts`), "utf8")
+    .replaceAll('"./channel"', '"./channel.js"')
+    .replaceAll('"./extension-messages"', '"./extension-messages.js"');
+  fs.writeFileSync(path.join(outdir, `${name}.d.ts`), declaration);
+}
 console.log("Library build written to dist/public-api.js");

@@ -90,14 +90,14 @@ export const PokerLobby: React.FC<PokerLobbyProps> = ({
   const handleJoinRequest = useCallback((peerId: string, payload: { displayName: string }) => {
     console.log('[PokerLobby] Join request from:', peerId, payload);
     if (isHost && matchmakingRef.current) {
-      const currentPlayers = players.length;
-      if (currentPlayers < maxPlayers) {
-        matchmakingRef.current.acceptJoin(peerId, currentPlayers);
+      const seat = matchmakingRef.current.getAvailableSeat();
+      if (seat !== null) {
+        matchmakingRef.current.acceptJoin(peerId, seat);
       } else {
         matchmakingRef.current.rejectJoin(peerId, 'Table is full');
       }
     }
-  }, [isHost, maxPlayers, players.length]);
+  }, [isHost]);
 
   const handleJoinResponse = useCallback((payload: { accepted: boolean; seatOffered?: number; reason?: string }) => {
     console.log('[PokerLobby] Join response:', payload);

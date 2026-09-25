@@ -8,7 +8,7 @@ import {
   loadPackCatalogFromHttp,
   DEFAULT_PACK_BASE_URL,
 } from "@manamesh/timestreams";
-import type { PackCatalog, PackCatalogLoadResult } from "@manamesh/timestreams";
+import type { PackCatalog, PackCatalogLoadResult, TimestreamsConfig, TimestreamsCard } from "@manamesh/timestreams";
 import { TimestreamsLobby } from "./TimestreamsLobby";
 import { RoomCodeLobby } from "../../components/RoomCodeLobby";
 import {
@@ -188,29 +188,28 @@ const gameDef = TimestreamsModule.getBoardgameIOGame();
 
 /** Wrap game so Local/P2P clients get fixed moduleConfig + pack catalog. */
 function gameWithExtras(extras: {
-  moduleConfig?: {
-    homeEraAssignment?: "selectable" | "random";
-    playMode?: "plaintext" | "mental-poker";
-    rulesEnabled?: boolean;
-  };
+  moduleConfig?: Partial<TimestreamsConfig>;
   packCatalog?: PackCatalog | null;
   packName?: string;
-}) {
+}): typeof gameDef {
+  const setup = gameDef.setup;
+  if (!setup) throw new Error("Timestreams requires a setup function");
   return {
     ...gameDef,
-    setup: (arg: unknown, setupData?: Record<string, unknown>) => {
-      const setup = gameDef.setup as
-        | ((a: unknown, d?: unknown) => unknown)
-        | undefined;
-      if (!setup) return {};
+    setup: (arg, setupData?: {
+      moduleConfig?: Partial<TimestreamsConfig>;
+      decks?: Record<string, TimestreamsCard[]>;
+      packCatalog?: PackCatalog;
+      packName?: string;
+    }) => {
       return setup(arg, {
         ...setupData,
         moduleConfig: {
           ...extras.moduleConfig,
-          ...(setupData?.moduleConfig as object | undefined),
+          ...setupData?.moduleConfig,
         },
-        packCatalog: extras.packCatalog ?? (setupData as any)?.packCatalog,
-        packName: extras.packName ?? (setupData as any)?.packName,
+        packCatalog: extras.packCatalog ?? setupData?.packCatalog,
+        packName: extras.packName ?? setupData?.packName,
       });
     },
   };

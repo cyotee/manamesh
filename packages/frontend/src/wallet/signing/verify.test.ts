@@ -1,12 +1,14 @@
+import { hashTypedData } from "viem";
+import type { SignedAction } from "./sign";
 /**
  * Tests for EIP-712 Verification Utilities
  */
 
 import { describe, it, expect } from "vitest";
-import { privateKeyToAccount } from "viem/accounts";
+import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { MANAMESH_DOMAIN } from "./domain";
-import { getTypesForAction } from "./types";
-import { hashTypedAction, verifySignedAction } from "./verify";
+import { getTypesForAction, JoinGameTypes, type JoinGameData } from "./types";
+import { hashTypedAction, verifySignedAction, verifySignedActions } from "./verify";
 
 describe("EIP-712 Verification", () => {
   it("verifies a JoinGame signature roundtrip", async () => {
@@ -122,5 +124,28 @@ describe("EIP-712 Verification", () => {
 
       expect(hash1).not.toBe(hash2);
     });
+  });
+});
+
+describe('typed action verification', () => {
+  it('verifies real signatures in a batch and rejects modified messages', async () => {
+    const account = privateKeyToAccount(generatePrivateKey());
+    const data: JoinGameData = { gameId: 'verification-test', playerId: '0', publicKey: '0x1234', timestamp: 1n };
+    const typedData = { domain: MANAMESH_DOMAIN, types: JoinGameTypes, primaryType: 'JoinGame' as const, message: { ...data } };
+    const signature = await account.signTypedData(typedData);
+    const signed = { actionType: 'JoinGame', data, signature, signer: account.address, signedAt: 1 } as SignedAction<JoinGameData>;
+    expect(hashTypedAction('JoinGame', data)).toBe(hashTypedData(typedData));
+    const results = await verifySignedActions([signed, { ...signed, data: { ...data, playerId: '1' } }]);
+    expect(results.map(result => result.isValid)).toEqual([true, false]);
+  });
+
+  it('requires the matching explicit domain for a signature from another chain', async () => {
+    const account = privateKeyToAccount(generatePrivateKey());
+    const data: JoinGameData = { gameId: 'domain-test', playerId: '0', publicKey: '0x1234', timestamp: 1n };
+    const domain = { ...MANAMESH_DOMAIN, chainId: 31337 };
+    const signature = await account.signTypedData({ domain, types: JoinGameTypes, primaryType: 'JoinGame', message: { ...data } });
+    const signed = { actionType: 'JoinGame', data, signature, signer: account.address, signedAt: 1 } as SignedAction<JoinGameData>;
+    expect((await verifySignedAction(signed)).isValid).toBe(false);
+    expect((await verifySignedAction(signed, { domain })).isValid).toBe(true);
   });
 });

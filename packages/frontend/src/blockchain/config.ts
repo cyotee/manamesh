@@ -15,6 +15,7 @@
 import type { Hex } from 'viem';
 import type { BlockchainMode } from './types';
 import type { SettlementTableConfig } from '@manamesh/poker';
+import { DEFAULT_TIMEOUT_SECONDS, normalizeTimeoutSeconds } from '@manamesh/poker/settlement';
 
 function env(key: string): string | undefined {
   try {
@@ -47,7 +48,9 @@ export function getSettlementTableConfigFromEnv(): SettlementTableConfig | null 
   const rakeBps = Number(env('VITE_POKER_RAKE_BPS') ?? '0');
   const smallBlind = BigInt(env('VITE_POKER_SMALL_BLIND') ?? '1');
   const bigBlind = BigInt(env('VITE_POKER_BIG_BLIND') ?? '2');
-  const timeoutSeconds = BigInt(env('VITE_POKER_TIMEOUT_SECONDS') ?? '300');
+  const timeoutSeconds = normalizeTimeoutSeconds(
+    BigInt(env('VITE_POKER_TIMEOUT_SECONDS') ?? DEFAULT_TIMEOUT_SECONDS),
+  ).timeoutSeconds;
 
   const address = settler as Hex;
   return {

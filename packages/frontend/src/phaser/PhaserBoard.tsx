@@ -74,7 +74,6 @@ export function PhaserBoard({
         autoCenter: Phaser.Scale.CENTER_BOTH,
       },
       // Disable unnecessary features for a card game
-      physics: { default: false },
       audio: { noAudio: true },
       input: {
         mouse: true,

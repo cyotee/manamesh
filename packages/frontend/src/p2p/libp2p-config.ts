@@ -4,7 +4,6 @@
  */
 
 import { createLibp2p, Libp2p } from 'libp2p';
-import { webRTC } from '@libp2p/webrtc';
 import { webSockets } from '@libp2p/websockets';
 import { circuitRelayTransport } from '@libp2p/circuit-relay-v2';
 import { kadDHT, type KadDHT } from '@libp2p/kad-dht';
@@ -12,6 +11,7 @@ import { bootstrap } from '@libp2p/bootstrap';
 import { noise } from '@chainsafe/libp2p-noise';
 import { yamux } from '@chainsafe/libp2p-yamux';
 import { identify } from '@libp2p/identify';
+import { gossipsub, StrictSign, type GossipSub } from '@libp2p/gossipsub';
 import { ping } from '@libp2p/ping';
 import { resolveBootstrapNodes } from './bootstrap-resolver';
 
@@ -19,10 +19,12 @@ export const DHT_NAMESPACE = '/manamesh/1.0.0';
 export const ROOM_TOPIC = `${DHT_NAMESPACE}/rooms`;
 export const PUBLIC_GAMES_TOPIC = `${DHT_NAMESPACE}/public-games`;
 
-export interface Libp2pServices {
+export type Libp2pServices = {
   dht: KadDHT;
-  identify: ReturnType<typeof identify>;
-}
+  pubsub: GossipSub;
+  identify: ReturnType<ReturnType<typeof identify>>;
+  ping: ReturnType<ReturnType<typeof ping>>;
+};
 
 export type ManaMeshLibp2p = Libp2p<Libp2pServices>;
 
@@ -34,6 +36,9 @@ export async function createNode(): Promise<ManaMeshLibp2p> {
   }
 
   console.log('[libp2p] Creating node...');
+  // Load the browser WebRTC transport only when starting a node. Pure discovery
+  // helpers must not eagerly initialize its platform-specific dependencies.
+  const { webRTC } = await import('@libp2p/webrtc');
   const bootstrapNodes = await resolveBootstrapNodes();
   console.log('[libp2p] Using bootstrap nodes:', bootstrapNodes.length);
 
@@ -63,6 +68,7 @@ export async function createNode(): Promise<ManaMeshLibp2p> {
       identify: identify(),
       // Ping protocol (required by DHT)
       ping: ping(),
+      pubsub: gossipsub({ globalSignaturePolicy: StrictSign }),
     },
   });
 

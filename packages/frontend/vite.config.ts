@@ -17,6 +17,8 @@ const rootDist = process.env.TIMESTREAMS_VERCEL_OUT
   ? path.resolve(process.env.TIMESTREAMS_VERCEL_OUT)
   : path.resolve(__dirname, '../../../../dist');
 const isVercelBuild = !!process.env.TIMESTREAMS_VERCEL_OUT;
+const pageEntry = process.env.MANAMESH_PAGE ?? 'timestreams';
+if (!['timestreams', 'poker'].includes(pageEntry)) throw new Error('Unsupported MANAMESH_PAGE');
 
 // Real stub file that replaces boardgame.io's Svelte debug panel. Aliasing to a
 // physical file (instead of a `data:` URI) resolves cleanly in both the dev
@@ -81,6 +83,22 @@ export default defineConfig(({ command }) => ({
     plugins: [
       react(),
       serveTimestreamsPack(),
+      {
+        name: 'local-protected-poker-module',
+        configureServer(server) {
+          const modulePath = process.env.POKER_SHUFFLE_WASM;
+          if (!modulePath) return;
+          server.middlewares.use('/poker-protected.wasm', (req, res) => {
+            if ((req.url || '/').split('?')[0] !== '/') { res.statusCode = 404; res.end(); return; }
+            try {
+              if (fs.statSync(modulePath).size > 1024 * 1024) throw new Error('module_size');
+              res.setHeader('Content-Type', 'application/wasm');
+              res.setHeader('Cache-Control', 'no-store');
+              res.end(fs.readFileSync(modulePath));
+            } catch { res.statusCode = 503; res.end('Verification module unavailable'); }
+          });
+        },
+      },
       {
         name: 'strip-boardgame-debug-svelte',
         // 'pre' so this resolveId runs before Vite's core resolver in the dev
@@ -221,9 +239,9 @@ export default defineConfig(({ command }) => ({
         assetsInlineLimit: 100000000,
         cssCodeSplit: false,
         rollupOptions: {
-            // Only the timestreams SPA entry. Single file output.
+            // One selected SPA per build; keep Timestreams as the root default.
             input: {
-                timestreams: path.resolve(__dirname, 'src/pages/timestreams/index.html'),
+                [pageEntry]: path.resolve(__dirname, `src/pages/${pageEntry}/index.html`),
             },
             output: {
                 format: 'iife',
@@ -239,5 +257,10 @@ export default defineConfig(({ command }) => ({
     },
     test: {
         setupFiles: ['./vitest.setup.ts'],
+        // Keep Playwright specs out of Vitest and isolate snarkjs/web-worker in processes.
+        include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+        pool: 'forks',
+        maxWorkers: 2,
+        minWorkers: 1,
     },
 }));

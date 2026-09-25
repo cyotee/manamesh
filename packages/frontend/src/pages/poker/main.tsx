@@ -1,3 +1,4 @@
+import { PokerProtectedApp } from "./PokerProtectedApp";
 import React, { useState, useCallback, useMemo } from "react";
 import ReactDOM from "react-dom/client";
 import { Client } from "boardgame.io/react";
@@ -7,6 +8,7 @@ import { P2PLobby } from "../../components/P2PLobby";
 import { P2PMultiplayer } from "../../p2p/transport";
 import type { P2PChannel } from "@cyotee/boardgameio-p2p/channel";
 import { getPokerMaxPlayers } from "../../p2p/connect";
+import { WalletProvider, E2eWalletToolbar } from "../../wallet";
 
 console.log("[ManaMesh] poker page boot");
 
@@ -73,6 +75,7 @@ function PokerApp() {
     return (
       <div>
         <div style={{ padding: 12, display: "flex", gap: 8, background: "#0f172a" }}>
+          <a href="?protected=1">Protected protocol preview</a>
           <button
             type="button"
             onClick={() => setLobbyRole("host")}
@@ -183,6 +186,11 @@ function getPlayerName(): string {
 
 root.render(
   <React.StrictMode>
-    <PokerApp />
+    {new URLSearchParams(window.location.search).get("protected") === "1" ? <PokerProtectedApp /> : <WalletProvider>
+      <div data-testid="poker-app-root">
+        <E2eWalletToolbar />
+        <PokerApp />
+      </div>
+    </WalletProvider>}
   </React.StrictMode>,
 );

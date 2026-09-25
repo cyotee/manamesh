@@ -5,8 +5,8 @@
  */
 
 import { createHelia, Helia } from 'helia';
-import { unixfs } from '@helia/unixfs';
-import { CID } from 'multiformats/cid';
+import { unixfsForHelia } from './helia-unixfs';
+import { CID } from 'multiformats';
 import { getFromCache, putInCache, isInCache } from './cache';
 import { getConfig, getEffectiveGateways } from './config';
 
@@ -39,14 +39,15 @@ let heliaInitPromise: Promise<Helia | null> | null = null;
 let heliaFailed = false;
 
 // Test Helia instance - used for testing to inject a pre-configured Helia
-let testHeliaInstance: Helia | null = null;
+// undefined uses normal initialization; null explicitly models unavailable Helia.
+let testHeliaInstance: Helia | null | undefined;
 
 /**
  * Set a Helia instance to use for testing
  * This overrides the normal singleton initialization
  * @internal For testing only
  */
-export function setHeliaForTest(helia: Helia): void {
+export function setHeliaForTest(helia: Helia | null): void {
   testHeliaInstance = helia;
 }
 
@@ -55,7 +56,7 @@ export function setHeliaForTest(helia: Helia): void {
  * @internal For testing only
  */
 export function clearHeliaTestInstance(): void {
-  testHeliaInstance = null;
+  testHeliaInstance = undefined;
 }
 
 /**
@@ -63,12 +64,9 @@ export function clearHeliaTestInstance(): void {
  * Returns null if initialization fails (fallback to gateway)
  */
 async function getHelia(): Promise<Helia | null> {
+  if (testHeliaInstance !== undefined) return testHeliaInstance;
   if (heliaFailed) {
     return null;
-  }
-
-  if (testHeliaInstance) {
-    return testHeliaInstance;
   }
 
   if (heliaInstance) {
@@ -122,38 +120,33 @@ export async function fetchFromHelia(cidString: string, timeout: number): Promis
   const bareCidString = slashIndex === -1 ? cidString : cidString.slice(0, slashIndex);
   const subPath = slashIndex === -1 ? undefined : cidString.slice(slashIndex + 1);
 
+  const controller = new AbortController();
   let timeoutId: NodeJS.Timeout | undefined;
   const timeoutPromise = new Promise<never>((_, reject) => {
-    timeoutId = setTimeout(() => reject(new Error('Helia fetch timeout')), timeout);
+    timeoutId = setTimeout(() => {
+      controller.abort();
+      reject(new Error('Helia fetch timeout'));
+    }, timeout);
   });
 
   try {
     const cid = CID.parse(bareCidString);
-    let result: Blob;
-
-    if (subPath) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const fs = unixfs(helia as any);
-      const fetchPromise = (async () => {
-        const chunks: Uint8Array[] = [];
-        for await (const chunk of fs.cat(cid, { path: subPath })) {
-          chunks.push(chunk);
-        }
-        const total = chunks.reduce((sum, c) => sum + c.length, 0);
-        const combined = new Uint8Array(total);
-        let offset = 0;
-        for (const chunk of chunks) {
-          combined.set(chunk, offset);
-          offset += chunk.length;
-        }
-        return new Blob([combined]);
-      })();
-      result = await Promise.race([fetchPromise, timeoutPromise]);
-    } else {
-      // Use new Uint8Array(block) to guarantee a plain ArrayBuffer type for the Blob constructor.
-      const block = await Promise.race([helia.blockstore.get(cid), timeoutPromise]);
-      result = new Blob([new Uint8Array(block)]);
-    }
+    const fs = unixfsForHelia(helia);
+    const fetchPromise = (async () => {
+      const chunks: Uint8Array[] = [];
+      for await (const chunk of fs.cat(cid, { path: subPath, signal: controller.signal })) {
+        chunks.push(chunk);
+      }
+      const total = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+      const combined = new Uint8Array(total);
+      let offset = 0;
+      for (const chunk of chunks) {
+        combined.set(chunk, offset);
+        offset += chunk.length;
+      }
+      return new Blob([combined]);
+    })();
+    const result = await Promise.race([fetchPromise, timeoutPromise]);
 
     if (timeoutId) clearTimeout(timeoutId);
     return result;

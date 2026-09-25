@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from "react";
+import React, { useState, useCallback, useMemo, useEffect } from "react";
 import ReactDOM from "react-dom/client";
 import { Client } from "boardgame.io/react";
 import { Local } from "boardgame.io/multiplayer";
@@ -11,6 +11,7 @@ import { P2PLobby } from "../../components/P2PLobby";
 import { P2PMultiplayer } from "../../p2p/transport";
 import type { P2PChannel } from "@cyotee/boardgameio-p2p/channel";
 import type { JoinCodeConnection } from "../../p2p";
+import { createBattleshipChannel } from "../../p2p/battleship-channel";
 
 console.log("[ManaMesh] merkle-battleship page boot");
 
@@ -29,30 +30,61 @@ const rootEl = document.getElementById("root");
 if (!rootEl) throw new Error("[ManaMesh] Missing #root element");
 const root = ReactDOM.createRoot(rootEl);
 
+function LocalBattleshipGame() {
+  const LocalClient = useMemo(() => Client({
+    game: MerkleBattleshipGame,
+    board: MerkleBattleshipBoard,
+    multiplayer: Local(),
+    numPlayers: 2,
+    debug: false,
+  }), []);
+
+  return <>
+    { ["0", "1"].map((playerID) => (
+      <section key={playerID} aria-label={`Player ${playerID}`}>
+        <LocalClient playerID={playerID} matchID="local-battleship" />
+      </section>
+    )) }
+  </>;
+}
+
 function MerkleBattleshipApp() {
   const [phase, setPhase] = useState<Phase>("menu");
   const [lobbyRole, setLobbyRole] = useState<"host" | "guest">("host");
-  const [gameParams, setGameParams] = useState<GameStartParams | null>(null);
+  const [gameParams, setGameParams] = useState<(GameStartParams & { signalChannel: ReturnType<typeof createBattleshipChannel> }) | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const handleGameStart = useCallback((params: GameStartParams) => {
-    setGameParams(params);
+    const opponentID = params.playerID === "0" ? "1" : "0";
+    const peer = params.hostConnections?.get(opponentID) ?? params.connection;
+    if (!peer || params.numPlayers !== 2 ||
+        params.playerID !== (params.role === "host" ? "0" : "1") ||
+        (params.hostConnections && params.hostConnections.size !== 1)) {
+      setError("Battleship requires one connected opponent.");
+      return;
+    }
+    const signalChannel = createBattleshipChannel(peer);
+    signalChannel.activate();
+    setGameParams({
+      ...params,
+      connection: signalChannel,
+      hostConnections: params.role === "host"
+        ? new Map([[opponentID, signalChannel]])
+        : undefined,
+      signalChannel,
+    });
     setPhase("game");
   }, []);
 
+  useEffect(() => {
+    gameParams?.signalChannel.activate();
+    return () => gameParams?.signalChannel.dispose();
+  }, [gameParams]);
+
   const Board = useMemo(() => {
     if (!gameParams) return null;
-    const conn = gameParams.connection;
-    // Inject signal channel when JoinCodeConnection-shaped
     const Wrapped: React.FC<any> = (props) => (
-      <MerkleBattleshipBoard
-        {...props}
-        p2pConnection={
-          conn && "sendSignal" in conn
-            ? (conn as JoinCodeConnection)
-            : undefined
-        }
-      />
+      <MerkleBattleshipBoard {...props} p2pConnection={gameParams.signalChannel} />
     );
     return Wrapped;
   }, [gameParams]);
@@ -75,6 +107,7 @@ function MerkleBattleshipApp() {
         numPlayers: gameParams.numPlayers,
       }),
       numPlayers: gameParams.numPlayers,
+      debug: false,
     });
   }, [gameParams, Board]);
 
@@ -161,11 +194,7 @@ function MerkleBattleshipApp() {
         <button type="button" onClick={() => setPhase("menu")} style={{ margin: 8 }}>
           ← Menu
         </button>
-        <Client
-          game={MerkleBattleshipGame}
-          board={MerkleBattleshipBoard}
-          multiplayer={Local()}
-        />
+        <LocalBattleshipGame />
       </div>
     );
   }
@@ -176,6 +205,7 @@ function MerkleBattleshipApp() {
         <button type="button" onClick={() => setPhase("menu")} style={{ margin: 8 }}>
           ← Menu
         </button>
+        {error && <p role="alert">{error}</p>}
         <RoomCodeLobby
           key={`mb-lobby-${lobbyRole}`}
           gameId="merkle-battleship"
@@ -233,7 +263,7 @@ function MerkleBattleshipApp() {
   const BoardClient = P2PClient;
   return (
     <div>
-      <button type="button" onClick={() => setPhase("menu")} style={{ margin: 8 }}>
+      <button type="button" onClick={() => { setGameParams(null); setPhase("menu"); }} style={{ margin: 8 }}>
         ← Menu
       </button>
       <BoardClient playerID={gameParams.playerID} matchID={gameParams.matchID} />

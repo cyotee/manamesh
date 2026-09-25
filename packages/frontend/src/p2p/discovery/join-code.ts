@@ -8,7 +8,8 @@
 
 import { PeerConnection, type ConnectionState, type PeerConnectionEvents } from '../webrtc';
 import { encodeOffer, decodeOffer, isValidJoinCode } from '../codec';
-import type { P2PChannel, P2PChannelEvents } from '@cyotee/boardgameio-p2p/channel';
+import type { P2PChannel } from '@cyotee/boardgameio-p2p/channel';
+type P2PChannelEvents = P2PChannel['events'];
 
 export type JoinCodeRole = 'host' | 'guest';
 
@@ -178,6 +179,17 @@ export class JoinCodeConnection implements P2PChannel {
       throw new Error('Not connected');
     }
     this.peerConnection.send(data);
+  }
+
+  /** Attach a dedicated protocol after join-code setup; both peers register before opening. */
+  registerReliableChannel(label: string, accept: (channel: RTCDataChannel) => void): () => void {
+    if (!this.peerConnection) throw new Error('No peer connection');
+    return this.peerConnection.registerReliableChannel(label, accept);
+  }
+
+  openReliableChannel(label: string): RTCDataChannel {
+    if (!this.peerConnection) throw new Error('No peer connection');
+    return this.peerConnection.openReliableChannel(label);
   }
 
   /**

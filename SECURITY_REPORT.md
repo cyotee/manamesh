@@ -1,5 +1,11 @@
 # ManaMesh Cryptographic Security Report
 
+> **Historical report:** Paths and remediation claims below describe May 2026.
+> The [2026-09-05 monorepo investigation](../../docs/production-readiness.md)
+> identifies additional Poker protocol blockers, including keyless tracking of
+> unchanged ciphertexts through shuffles and private peeks in shared state.
+> Primitive-level tests do not establish security against a malicious host.
+
 **Date:** May 8, 2026
 **Scope:** `packages/frontend/src/crypto/` and `packages/frontend/src/game/modules/*/crypto.ts`
 **Classification:** Architectural Security Assessment — Post-Remediation Review

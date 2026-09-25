@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
 import JSZip from 'jszip';
 import { createHelia } from 'helia';
-import { unixfs } from '@helia/unixfs';
+import { unixfsForHelia } from '../helia-unixfs';
 import { setHeliaForTest, clearHeliaTestInstance } from '../ipfs-loader';
 
 const MINIMAL_PNG = Uint8Array.from([
@@ -25,7 +25,6 @@ const mockLocalStorage = {
   get length() { return localStorageData.size; },
   key: (i: number) => Array.from(localStorageData.keys())[i] ?? null,
 };
-// @ts-expect-error - mocking global
 globalThis.localStorage = mockLocalStorage;
 
 const { mockStorage } = vi.hoisted(() => {
@@ -80,10 +79,13 @@ describe('IPFS Asset Loading Integration', () => {
   vi.setConfig({ testTimeout: 120000 });
 
   let testZipCID: string | null = null;
+  let helia: Awaited<ReturnType<typeof createHelia>> | undefined;
 
   beforeAll(async () => {
-    const helia = await createHelia();
-    const fs = unixfs(helia);
+    // All fixture blocks are local. Starting libp2p adds sockets and bootstrap
+    // dependencies without exercising any additional loader behavior.
+    helia = await createHelia({ start: false });
+    const fs = unixfsForHelia(helia);
 
     const zipBlob = await buildTestZip();
     const zipBytes = new Uint8Array(await zipBlob.arrayBuffer());
@@ -95,6 +97,23 @@ describe('IPFS Asset Loading Integration', () => {
 
   afterAll(async () => {
     clearHeliaTestInstance();
+    await helia?.stop();
+  });
+
+  it('reconstructs multi-block files by bare CID and directory path', async () => {
+    if (!helia) throw new Error('Expected local Helia fixture');
+    const fs = unixfsForHelia(helia);
+    const bytes = Uint8Array.from({ length: 700_000 }, (_, i) => i % 251);
+    const cid = await fs.addBytes(bytes, { rawLeaves: false });
+    expect(cid.code).toBe(0x70); // DAG-PB root, not a raw file block.
+    const directory = await fs.addDirectory();
+    const root = await fs.cp(cid, directory, 'large.bin');
+    const { fetchFromHelia } = await import('../ipfs-loader');
+    for (const address of [cid.toString(), `${root}/large.bin`]) {
+      const blob = await fetchFromHelia(address, 5000);
+      expect(blob, address).not.toBeNull();
+      expect(new Uint8Array(await blob!.arrayBuffer())).toEqual(bytes);
+    }
   });
 
   describe('Zip Pack Loading', () => {
@@ -115,6 +134,7 @@ describe('IPFS Asset Loading Integration', () => {
       expect(pack.manifest.name).toBe('Test Card Pack');
       expect(pack.manifest.version).toBe('1.0.0');
       expect(pack.manifest.game).toBe('poker');
+      if (!pack.manifest.cards) throw new Error("Expected card pack manifest");
       expect(pack.manifest.cards.length).toBe(4);
 
       expect(progressUpdates.length).toBeGreaterThan(0);
@@ -138,6 +158,7 @@ describe('IPFS Asset Loading Integration', () => {
       );
 
       expect(pack.id).toContain('ipfs-zip:');
+      if (!pack.manifest.cards) throw new Error("Expected card pack manifest");
       expect(pack.manifest.cards.length).toBe(4);
       expect(pack.loadedAt).toBeGreaterThan(0);
 

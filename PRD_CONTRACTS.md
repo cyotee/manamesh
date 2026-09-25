@@ -10,6 +10,26 @@
 > Where §11 conflicts with the original body, §11 wins.
 >
 > **Current status (2026-06):** Contracts implemented and tested in `packages/poker/`. See the companion `PREPAREDNESS_REPORT.md`, `PRD_Deployment.md`, and `TASK.md` in that directory for integration/deployment status. The legacy `GameVault` design has been superseded.
+>
+> ### Supersession (2026-08-12) — Settlement Security Hardening
+>
+> The following §11 (and body) decisions are **superseded** by
+> `packages/poker/docs/PRD_SETTLEMENT_SECURITY_HARDENING.md` **v0.6** and the
+> shipped contracts under `packages/poker/contracts/`. Prefer the hardening PRD
+> + implementation plan when they conflict with this document.
+>
+> | Topic | This document (§11 / body) | Superseded by |
+> |-------|----------------------------|---------------|
+> | **G1 force forfeit** | §11.9–11.10: unsigned winners forfeit stacks to operator | **No forfeit.** Force always credits `finalStacks` to seats; Mode A/B only (pot tax or snapshot rake). |
+> | **Activity clock** | §11.5: any on-chain activity resets window; only sliding `lastActivity` | **Dual clocks:** `assertedAt` + `lastActivity`; seat-only `bumpHandActivity`; force if `lastActivity+timeout` **OR** `assertedAt+MAX_HAND_LIFETIME` (86400). Assert bounds `timeoutSeconds ∈ [900, 86400]`. |
+> | **Early abandon / RefundAll** | §11.9: pre-flop buy-ins return **minus rake** | **RefundAll** (`outcomeMode=1`): restore buy-ins, rake **0**, winners empty, N-of-N no-progress lastRound required. |
+> | **Rake / operator snapshot** | §11.14: live `oracle.configOf` at settle; no assert snapshot | **Snapshot at assert** (`operator`, `rakeBps`); Normal/Force use snapshot. Oracle `maxRakeBps` default 1000. |
+> | **Normal free stacks / SIG** | §11.9: only `winners[]` sign; free `finalStacks` under conservation | **HandEnd bind** + SIG-2b (every seat with stack>0 signs); `payouts[]` removed; `outcome.pot == sum(buyIns)`. |
+> | **Deposit FoT** | Implicit amount-credit | **Balance-delta** credit + reentrancy lock. |
+>
+> Authoritative sources: `PRD_SETTLEMENT_SECURITY_HARDENING.md`,
+> `IMPLEMENTATION_PLAN_SETTLEMENT_SECURITY_HARDENING.md`,
+> `GRIEFING_VECTORS_SETTLEMENT_v0.5.md`, `ADVERSARIAL_TESTS.md`.
 
 ### 1. Purpose
 Build a **minimal, production-ready, gas-optimized settlement layer** for Texas Hold’em poker that runs on top of the existing ManaMesh off-chain stack (boardgame.io + libp2p + mental poker with cooperative elliptic encryption/decryption).
@@ -173,9 +193,13 @@ The following are all in v1:
   current off-chain module's 2–6 limit; off-chain may stay tighter).
 
 **11.5 Timeout clock**
-- The per-hand timeout window resets on **any on-chain activity for that handId**
+- ~~The per-hand timeout window resets on **any on-chain activity for that handId**
   (assertion, settlement attempt, etc.). `forceTimeoutSettlement` becomes valid
-  after `lastActivity + timeoutSeconds`.
+  after `lastActivity + timeoutSeconds`.~~
+- **SUPERSEDED (2026-08):** Assert stores `assertedAt` and `lastActivity`.
+  Seats may call `bumpHandActivity` (updates `lastActivity` only). Force is
+  valid when `now >= lastActivity + timeoutSeconds` **or**
+  `now >= assertedAt + MAX_HAND_LIFETIME` (86400). See hardening PRD G3 / REQ-TO-*.
 
 **11.6 Off-chain TypeScript signing helpers**
 - Live inside `packages/frontend/src/game/modules/poker/` alongside the existing
@@ -203,22 +227,30 @@ The following are all in v1:
 - `lastRoundState` (latest RoundStateTransition) must carry signatures from
   **all** original players. This is the on-chain proof of the pot at the cutoff;
   it was already signed during normal play.
-- `HandOutcome` must carry signatures from **all addresses listed in `winners[]`**.
+- ~~`HandOutcome` must carry signatures from **all addresses listed in `winners[]`**.
   No player can be paid without their own signature; non-winners do not need
-  to sign.
-- Any player or third party can submit `forceTimeoutSettlement` once
-  `block.timestamp >= lastActivity + timeoutSeconds`.
+  to sign.~~ **SUPERSEDED:** Normal settle uses SIG-2b (parallel to players for
+  non-zero stacks) + N-of-N HandEnd; force **ignores** winners/partialSignatures
+  for money (G1).
+- ~~Any player or third party can submit `forceTimeoutSettlement` once
+  `block.timestamp >= lastActivity + timeoutSeconds`.~~ **SUPERSEDED:** also
+  after hard lifetime `assertedAt + MAX_HAND_LIFETIME`.
 - Failure modes:
-  - If a proposed winner refuses to sign, their share forfeits to the operator
-    (per §11.10).
-  - If no `lastRoundState` with full sigs ever existed (e.g. abandonment before
-    pre-flop), the buy-ins return to depositors' vault balances minus rake.
+  - ~~If a proposed winner refuses to sign, their share forfeits to the operator
+    (per §11.10).~~ **SUPERSEDED (G1):** no forfeit; stacks always credited from
+    lastRound. Mode A (terminal post-rake) or Mode B (dead-man pot→operator).
+  - ~~If no `lastRoundState` with full sigs ever existed (e.g. abandonment before
+    pre-flop), the buy-ins return to depositors' vault balances minus rake.~~
+    **SUPERSEDED:** early abandon uses **RefundAll** (rake 0, buy-in restore)
+    with required N-of-N no-progress lastRound (typically Round0).
 
 **11.10 Force-timeout forfeit destination**
-- All forfeited amounts go **100% to the operator address** (the same immutable
+- ~~All forfeited amounts go **100% to the operator address** (the same immutable
   operator that receives rake on normal settlements). No on-contract house
-  treasury in v1.
-- This honors PRD §1's "no player-to-player splitting" rule and keeps state minimal.
+  treasury in v1.~~
+- **SUPERSEDED (G1 / A10 inverted):** Force never forfeits seat stacks for missing
+  winner sigs. Operator receives only: Mode A **snapshot rake**, or Mode B
+  **currentPot** (timeout tax). Stacks always return to seats.
 
 **11.11 Level-1 on-chain hand verifier scope**
 - Given `holeCards[2]` per player + `communityCards[5]` revealed in `HandOutcome`,
@@ -279,9 +311,13 @@ Entry defaultConfig;                  // { defaultOperator, defaultRakeBps }
                       : defaultConfig;
 ```
 
-*Lookup timing.* The settler performs a **live read** on every `settleHand`
+*Lookup timing.* ~~The settler performs a **live read** on every `settleHand`
 and `forceTimeoutSettlement`. Config changes apply immediately to all pending
-and future hands at that settler. Hands do not snapshot config at activation.
+and future hands at that settler. Hands do not snapshot config at activation.~~
+**SUPERSEDED (H1):** At `assertHandMembership`, the settler **snapshots**
+`(operator, rakeBps)` from the oracle onto the hand record. Normal and Force
+settlement use the snapshot only. Mid-hand oracle changes affect **new hands**
+only. Oracle enforces `rakeBps <= maxRakeBps` (default **1000**).
 
 *Settler reference.* Each `PokerHandSettler` diamond holds an **immutable**
 reference to the oracle diamond (set in `PokerHandSettlerDFPkg.PkgInit`).
@@ -295,8 +331,9 @@ diamond — settlers do not need to change.
 *Events.* Oracle emits typed events on each entry/default change for indexers.
 (Specific event signatures to be defined during implementation.)
 
-*Out of scope for v1.* No per-table or per-hand rake overrides; no oracle-level
-`maxRakeBps` ceiling (owner is trusted); no batch update entry points (single-
+*Out of scope for v1.* No per-table or per-hand rake overrides; ~~no oracle-level
+`maxRakeBps` ceiling (owner is trusted)~~ **SUPERSEDED:** `maxRakeBps` default
+1000 is enforced; no batch update entry points (single-
 entry mutators only — batching is an off-chain script concern).
 
 **11.15 Off-chain TS data model**
